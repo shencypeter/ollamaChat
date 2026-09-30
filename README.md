@@ -29,6 +29,36 @@
 http://IAN02:11434
 ```
 
+### 查看 IAN02 可用模型
+
+在 Windows 開啟「遠端桌面連線」（`mstsc`），連線至 `IAN02`。登入後開啟命令提示字元，執行：
+
+```bat
+D:\>ollama list
+```
+
+目前安裝的模型清單（2026-09-30 快照）：
+
+```text
+NAME                                ID              SIZE      MODIFIED
+phi4:14b                            ac896e5b8b34    9.1 GB    11 months ago
+dengcao/Qwen3-Reranker-8B:Q3_K_M    74081eb12b5f    4.1 GB    12 months ago
+gpt-oss:20b                         aa4295ac10c3    13 GB     13 months ago
+deepseek-coder:1.3b                 3ddd2d3fc8d2    776 MB    16 months ago
+nomic-embed-text:latest             0a109f422b47    274 MB    17 months ago
+qwen2.5-coder:1.5b-base             02e0f2817a89    986 MB    17 months ago
+qwen3:8b                            e4b5fd7f8af0    5.2 GB    17 months ago
+mxbai-embed-large:latest            468836162de7    669 MB    17 months ago
+codegemma:7b                        0c96700aaada    5.0 GB    17 months ago
+codellama:13b                       9f438cb9cd58    7.4 GB    17 months ago
+gemma3:27b                          a418f5838eaf    17 GB     18 months ago
+gemma3:12b                          f4031aab637d    8.1 GB    18 months ago
+deepseek-coder-v2:16b               63fb193b3a9b    8.9 GB    18 months ago
+llama3.1:8b                         46e0c10c039e    4.9 GB    18 months ago
+```
+
+`ollama list` 的實際輸出是模型可用性的準確來源；上方清單只記錄建立文件當時的狀態。
+
 ## 快速開始
 
 ```powershell
