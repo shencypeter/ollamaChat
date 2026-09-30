@@ -1,0 +1,157 @@
+@model ChatPageViewModel
+@inject AiTeachingAssistant.Services.IMarkdownRenderer MarkdownRenderer
+@{
+    ViewData["Title"] = "聊天工作台";
+    var memoryLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["None"] = "無記憶",
+        ["Window"] = "滑動視窗",
+        ["Buffer"] = "完整緩衝",
+        ["Summary"] = "摘要記憶"
+    };
+    var activeMemoryLabel = memoryLabels.GetValueOrDefault(Model.MemoryStrategy, Model.MemoryStrategy);
+    var activeStage = AnalysisStageCatalog.Get(Model.ActiveStage);
+    var stageNumbers = new[] { "①", "②", "③", "④" };
+}
+
+<div class="app-shell">
+    <header class="topbar">
+        <a class="brand" href="/" aria-label="中山大學 AI 助教系統首頁">
+            <span class="brand-mark" aria-hidden="true">AI</span>
+            <span>中山大學 <strong>AI 助教系統</strong></span>
+        </a>
+        <div class="topbar-actions">
+            <div class="server-state" id="serverState" aria-live="polite"><span class="status-dot"></span><span>尚未檢查</span></div>
+            <button class="button button-secondary" id="healthButton" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12h-3l-2 6-4-12-2 6H4"/></svg>檢查 Ollama
+            </button>
+            <button class="icon-button" id="clearButton" type="button" title="清除此分析項目的對話" aria-label="清除此分析項目的對話">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/></svg>
+            </button>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div><p class="eyebrow">AI 助教聊天室</p><h1>個案分析 <em>AI 助教系統</em></h1></div>
+        <div class="connection-card">
+            <span>模型</span><strong>@Model.Model</strong>
+            <span>端點</span><strong title="@Model.Server">@Model.Server.Replace("http://", "")</strong>
+            <span>記憶模式</span>
+            <div class="memory-picker-wrap">
+                <select id="memoryStrategy" class="memory-picker" aria-label="記憶模式">
+                    @foreach (var strategy in new[] { "None", "Window", "Buffer", "Summary" })
+                    {
+                        if (strategy.Equals(Model.MemoryStrategy, StringComparison.OrdinalIgnoreCase))
+                        {
+                            <option value="@strategy" selected>@memoryLabels[strategy]</option>
+                        }
+                        else
+                        {
+                            <option value="@strategy">@memoryLabels[strategy]</option>
+                        }
+                    }
+                </select>
+                @if (Model.MemoryStrategy.Equals("Summary", StringComparison.OrdinalIgnoreCase))
+                {
+                    <b class="summary-badge">保留最近 @Model.MemoryWindow 回合</b>
+                }
+            </div>
+            <span>思考內容</span>
+            <label class="thinking-checkbox" for="showThinking">
+                <input id="showThinking" type="checkbox" checked>
+                <span>顯示 AI 思考過程</span>
+            </label>
+        </div>
+    </section>
+
+    <section class="chat-card" aria-label="對話">
+        <nav class="analysis-tabs" aria-label="案例分析項目">
+            @for (var index = 0; index < AnalysisStageCatalog.All.Count; index++)
+            {
+                var option = AnalysisStageCatalog.All[index];
+                var selected = option.Stage == Model.ActiveStage;
+                <button type="button"
+                        class="analysis-tab @(selected ? "active" : null)"
+                        data-stage="@option.Key"
+                        aria-selected="@(selected ? "true" : "false")">
+                    <span>@stageNumbers[index]</span> @option.Label
+                </button>
+            }
+        </nav>
+        <div class="chat-scroll" id="chatMessages" aria-live="polite">
+            @if (Model.Messages.Count == 0)
+            {
+                <div class="empty-state" id="emptyState">
+                    <div class="orb"><span></span></div>
+                    <h2>開始分析「@activeStage.Label」</h2>
+                    <p>輸入你的案例分析，AI 助教會在不直接代答的前提下提供教學回饋。各分析項目的對話會分開保留。</p>
+                </div>
+            }
+            @foreach (var message in Model.Messages)
+            {
+                @if (message.Role == "assistant" && !string.IsNullOrWhiteSpace(message.Thinking))
+                {
+                    <article class="message thinking">
+                        <div class="message-label">AI 思考過程</div>
+                        <div class="message-line">
+                            <div class="bubble">
+                                <details class="thinking-disclosure">
+                                    <summary>@message.Thinking!.Replace("\r\n", "\n").Split('\n')[0].Trim()</summary>
+                                    <div>@message.Thinking</div>
+                                </details>
+                            </div>
+                        </div>
+                    </article>
+                }
+                <article class="message @message.Role">
+                    <div class="message-label">@(message.Role == "user" ? "你" : "LLM")</div>
+                    <div class="message-line">
+                        @if (message.Role == "user")
+                        {
+                            <span class="read-receipt"><b>已讀</b>@message.Timestamp.ToLocalTime().ToString("HH:mm")</span>
+                        }
+                        @if (message.Role == "assistant")
+                        {
+                            <div class="bubble markdown-body">@Html.Raw(MarkdownRenderer.ToHtml(message.Content))</div>
+                        }
+                        else
+                        {
+                            <div class="bubble">@message.Content</div>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+
+        <form class="composer" id="chatForm" data-stage="@activeStage.Key">
+            @Html.AntiForgeryToken()
+            <label class="sr-only" for="messageInput">傳送訊息給 LLM</label>
+            <textarea id="messageInput" name="message" rows="1" maxlength="8000" placeholder="@activeStage.Placeholder" autocomplete="off"></textarea>
+            <div class="composer-footer">
+                <span><kbd>Enter</kbd> 傳送 · <kbd>Shift</kbd> + <kbd>Enter</kbd> 換行</span>
+                <button class="send-button" id="sendButton" type="submit" aria-label="傳送訊息">傳送 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Zm7 1 7-8"/></svg></button>
+            </div>
+        </form>
+    </section>
+
+    <section class="metrics-section" aria-labelledby="metricsHeading">
+        <div class="section-heading">
+            <div><p class="eyebrow">即時遙測</p><h2 id="metricsHeading">上一筆請求</h2></div>
+            <span class="metric-state" id="metricState">等待輸入提示詞</span>
+        </div>
+        <div class="metric-grid">
+            <article class="metric-card accent"><span>總處理時間</span><strong id="metricTotal">—</strong><small>模型端處理</small></article>
+            <article class="metric-card"><span>往返時間</span><strong id="metricRoundTrip">—</strong><small>瀏覽器 → Ollama</small></article>
+            <article class="metric-card"><span>生成速度</span><strong id="metricSpeed">—</strong><small>Token／秒</small></article>
+            <article class="metric-card"><span>生成 Token</span><strong id="metricResponseTokens">—</strong><small id="metricPromptTokens">— 個輸入 Token</small></article>
+            <article class="metric-card memory-metric"><span>記憶內容</span><strong id="metricMemory">@activeMemoryLabel</strong><small id="metricMemoryDetail">@(Model.MemoryStrategy == "Summary" ? $"最多保留最近 {Model.MemoryWindow} 回合" : "等待請求")</small></article>
+        </div>
+        <div class="timing-card">
+            <div class="timing-header"><strong>請求時間分析</strong><span id="contextLabel">@activeMemoryLabel</span></div>
+            <div class="timing-row"><span>模型載入</span><div><i id="barLoad"></i></div><strong id="metricLoad">—</strong></div>
+            <div class="timing-row"><span>提示詞評估</span><div><i id="barPrompt"></i></div><strong id="metricPrompt">—</strong></div>
+            <div class="timing-row"><span>內容生成</span><div><i id="barEval"></i></div><strong id="metricEval">—</strong></div>
+        </div>
+    </section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
