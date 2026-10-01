@@ -6,10 +6,13 @@
 
 ## 功能
 
-- 四個彼此獨立的案例分析聊天室：病前功能、疾病病程、功能評估結果、心理社會條件
-- 每個分析階段各自保存對話與 Summary 記憶，不會跨聊天室混用
+- 三個清楚分工的工作區：助教評閱、版本比較、一般對話
+- 「助教評閱」接受一份目前作答，並可選擇病前功能、疾病病程、功能評估結果或心理社會條件
+- 「版本比較」接受修改前與修改後兩版作答，並依所選評閱項目檢查改善、退步與待釐清之處
+- 兩種助教評閱都不保存或傳送其他請求中的舊版本與先前回饋
+- 「一般對話」只套用 zh-TW 規則，並保留短期記憶模式供 POC 測試
 - 後端注入 AI 助教角色、提示注入防護及各階段教學規則；學生訊息維持原文
-- 支援 `None`、`Window`、`Buffer`、`Summary` 四種記憶模式
+- 一般對話支援 `None`、`Window`、`Buffer`、`Summary` 四種記憶模式
 - 保留 Ollama 的 `user`／`assistant` 角色，不使用有相容性問題的 LangChain.NET `WithHistory()`
 - 支援模型選用的 `thinking` 欄位，並以可收合的「AI 思考過程」呈現
 - AI 回覆支援經安全清理的 Markdown，包括清單、標題、表格、引言與程式碼區塊
@@ -102,25 +105,34 @@ dotnet run --project AiTeachingAssistant.csproj
 
 ### 記憶模式
 
+助教評閱與版本比較固定採用單次獨立請求，不傳送其他評閱的作答或回饋。下列記憶模式只作用於「一般對話」工作區。
+
 | 模式 | 傳送給模型的對話內容 |
 |---|---|
-| `None` | 階段系統訊息與目前學生訊息 |
+| `None` | zh-TW 系統訊息與目前訊息 |
 | `Window` | 最近 `WindowSize` 個完整回合 |
 | `Buffer` | 工作階段內保存的全部訊息，受 `MaxStoredMessages` 限制 |
 | `Summary` | 舊對話的累進摘要，加上最近 `SummaryRecentTurns` 個原始回合 |
 
-切換記憶模式會清除各分析階段的累進摘要，使 Summary 能從現有對話重新建立一致狀態。
+切換記憶模式會清除累進摘要，使 Summary 能從一般對話的現有紀錄重新建立一致狀態。
 
 ## Ollama 訊息結構
 
-一般請求依序包含：
+助教評閱請求依序包含：
 
 ```text
-system    全域 AI 助教、zh-TW、安全與提示注入規則
-system    目前分析階段的專屬教學規則
+system    全域 zh-TW 規則
+system    AI 助教角色、安全界線及目前分析階段的專屬教學規則
+user      本次提交的一份作答，或本次修改前／修改後兩版作答
+```
+
+一般對話依記憶模式包含：
+
+```text
+system    全域 zh-TW 規則
 system    較早對話的 Summary（僅 Summary 模式且摘要存在時）
-user / assistant    該階段的近期對話
-user      學生本次輸入的原文
+user / assistant    近期一般對話
+user      本次輸入的原文
 ```
 
 `thinking` 是選用回應欄位。模型未回傳時，介面只顯示正式回答，不會產生空白的思考泡泡。
@@ -131,8 +143,10 @@ user      學生本次輸入的原文
 
 - 對話不寫入資料庫
 - 每個瀏覽器工作階段有獨立資料
-- 四個分析階段使用穩定 key 分開保存
-- 清除對話只清除目前分析階段
+- 助教評閱結果只顯示在目前頁面，不寫入 session 對話歷史
+- 一般對話使用獨立且穩定的 session key 保存畫面紀錄
+- Summary 記憶只供一般對話使用
+- 清除對話只清除一般對話紀錄
 - 預設工作階段閒置期限為四小時
 
 若要部署多個應用程式執行個體，應將 `IDistributedCache` 換成 Redis 或其他共用儲存。
@@ -151,7 +165,7 @@ dotnet build AI_TeachingAssistant.sln --configuration Release
 dotnet test tests/AiTeachingAssistant.Tests/AiTeachingAssistant.Tests.csproj --configuration Release
 ```
 
-測試涵蓋記憶模式、角色保留、Summary 累進摘要、分析階段隔離、專屬系統提示，以及 Markdown 安全清理。
+測試涵蓋一般對話記憶模式、角色保留、Summary 累進摘要、案例分析單次評閱、專屬系統提示，以及 Markdown 安全清理。
 
 GitHub Actions 會在 `main` 的 push 與 pull request 上執行 Release build 和測試。
 

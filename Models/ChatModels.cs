@@ -10,6 +10,11 @@ public sealed class SendMessageRequest
     [Required, StringLength(8000, MinimumLength = 1)]
     public string Message { get; set; } = string.Empty;
 
+    [StringLength(8000)]
+    public string? BeforeMessage { get; set; }
+
+    public bool Compare { get; set; }
+
     [Required]
     public string Stage { get; set; } = string.Empty;
 }

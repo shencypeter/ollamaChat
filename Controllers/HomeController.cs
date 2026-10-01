@@ -20,7 +20,7 @@ public class HomeController(
     {
         var ollama = ollamaOptions.Value;
         var memory = memoryOptions.Value;
-        var activeStage = sessionStore.GetActiveStage();
+        var activeStage = AnalysisStage.GeneralChat;
         return View(new ChatPageViewModel(
             sessionStore.GetMessages(activeStage), ollama.Model, ollama.BaseUrl,
             sessionStore.GetMemoryStrategy(),
@@ -35,19 +35,40 @@ public class HomeController(
     public async Task<IActionResult> Send([FromBody] SendMessageRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid || !AnalysisStageCatalog.TryParse(request.Stage, out var stage))
-            return BadRequest(new { error = "請輸入 1 至 8,000 個字元的訊息，並選擇有效的分析項目。" });
+            return BadRequest(new { error = "請輸入 1 至 8,000 個字元的內容，並選擇有效的評閱項目。" });
+
+        if (request.Compare && stage == AnalysisStage.GeneralChat)
+            return BadRequest(new { error = "一般對話不支援版本比較。" });
+
+        if (request.Compare && string.IsNullOrWhiteSpace(request.BeforeMessage))
+            return BadRequest(new { error = "版本比較需要同時提供修改前與修改後版本。" });
 
         try
         {
-            var input = request.Message.Trim();
+            var currentVersion = request.Message.Trim();
+            var beforeVersion = request.BeforeMessage?.Trim();
+            var input = request.Compare
+                ? $"""
+                    請比較同一份學生作答的修改前與修改後版本，並以修改後版本是否更符合目前評閱項目的學習目標為核心提供回饋。
+
+                    修改前版本
+                    {beforeVersion}
+
+                    修改後版本
+                    {currentVersion}
+                    """
+                : currentVersion;
             sessionStore.SetActiveStage(stage);
-            var history = sessionStore.GetMessages(stage);
+            var history = stage == AnalysisStage.GeneralChat
+                ? sessionStore.GetMessages(stage)
+                : [];
             var context = await memoryOrchestrator.BuildContextAsync(history, input, stage, cancellationToken);
             var (content, thinking, metrics) = await ollamaClient.ChatAsync(context.Messages, cancellationToken);
 
             var userMessage = new ChatMessage("user", input, DateTimeOffset.UtcNow);
             var assistantMessage = new ChatMessage("assistant", content, DateTimeOffset.UtcNow, thinking);
-            sessionStore.SaveMessages(stage, history.Append(userMessage).Append(assistantMessage));
+            if (stage == AnalysisStage.GeneralChat)
+                sessionStore.SaveMessages(stage, history.Append(userMessage).Append(assistantMessage));
             var summaryUpdated = await memoryOrchestrator.CommitTurnAsync(stage, userMessage, assistantMessage, cancellationToken);
             var memoryDiagnostics = context.Diagnostics with
             {
@@ -106,7 +127,7 @@ public class HomeController(
     [ValidateAntiForgeryToken]
     public IActionResult Clear()
     {
-        sessionStore.Clear(sessionStore.GetActiveStage());
+        sessionStore.Clear(AnalysisStage.GeneralChat);
         return NoContent();
     }
 

@@ -37,6 +37,13 @@ public sealed class LangChainMemoryOrchestrator(
         CancellationToken cancellationToken = default)
     {
         var strategy = Strategy;
+        if (stage != AnalysisStage.GeneralChat)
+        {
+            return CreateContext(
+                [StageInstruction(stage), new OllamaMessage("user", currentMessage)],
+                "None", 0, false, 0, false);
+        }
+
         if (strategy.Equals("Summary", StringComparison.OrdinalIgnoreCase))
             return await BuildSummaryContextAsync(history, currentMessage, stage, cancellationToken);
 
@@ -44,7 +51,7 @@ public sealed class LangChainMemoryOrchestrator(
         if (strategy.Equals("None", StringComparison.OrdinalIgnoreCase) || history.Count == 0)
         {
             return CreateContext(
-                [StageInstruction(stage), .. current.Select(ToOllama)],
+                [.. current.Select(ToOllama)],
                 strategy, 0, false, 0, false);
         }
 
@@ -58,7 +65,7 @@ public sealed class LangChainMemoryOrchestrator(
 
         var selected = AttachRolePreservingHistory(memory, current);
         return CreateContext(
-            [StageInstruction(stage), .. selected.Select(ToOllama)],
+            [.. selected.Select(ToOllama)],
             strategy,
             selected.Count - current.Length,
             false,
@@ -72,7 +79,8 @@ public sealed class LangChainMemoryOrchestrator(
         ChatMessage assistantMessage,
         CancellationToken cancellationToken = default)
     {
-        if (!Strategy.Equals("Summary", StringComparison.OrdinalIgnoreCase))
+        if (stage != AnalysisStage.GeneralChat ||
+            !Strategy.Equals("Summary", StringComparison.OrdinalIgnoreCase))
             return false;
 
         var state = sessionStore.GetSummaryMemory(stage) ?? new SummaryMemoryState(string.Empty, []);
@@ -131,7 +139,7 @@ public sealed class LangChainMemoryOrchestrator(
             sessionStore.SaveSummaryMemory(stage, state);
         }
 
-        var messages = new List<OllamaMessage> { StageInstruction(stage) };
+        var messages = new List<OllamaMessage>();
         if (!string.IsNullOrWhiteSpace(state.Summary))
         {
             messages.Add(new OllamaMessage(

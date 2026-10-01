@@ -20,14 +20,9 @@ public class LangChainMemoryOrchestratorTests
             ("user", "對了 我的名字叫Peter, 男性, 處女座."),
             ("assistant", "嗨Peter！..."));
 
-        var result = await orchestrator.BuildContextAsync(history, "我剛剛跟你說我是什麼星座？", AnalysisStage.Premorbid);
+        var result = await orchestrator.BuildContextAsync(history, "我剛剛跟你說我是什麼星座？", AnalysisStage.GeneralChat);
 
         Assert.Collection(result.Messages,
-            stage =>
-            {
-                Assert.Equal("system", stage.Role);
-                Assert.Contains("病前功能", stage.Content);
-            },
             message => AssertMessage(message, "user", "早安你好..."),
             message => AssertMessage(message, "assistant", "早安！你好！..."),
             message => AssertMessage(message, "user", "對了 我的名字叫Peter, 男性, 處女座."),
@@ -45,10 +40,9 @@ public class LangChainMemoryOrchestratorTests
             ("user", "latest question"),
             ("assistant", "latest answer"));
 
-        var result = await orchestrator.BuildContextAsync(history, "current question", AnalysisStage.Premorbid);
+        var result = await orchestrator.BuildContextAsync(history, "current question", AnalysisStage.GeneralChat);
 
         Assert.Collection(result.Messages,
-            stage => Assert.Contains("病前功能", stage.Content),
             message => AssertMessage(message, "user", "latest question"),
             message => AssertMessage(message, "assistant", "latest answer"),
             message => AssertMessage(message, "user", "current question"));
@@ -60,11 +54,10 @@ public class LangChainMemoryOrchestratorTests
         var (orchestrator, _, _) = CreateOrchestrator("Buffer", windowSize: 1);
         var history = Conversation(("user", "first"), ("assistant", "second"));
 
-        var result = await orchestrator.BuildContextAsync(history, "third", AnalysisStage.Premorbid);
+        var result = await orchestrator.BuildContextAsync(history, "third", AnalysisStage.GeneralChat);
 
-        Assert.Equal(["system", "user", "assistant", "user"], result.Messages.Select(message => message.Role));
-        Assert.Contains("病前功能", result.Messages[0].Content);
-        Assert.Equal(["first", "second", "third"], result.Messages.Skip(1).Select(message => message.Content));
+        Assert.Equal(["user", "assistant", "user"], result.Messages.Select(message => message.Role));
+        Assert.Equal(["first", "second", "third"], result.Messages.Select(message => message.Content));
     }
 
     [Fact]
@@ -73,22 +66,57 @@ public class LangChainMemoryOrchestratorTests
         var (orchestrator, _, _) = CreateOrchestrator("None");
         var history = Conversation(("user", "old"), ("assistant", "old response"));
 
-        var result = await orchestrator.BuildContextAsync(history, "current", AnalysisStage.Premorbid);
+        var result = await orchestrator.BuildContextAsync(history, "current", AnalysisStage.GeneralChat);
 
         Assert.Collection(result.Messages,
-            stage => Assert.Contains("病前功能", stage.Content),
             message => AssertMessage(message, "user", "current"));
     }
 
+    [Theory]
+    [InlineData("Window")]
+    [InlineData("Buffer")]
+    [InlineData("Summary")]
+    public async Task TeachingStages_AlwaysEvaluateOnlyTheCurrentSubmission(string configuredStrategy)
+    {
+        var (orchestrator, store, summarizer) = CreateOrchestrator(configuredStrategy, summaryRecentTurns: 1);
+        var history = Conversation(
+            ("user", "這是已被取代的舊版本"),
+            ("assistant", "這是舊版本的回饋"));
+
+        var result = await orchestrator.BuildContextAsync(
+            history,
+            "這是目前提交的版本",
+            AnalysisStage.IllnessCourse);
+
+        Assert.Collection(result.Messages,
+            system =>
+            {
+                Assert.Equal("system", system.Role);
+                Assert.Contains("疾病病程", system.Content);
+                Assert.Contains("不得引用或依賴其他請求中的舊版本", system.Content);
+            },
+            current => AssertMessage(current, "user", "這是目前提交的版本"));
+        Assert.Equal("None", result.Diagnostics.Strategy);
+
+        var summaryUpdated = await orchestrator.CommitTurnAsync(
+            AnalysisStage.IllnessCourse,
+            new ChatMessage("user", "這是目前提交的版本", DateTimeOffset.UtcNow),
+            new ChatMessage("assistant", "這是本次回饋", DateTimeOffset.UtcNow));
+
+        Assert.False(summaryUpdated);
+        Assert.Null(store.GetSummaryMemory(AnalysisStage.IllnessCourse));
+        Assert.Equal(0, summarizer.SummaryCalls);
+    }
+
     [Fact]
-    public async Task SummaryMemory_IsScopedToTheSelectedAnalysisStage()
+    public async Task TeachingStage_DoesNotUseTheGeneralChatSummary()
     {
         var (orchestrator, store, _) = CreateOrchestrator("Summary", summaryRecentTurns: 1);
-        var premorbidHistory = new List<ChatMessage>();
+        var generalHistory = new List<ChatMessage>();
         await AddTurn(
-            "病前功能資料只應留在這個聊天室",
-            "收到病前功能資料。",
-            premorbidHistory,
+            "一般對話資料只應留在這個聊天室",
+            "收到一般對話資料。",
+            generalHistory,
             orchestrator);
 
         var illnessCourse = await orchestrator.BuildContextAsync(
@@ -101,11 +129,11 @@ public class LangChainMemoryOrchestratorTests
             {
                 Assert.Equal("system", stage.Role);
                 Assert.Contains("疾病病程", stage.Content);
-                Assert.DoesNotContain("病前功能資料只應留在這個聊天室", stage.Content);
+                Assert.DoesNotContain("一般對話資料只應留在這個聊天室", stage.Content);
             },
             current => AssertMessage(current, "user", "這是疾病病程的第一則訊息"));
-        Assert.NotNull(store.GetSummaryMemory(AnalysisStage.Premorbid));
-        Assert.NotNull(store.GetSummaryMemory(AnalysisStage.IllnessCourse));
+        Assert.NotNull(store.GetSummaryMemory(AnalysisStage.GeneralChat));
+        Assert.Null(store.GetSummaryMemory(AnalysisStage.IllnessCourse));
     }
 
     [Theory]
@@ -135,15 +163,10 @@ public class LangChainMemoryOrchestratorTests
         await AddTurn("今天天氣如何？", "今天是晴天。", history, orchestrator);
         await AddTurn("請給我一道數學題。", "請計算 12 x 8。", history, orchestrator);
 
-        var result = await orchestrator.BuildContextAsync(history, "還記得我的星座嗎？", AnalysisStage.Premorbid);
+        var result = await orchestrator.BuildContextAsync(history, "還記得我的星座嗎？", AnalysisStage.GeneralChat);
 
         Assert.DoesNotContain(result.Messages, message => message.Content.Contains("你好 千問 我是 Peter"));
         Assert.Collection(result.Messages,
-            stage =>
-            {
-                Assert.Equal("system", stage.Role);
-                Assert.Contains("病前功能", stage.Content);
-            },
             summary =>
             {
                 Assert.Equal("system", summary.Role);
@@ -177,12 +200,11 @@ public class LangChainMemoryOrchestratorTests
 
         using var payload = JsonDocument.Parse(Assert.IsType<string>(handler.RequestBody));
         var payloadMessages = payload.RootElement.GetProperty("messages").EnumerateArray().ToList();
-        Assert.Equal(["system", "system", "system", "user", "assistant", "user"],
+        Assert.Equal(["system", "system", "user", "assistant", "user"],
             payloadMessages.Select(message => message.GetProperty("role").GetString()));
         Assert.Equal("Normal teaching system prompt", payloadMessages[0].GetProperty("content").GetString());
-        Assert.Contains("病前功能", payloadMessages[1].GetProperty("content").GetString());
-        Assert.Contains("Peter", payloadMessages[2].GetProperty("content").GetString());
-        Assert.Contains("處女座", payloadMessages[2].GetProperty("content").GetString());
+        Assert.Contains("Peter", payloadMessages[1].GetProperty("content").GetString());
+        Assert.Contains("處女座", payloadMessages[1].GetProperty("content").GetString());
         Assert.DoesNotContain("你好 千問 我是 Peter", handler.RequestBody);
     }
 
@@ -192,12 +214,12 @@ public class LangChainMemoryOrchestratorTests
         List<ChatMessage> history,
         LangChainMemoryOrchestrator orchestrator)
     {
-        _ = await orchestrator.BuildContextAsync(history, userContent, AnalysisStage.Premorbid);
+        _ = await orchestrator.BuildContextAsync(history, userContent, AnalysisStage.GeneralChat);
         var user = new ChatMessage("user", userContent, DateTimeOffset.UtcNow);
         var assistant = new ChatMessage("assistant", assistantContent, DateTimeOffset.UtcNow);
         history.Add(user);
         history.Add(assistant);
-        await orchestrator.CommitTurnAsync(AnalysisStage.Premorbid, user, assistant);
+        await orchestrator.CommitTurnAsync(AnalysisStage.GeneralChat, user, assistant);
     }
 
     private static (LangChainMemoryOrchestrator Orchestrator, FakeSessionStore Store, FakeOllamaClient Ollama)
@@ -232,7 +254,7 @@ public class LangChainMemoryOrchestratorTests
     private sealed class FakeSessionStore(string strategy) : IChatSessionStore
     {
         private readonly Dictionary<AnalysisStage, SummaryMemoryState> _summaries = [];
-        public SummaryMemoryState? SummaryMemory => GetSummaryMemory(AnalysisStage.Premorbid);
+        public SummaryMemoryState? SummaryMemory => GetSummaryMemory(AnalysisStage.GeneralChat);
         public string Strategy { get; private set; } = strategy;
         public AnalysisStage ActiveStage { get; private set; } = AnalysisStage.Premorbid;
         public IReadOnlyList<ChatMessage> GetMessages(AnalysisStage stage) => [];

@@ -1,7 +1,10 @@
 @model ChatPageViewModel
 @inject AiTeachingAssistant.Services.IMarkdownRenderer MarkdownRenderer
 @{
-    ViewData["Title"] = "聊天工作台";
+    ViewData["Title"] = "AI 個案分析助教系統";
+    var teachingStages = AnalysisStageCatalog.All
+        .Where(option => option.Stage != AnalysisStage.GeneralChat)
+        .ToList();
     var memoryLabels = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["None"] = "無記憶",
@@ -9,9 +12,6 @@
         ["Buffer"] = "完整緩衝",
         ["Summary"] = "摘要記憶"
     };
-    var activeMemoryLabel = memoryLabels.GetValueOrDefault(Model.MemoryStrategy, Model.MemoryStrategy);
-    var activeStage = AnalysisStageCatalog.Get(Model.ActiveStage);
-    var stageNumbers = new[] { "①", "②", "③", "④" };
 }
 
 <div class="app-shell">
@@ -25,129 +25,130 @@
             <button class="button button-secondary" id="healthButton" type="button">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12h-3l-2 6-4-12-2 6H4"/></svg>檢查 Ollama
             </button>
-            <button class="icon-button" id="clearButton" type="button" title="清除此分析項目的對話" aria-label="清除此分析項目的對話">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/></svg>
-            </button>
-        </div>
-    </header>
-
-    <section class="hero">
-        <div><p class="eyebrow">AI 助教聊天室</p><h1>個案分析 <em>AI 助教系統</em></h1></div>
-        <div class="connection-card">
-            <span>模型</span><strong>@Model.Model</strong>
-            <span>端點</span><strong title="@Model.Server">@Model.Server.Replace("http://", "")</strong>
-            <span>記憶模式</span>
-            <div class="memory-picker-wrap">
-                <select id="memoryStrategy" class="memory-picker" aria-label="記憶模式">
-                    @foreach (var strategy in new[] { "None", "Window", "Buffer", "Summary" })
-                    {
-                        if (strategy.Equals(Model.MemoryStrategy, StringComparison.OrdinalIgnoreCase))
-                        {
-                            <option value="@strategy" selected>@memoryLabels[strategy]</option>
-                        }
-                        else
-                        {
-                            <option value="@strategy">@memoryLabels[strategy]</option>
-                        }
-                    }
-                </select>
-                @if (Model.MemoryStrategy.Equals("Summary", StringComparison.OrdinalIgnoreCase))
-                {
-                    <b class="summary-badge">保留最近 @Model.MemoryWindow 回合</b>
-                }
-            </div>
-            <span>思考內容</span>
             <label class="thinking-checkbox" for="showThinking">
                 <input id="showThinking" type="checkbox" checked>
                 <span>顯示 AI 思考過程</span>
             </label>
         </div>
+    </header>
+
+    <section class="hero">
+        <div><p class="eyebrow">AI 個案分析助教</p><h1>個案分析 <em>AI 助教系統</em></h1></div>
+        <div class="connection-card">
+            <span>模型</span><strong>@Model.Model</strong>
+            <span>端點</span><strong title="@Model.Server">@Model.Server.Replace("http://", "")</strong>
+            <span>語言</span><strong>臺灣繁體中文</strong>
+        </div>
     </section>
 
-    <section class="chat-card" aria-label="對話">
-        <nav class="analysis-tabs" aria-label="案例分析項目">
-            @for (var index = 0; index < AnalysisStageCatalog.All.Count; index++)
-            {
-                var option = AnalysisStageCatalog.All[index];
-                var selected = option.Stage == Model.ActiveStage;
-                <button type="button"
-                        class="analysis-tab @(selected ? "active" : null)"
-                        data-stage="@option.Key"
-                        aria-selected="@(selected ? "true" : "false")">
-                    <span>@stageNumbers[index]</span> @option.Label
-                </button>
-            }
+    <section class="workspace-card" aria-label="AI 工作區">
+        <nav class="analysis-tabs" aria-label="工作區">
+            <button type="button" class="analysis-tab active" data-workspace-tab="review" aria-selected="true"><span>①</span> 助教評閱</button>
+            <button type="button" class="analysis-tab" data-workspace-tab="compare" aria-selected="false"><span>②</span> 版本比較</button>
+            <button type="button" class="analysis-tab" data-workspace-tab="chat" aria-selected="false"><span>③</span> 一般對話</button>
         </nav>
-        <div class="chat-scroll" id="chatMessages" aria-live="polite">
-            @if (Model.Messages.Count == 0)
-            {
-                <div class="empty-state" id="emptyState">
-                    <div class="orb"><span></span></div>
-                    <h2>開始分析「@activeStage.Label」</h2>
-                    <p>輸入你的案例分析，AI 助教會在不直接代答的前提下提供教學回饋。各分析項目的對話會分開保留。</p>
+
+        <section class="workspace-panel active" data-workspace-panel="review">
+            <div class="task-heading">
+                <div><p class="eyebrow">單次獨立評閱</p><h2>提交目前作答</h2></div>
+                <label class="context-picker">評閱項目
+                    <select id="reviewStage">
+                        @foreach (var option in teachingStages) { <option value="@option.Key">@option.Label</option> }
+                    </select>
+                </label>
+            </div>
+            <form class="assessment-form" id="reviewForm">
+                @Html.AntiForgeryToken()
+                <label class="submission-field" for="reviewInput">
+                    <span>學生作答</span>
+                    <textarea id="reviewInput" rows="9" maxlength="8000" placeholder="貼上要評閱的目前版本…"></textarea>
+                </label>
+                <div class="form-actions"><small>不會帶入先前提交或先前回饋</small><button class="send-button" type="submit">開始評閱</button></div>
+            </form>
+            <div class="feedback-panel" id="reviewFeedback" aria-live="polite">
+                <div class="feedback-empty"><strong>TA 回饋會顯示在這裡</strong><span>每次結果只根據本次送出的作答。</span></div>
+            </div>
+        </section>
+
+        <section class="workspace-panel" data-workspace-panel="compare" hidden>
+            <div class="task-heading">
+                <div><p class="eyebrow">前後版本比較</p><h2>檢查修改是否更完整</h2></div>
+                <label class="context-picker">評閱項目
+                    <select id="compareStage">
+                        @foreach (var option in teachingStages) { <option value="@option.Key">@option.Label</option> }
+                    </select>
+                </label>
+            </div>
+            <form class="assessment-form" id="compareForm">
+                @Html.AntiForgeryToken()
+                <div class="revision-grid">
+                    <label class="submission-field" for="beforeInput"><span>修改前版本</span><textarea id="beforeInput" rows="8" maxlength="8000" placeholder="貼上學生原本的作答…"></textarea></label>
+                    <label class="submission-field" for="afterInput"><span>修改後版本</span><textarea id="afterInput" rows="8" maxlength="8000" placeholder="貼上學生修改後的作答…"></textarea></label>
                 </div>
-            }
-            @foreach (var message in Model.Messages)
-            {
-                @if (message.Role == "assistant" && !string.IsNullOrWhiteSpace(message.Thinking))
+                <div class="form-actions"><small>只比較本次提供的兩個版本</small><button class="send-button" type="submit">比較版本</button></div>
+            </form>
+            <div class="feedback-panel" id="compareFeedback" aria-live="polite">
+                <div class="feedback-empty"><strong>比較回饋會顯示在這裡</strong><span>AI 會指出改善、退步與仍需釐清之處。</span></div>
+            </div>
+        </section>
+
+        <section class="workspace-panel chat-panel" data-workspace-panel="chat" hidden>
+            <div class="chat-scroll" id="chatMessages" aria-live="polite">
+                @if (Model.Messages.Count == 0)
                 {
-                    <article class="message thinking">
-                        <div class="message-label">AI 思考過程</div>
+                    <div class="empty-state" id="emptyState"><div class="orb"><span></span></div><h2>開始一般對話</h2><p>此 POC 頁籤只套用臺灣繁體中文規則，可自由測試模型與四種記憶模式。</p></div>
+                }
+                @foreach (var message in Model.Messages)
+                {
+                    @if (message.Role == "assistant" && !string.IsNullOrWhiteSpace(message.Thinking))
+                    {
+                        <article class="message thinking"><div class="message-label">AI 思考過程</div><div class="message-line"><div class="bubble"><details class="thinking-disclosure"><summary>@message.Thinking!.Replace("\r\n", "\n").Split('\n')[0].Trim()</summary><div>@message.Thinking</div></details></div></div></article>
+                    }
+                    <article class="message @message.Role">
+                        <div class="message-label">@(message.Role == "user" ? "你" : "LLM")</div>
                         <div class="message-line">
-                            <div class="bubble">
-                                <details class="thinking-disclosure">
-                                    <summary>@message.Thinking!.Replace("\r\n", "\n").Split('\n')[0].Trim()</summary>
-                                    <div>@message.Thinking</div>
-                                </details>
-                            </div>
+                            @if (message.Role == "user") { <span class="read-receipt"><b>已讀</b>@message.Timestamp.ToLocalTime().ToString("HH:mm")</span> }
+                            @if (message.Role == "assistant") { <div class="bubble markdown-body">@Html.Raw(MarkdownRenderer.ToHtml(message.Content))</div> }
+                            else { <div class="bubble">@message.Content</div> }
                         </div>
                     </article>
                 }
-                <article class="message @message.Role">
-                    <div class="message-label">@(message.Role == "user" ? "你" : "LLM")</div>
-                    <div class="message-line">
-                        @if (message.Role == "user")
-                        {
-                            <span class="read-receipt"><b>已讀</b>@message.Timestamp.ToLocalTime().ToString("HH:mm")</span>
-                        }
-                        @if (message.Role == "assistant")
-                        {
-                            <div class="bubble markdown-body">@Html.Raw(MarkdownRenderer.ToHtml(message.Content))</div>
-                        }
-                        else
-                        {
-                            <div class="bubble">@message.Content</div>
-                        }
-                    </div>
-                </article>
-            }
-        </div>
-
-        <form class="composer" id="chatForm" data-stage="@activeStage.Key">
-            @Html.AntiForgeryToken()
-            <label class="sr-only" for="messageInput">傳送訊息給 LLM</label>
-            <textarea id="messageInput" name="message" rows="1" maxlength="8000" placeholder="@activeStage.Placeholder" autocomplete="off"></textarea>
-            <div class="composer-footer">
-                <span><kbd>Enter</kbd> 傳送 · <kbd>Shift</kbd> + <kbd>Enter</kbd> 換行</span>
-                <button class="send-button" id="sendButton" type="submit" aria-label="傳送訊息">傳送 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Zm7 1 7-8"/></svg></button>
             </div>
-        </form>
+            <form class="composer" id="chatForm">
+                @Html.AntiForgeryToken()
+                <label class="sr-only" for="messageInput">傳送訊息給 LLM</label>
+                <textarea id="messageInput" rows="1" maxlength="8000" placeholder="想和 AI 聊些什麼？" autocomplete="off"></textarea>
+                <div class="composer-footer">
+                    <span><kbd>Enter</kbd> 傳送 · <kbd>Shift</kbd> + <kbd>Enter</kbd> 換行</span>
+                    <div class="chat-actions">
+                        <label class="memory-inline">記憶
+                            <select id="memoryStrategy">
+                                @foreach (var strategy in new[] { "None", "Window", "Buffer", "Summary" })
+                                {
+                                    if (strategy.Equals(Model.MemoryStrategy, StringComparison.OrdinalIgnoreCase)) { <option value="@strategy" selected>@memoryLabels[strategy]</option> }
+                                    else { <option value="@strategy">@memoryLabels[strategy]</option> }
+                                }
+                            </select>
+                        </label>
+                        <button class="icon-button" id="clearButton" type="button" title="清除一般對話" aria-label="清除一般對話"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/></svg></button>
+                        <button class="send-button" id="sendButton" type="submit">傳送 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Zm7 1 7-8"/></svg></button>
+                    </div>
+                </div>
+            </form>
+        </section>
     </section>
 
     <section class="metrics-section" aria-labelledby="metricsHeading">
-        <div class="section-heading">
-            <div><p class="eyebrow">即時遙測</p><h2 id="metricsHeading">上一筆請求</h2></div>
-            <span class="metric-state" id="metricState">等待輸入提示詞</span>
-        </div>
+        <div class="section-heading"><div><p class="eyebrow">即時遙測</p><h2 id="metricsHeading">上一筆請求</h2></div><span class="metric-state" id="metricState">等待送出內容</span></div>
         <div class="metric-grid">
             <article class="metric-card accent"><span>總處理時間</span><strong id="metricTotal">—</strong><small>模型端處理</small></article>
             <article class="metric-card"><span>往返時間</span><strong id="metricRoundTrip">—</strong><small>瀏覽器 → Ollama</small></article>
             <article class="metric-card"><span>生成速度</span><strong id="metricSpeed">—</strong><small>Token／秒</small></article>
             <article class="metric-card"><span>生成 Token</span><strong id="metricResponseTokens">—</strong><small id="metricPromptTokens">— 個輸入 Token</small></article>
-            <article class="metric-card memory-metric"><span>記憶內容</span><strong id="metricMemory">@activeMemoryLabel</strong><small id="metricMemoryDetail">@(Model.MemoryStrategy == "Summary" ? $"最多保留最近 {Model.MemoryWindow} 回合" : "等待請求")</small></article>
+            <article class="metric-card memory-metric"><span>請求脈絡</span><strong id="metricMemory">—</strong><small id="metricMemoryDetail">等待請求</small></article>
         </div>
         <div class="timing-card">
-            <div class="timing-header"><strong>請求時間分析</strong><span id="contextLabel">@activeMemoryLabel</span></div>
+            <div class="timing-header"><strong>請求時間分析</strong><span id="contextLabel">尚無資料</span></div>
             <div class="timing-row"><span>模型載入</span><div><i id="barLoad"></i></div><strong id="metricLoad">—</strong></div>
             <div class="timing-row"><span>提示詞評估</span><div><i id="barPrompt"></i></div><strong id="metricPrompt">—</strong></div>
             <div class="timing-row"><span>內容生成</span><div><i id="barEval"></i></div><strong id="metricEval">—</strong></div>
