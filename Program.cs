@@ -77,12 +77,12 @@ builder.Services.AddScoped<IChatSessionStore,ChatSessionStore>();builder.Service
 builder.Services.AddScoped<OllamaRequestInspection>();
 builder.Services.AddSingleton<IMarkdownRenderer,MarkdownRenderer>();builder.Services.AddSingleton<OllamaPayloadDiagnostics>();
 var app=builder.Build();
-app.UsePortalSwagger();
 app.UseExceptionHandler(error=>error.Run(async context=>
 {
     context.Response.StatusCode=500;
     await context.Response.WriteAsJsonAsync(new{error="服務暫時無法完成請求，請稍後再試。"});
 }));
+app.UsePortalSwagger();
 if(!app.Environment.IsDevelopment()){app.UseHsts();app.UseHttpsRedirection();}
 app.Use(async (context,next)=>{ if(context.Request.Path.StartsWithSegments("/api")) context.Response.Headers.CacheControl="no-store"; await next(); });
 app.UseStaticFiles();app.UseRouting();app.UseSession();app.UseAuthentication();app.UseAuthorization();app.UseRateLimiter();

@@ -1,4 +1,11 @@
-﻿> 2026-11-03 implementation: courses are independent teaching groups with direct membership, groups and resources; sections and cross-course resource sharing are removed. Platform Administrator/Member and independent course-creation permission replace global teaching titles; teaching/student access follows each course membership. Migrations 015–016 are applied locally; pre-existing section data must be mapped before 016 (it fails closed). See [course implementation](docs/course-only-spec.md) and [permission implementation](docs/role-permissions-spec.md). Existing sessions must sign in again.
+> YouTube 回放可編輯逐字稿；影片門檻依播放速度換算有效內容時間（2倍速實看10分鐘計20分鐘），並保留實際時間與逐速度統計。020已套用本機。
+
+> 2026-11-06 教材支援週次／主題標籤搜尋，以及 YouTube 課程回放嵌入、有效觀看時間與課內逐人統計；回放亦可設為測驗時間門檻。018–019已套用本機。詳見 [教材操作與限制](docs/course-materials.md)。
+
+> 2026-11-03 implementation: courses are independent teaching groups with direct membership, groups and resources; sections and cross-course resource sharing are removed. Platform Administrator/Member and independent course-creation permission replace global teaching titles; teaching/student access follows each course membership. Migrations 015–016 are applied locally; pre-existing section data must be mapped before 016 (it fails closed). See [course implementation](docs/course-only-spec.md) and [permission implementation](docs/role-permissions-spec.md). Existing sessions must sign in again.
+
+Development API documentation is available at `/swagger` after restarting the rebuilt service. It uses the existing login Cookie and automatically fetches CSRF tokens for writes; Swagger is disabled in Production. See [Swagger usage and verification](docs/swagger.md).
+
 
 > 2026-10-29 最新補充：[課程管理與課程工作區](docs/course-hub.md) 已加回主導覽。課程資源、學員、小組、線上測驗、PDF 作業、成績與案例均以所屬課程串接，維持目前 S／T／A 與人工成績／文字 AI 的區分。
 

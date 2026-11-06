@@ -58,7 +58,7 @@ public sealed class LearningHistory(NpgsqlDataSource source,TimeProvider clock)
           WHERE i.source_assignment_id IS NULL AND i.source_report_id IS NULL AND s.score IS NOT NULL
           UNION ALL
           SELECT r.id,r.course_id,'material',COALESCE(NULLIF(r.display_title,''),r.file_name),'studied',NULL::timestamptz,NULL::timestamptz,max(s.last_seen_at),
-            NULL::numeric,NULL::numeric,''::text,'/courses/'||r.course_id::text||'/materials/'||r.id::text,NULL::int,(sum(s.credited_milliseconds)/1000)::bigint
+            NULL::numeric,NULL::numeric,''::text,'/courses/'||r.course_id::text||'/materials/'||r.id::text,NULL::int,(floor(sum(s.credited_milliseconds)/1000.0))::bigint
           FROM course_resources r JOIN mine ON mine.id=r.course_id
           JOIN learning_time_sessions s ON s.resource_id=r.id AND s.user_id=$1 AND NOT s.is_practice
           GROUP BY r.id HAVING sum(s.credited_milliseconds)>0

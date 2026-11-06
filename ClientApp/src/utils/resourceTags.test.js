@@ -1,0 +1,6 @@
+import {it,expect} from 'vitest'
+import {parseResourceTags,resourceTagChoices,filterResources} from './resourceTags'
+it('normalizes weekly aliases and duplicate topics',()=>{expect(parseResourceTags('第１周,week 01，PDF; pdf; 案例  分析')).toEqual(['第1週','PDF','案例 分析']);expect(parseResourceTags('')).toEqual([]);expect(()=>parseResourceTags('a'.repeat(31))).toThrow();expect(()=>parseResourceTags(Array.from({length:11},(_,i)=>'tag'+i).join(','))).toThrow()})
+const resources=[{id:'a',title:'第一週講義',fileName:'generic.pdf',tags:['第1週','案例']},{id:'b',title:'第十週回放',fileName:'YouTube',tags:['第10週']},{id:'c',title:'未分類圖片',fileName:'photo.png',tags:[]},{id:'d',title:'第二週回放',tags:['第2週','案例']}]
+it('filters exact tags and names together without confusing week one with ten',()=>{expect(filterResources(resources,{tag:'第1週'}).map(r=>r.id)).toEqual(['a']);expect(filterResources(resources,{tag:'案例',query:'回放'}).map(r=>r.id)).toEqual(['d']);expect(filterResources(resources,{untagged:true}).map(r=>r.id)).toEqual(['c']);expect(filterResources(resources,{query:'GENERIC'}).map(r=>r.id)).toEqual(['a'])})
+it('orders week tags numerically and counts only their resources',()=>{expect(resourceTagChoices(resources)).toEqual([{name:'第1週',count:1},{name:'第2週',count:1},{name:'第10週',count:1},{name:'案例',count:2}])})

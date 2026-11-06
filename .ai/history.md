@@ -414,3 +414,36 @@
 - 測試修正：初版學期select缺明確aria-label造成exact查找逾時，補標籤；重跑保留上一輪合成已公布評語導致測試跨輪干擾，改每輪唯一評語。測試呼叫ReleaseGrade參數順序修正後重跑通過。首建置需指定csproj，單次Vite工作目錄錯誤已更正，最終build無警告／錯誤。
 - 部署learning-release至p0-publish，5097啟動PID31220、contentRoot專案根／webroot發布wwwroot，最終session HTTP200（下次須重新查程序）。原5097無回應，未停止使用者開發程序。QA helper補新表範圍／非QA guard，合成帳號／課程／教材／計時／門檻／開始／提交／分數及state清理成功；只停止本次命令列核對的5107 PID18380。
 - 同步elearning、agents、learning-history-spec、learning-assessments與README。待後續：校務全修課身分／匯入、退選歷史、完整單元／完課證書、影片比例／續播、新跨修課匯出與公告／擴充教師報表；AI仍後期。未提交或推送Git。
+
+## 2026-11-06：加入開發環境 Swagger API
+
+- 使用者詢問是否已導入並要求開啟；核對原 csproj／Program 無 Swagger。新增 Swashbuckle.AspNetCore 9.0.6、AddPortalSwagger／UsePortalSwagger 與開發UI／v1 JSON；Production顯式404，避免SPA fallback假200。
+- 沿用Cookie登入，端點文件標登入需求與401／403；UI每次寫入先同源取得CSRF token，不繞過防偽／授權。GET不額外取token，跨源或token失敗停止請求。未加JWT或保存真實憑證。IFormFile移除多餘FromForm，保留自動表單綁定與原上傳限制。
+- 新文件生成測試涵蓋所有控制器、主要路徑、匿名／登入標示與兩類檔案multipart。完整文件成功產生92個API路徑。以同程序pipeline驗證Dev UI／初始化JS／JSON及Production404，Node測實際interceptor成功。build／publish 0警告錯誤；swagger-release成品已建置。
+- 環境限制：提高權限的程序啟動回OS存取被拒，正常shell可還原既有Swagger套件與建置，但本機HTTP／CIM及VSTest testhost連線受限；編譯改單節點、停用共享編譯避named pipe timeout。VSTest未完成，改直接執行新測試方法通過；未聲稱既有176回歸或瀏覽器登入通過。額外TestHost工具依賴還原失敗，未加到正式專案，改無socket同程序pipeline。
+- 未管理或重啟原5097／Visual Studio；短暫本輪前景服務啟動後已終止，原Data Protection設定不變。沒有資料庫變動／QA建立／模型推論。啟動現有開發服務新版後即可開/swagger，本輪沒有宣稱預覽已更新。
+- 同步README、docs/swagger、規格與交接／歷史；未提交推送。外部依據為Microsoft .NET8 Swashbuckle文件、NuGet版本頁與維護者FormFile說明，連結見docs/swagger.md。
+
+
+## 2026-11-06：教材週次標籤及 YouTube 回放觀看時間
+
+- 使用者先要求教材上傳由老師加tag供每週查詢，續要求YouTube回放嵌入及觀看時間；本輪合併完成。新增018標籤／獨立版本、019來源類型／影片ID，檔案bytes與歷史資料保留；001–019重跑全略過。
+- 教師／助教新增檔案或YouTube教材與自由標籤，週次正規化、去重／10個各30字限制；學生依週次／主題／未標記及名稱／檔名搜尋。標籤API有課程權限、封存阻擋、409版本與稽核，未存離頁提醒；標籤不重設原下載次數／學習時間。
+- YouTube只保存白名單11碼ID，支援常用影片網址但不接受任意HTML／外站／僅播放清單；官方IFrame API與nocookie嵌入，無影片代理下載。影片ID不覆寫，改片須新增。回放自動播放事件連結017計時，背景／暫停／緩衝／倍速停止、快轉不給跳過時間，伺服器wall-clock及位置雙重上限，10秒心跳／超25秒斷點不計。close保存有效尾段，時間投影floor避免四捨五入提前達門檻；序列化心跳避免關閉事件被在途請求吞掉。
+- 新課內教師／助教正式時間統計API與介面，列有效學生逐人秒數／最近觀看／未看0及總計；學生及練習視角拒讀，無跨課繞過。YouTube可加入既有測驗教材門檻並由伺服器鎖題／拒作答。不可嵌入／載入失敗與站外觀看不累計，仍為平台活動而非注意力或YouTube官方觀看數。
+- 後端193通過（DB啟用、0略過），前端53通過；新增政策與DB影片時間／練習隔離／統計授權測試，前端標籤篩選／衝突保留及播放器事件。Vite build與publish成功；首次publish缺npm，改用已完成的前端輸出並SkipFrontendBuild發布，無產品依賴變更。
+- 初次新browser測試因合成iframe滿高令測試按鈕溢出被連結遮住逾時，改合成iframe高度後通過；另修正教材template中插入統計導致v-else錯接、意外顯示同學區的問題。5107教材／既有計時3項通過，最終5097檔案預覽、PDF／WebM計時、跨課歷程／門檻、新標籤／YouTube／統計、檔名共5項通過。桌面／390px手機截圖檢視，合成播放約9秒達門檻且快轉不膨脹；真實官方YouTube示例播放器成功載入且無頁面錯誤，未做真實學生影片完成率或模型品質驗收。
+- 原5097未啟動，materials-release複製p0-publish並以contentRoot專案根／webroot發布目錄啟動PID9188，session／Swagger JSON均200（下次重查）。合成QA及state清理成功，核對命令列後停止本次5107 PID49724。未動真實課程／教材／模型設定，未停止使用者開發程序，未提交推送。
+- 同步docs/course-materials、elearning、agents及README；下方前次Swagger受限為當時紀錄，本輪工具已可正常執行提高權限DB／瀏覽器驗證。
+
+
+## 2026-11-06：YouTube逐字稿與播放速度／內容時間
+
+- 使用者要求YouTube教材提供逐字稿，播放速度和觀看時間共同參考。新增YouTube表單選填逐字稿、回放頁逐字稿區，教師／助教新增／修改／清除、學生唯讀。最多100,000字、純文字保留換行／時間文字，不執行HTML，不自動擷取／轉錄或同步跳播。獨立版本與409衝突，保留未存草稿、離頁提醒，稽核不存逐字稿正文；課程／封存／練習授權沿用。
+- 提問速度如何計入門檻，使用者選「以影片內容時間計入（2倍速實看10分鐘計20分鐘）」，取代原1倍速限制及當次暫採實際時間的建議。0.25–4倍速固定session分段，切速關閉舊段、新開新段，伺服器實際經過時間及位置／速度共同限制；跳轉／背景／暫停／緩衝仍不計，重看可累積。
+- 觀看時間保留實際credited_milliseconds，另保存content_milliseconds與playback_rate；門檻Gate改採內容（文件內容與實際相同），本人歷程原實際秒數不膨脹。學生顯示兩種時間與當前速度；教師逐位實際／內容合計、各速度實際／內容分段。既有已開始測驗依據不重寫，舊成績不變。
+- 新020增加transcript／transcript_version及速度／內容欄位，已交易套用，001–020重跑全略過；舊1倍速已計入時間等量承接內容欄，未製造站外／歷史觀看事件或搬移真實教材。無模型設定／有效負載變更、無AI推論。
+- 最終後端199通過（DB啟用、0略過），新增2倍速實10秒／內容20秒達門檻、錯誤速度／快轉不給分、0.5倍速及無效速度邊界等；前端55通過，含逐字稿純文字／學生唯讀／衝突草稿與清空。Vite及publish成功。首次後端test輸出被使用者開發程序apphost鎖定，改獨立replay-tests通過，未停止該程序。
+- 5107原政策3項browser通過後，依使用者答覆改門檻並重新驗證最終5097共3項通過：PDF／WebM、跨課歷程／門檻、新逐字稿／學生唯讀／HTML純文字／清除與409／教師UI編輯／1倍切2倍／實際少於25秒而內容達25秒解鎖／快轉不膨脹／正式統計。測試合成播放器的緩衝回播回呼補狀態檢查，避免按暫停後測試碼自行恢復播放；手機及統計截圖已檢視。未宣稱真人影片完成率或注意力驗收，本輪未重跑實際YouTube播放或模型測試。
+- 部署replay-release至p0-publish，核對命令列後更新本專案預覽；最終5097 PID41988，contentRoot專案根／webroot發布wwwroot，session200，下次重查。QA合成帳號／課程／教材／逐字稿／計時／提交及state已清理，僅停止本次5107 PID39940；未停止使用者開發程序，未提交／推送。
+- 更新elearning、agents、course-materials、learning-history-spec及README，以新確認的內容時間政策取代舊限制；歷史原決策保留。

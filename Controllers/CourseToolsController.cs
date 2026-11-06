@@ -28,25 +28,29 @@ public sealed partial class CourseToolsController(NpgsqlDataSource source,Learne
         return Ok(result);
     }
     [HttpGet("resources")]
-    public async Task<IActionResult> Resources(Guid course,CancellationToken ct)
+    public async Task<IActionResult> Resources(Guid course,CancellationToken ct,[FromQuery,StringLength(200)] string? q=null,[FromQuery,StringLength(30)] string? tag=null)
     {
         var role=await Access(course,false,ct);if(role==null)return Forbid();
-        await using var cmd=source.CreateCommand("SELECT id,file_name,octet_length(content),download_count,created_at,substring(content from 1 for 16),display_title,title_version FROM course_resources WHERE course_id=$1 ORDER BY created_at DESC");cmd.Parameters.AddWithValue(course);
+        await using var cmd=source.CreateCommand("SELECT id,file_name,octet_length(content),download_count,created_at,substring(content from 1 for 16),display_title,title_version,tags,tags_version,resource_type,youtube_video_id FROM course_resources WHERE course_id=$1 AND ($2::text IS NULL OR strpos(lower(display_title||' '||file_name||' '||array_to_string(tags,' ')),lower($2))>0) AND ($3::text IS NULL OR EXISTS(SELECT 1 FROM unnest(tags) t WHERE lower(t)=lower($3))) ORDER BY created_at DESC");cmd.Parameters.AddWithValue(course);
+        string? normalizedTag;try{normalizedTag=ResourceTagPolicy.Normalize(tag==null?[]:[tag]).FirstOrDefault();}catch(ArgumentException e){return BadRequest(new{error=e.Message});}
+        cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Text,Value=string.IsNullOrWhiteSpace(q)?DBNull.Value:q.Trim()});
+        cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Text,Value=(object?)normalizedTag??DBNull.Value});
         await using var r=await cmd.ExecuteReaderAsync(ct);var result=new List<object>();
-        while(await r.ReadAsync(ct))result.Add(new{id=r.GetGuid(0),fileName=r.GetString(1),size=r.GetInt32(2),downloadCount=r.GetInt64(3),createdAt=r.GetFieldValue<DateTimeOffset>(4),previewType=FilePreviewPolicy.ContentType(r.GetString(1),r.GetFieldValue<byte[]>(5)),learningType=LearningTimePolicy.MediaType(r.GetString(1),r.GetFieldValue<byte[]>(5)),title=r.GetString(6),titleVersion=r.GetInt32(7)});
+        while(await r.ReadAsync(ct))result.Add(new{id=r.GetGuid(0),fileName=r.GetString(1),size=r.GetInt32(2),downloadCount=r.GetInt64(3),createdAt=r.GetFieldValue<DateTimeOffset>(4),previewType=FilePreviewPolicy.ContentType(r.GetString(1),r.GetFieldValue<byte[]>(5)),learningType=LearningTimePolicy.MediaType(r.GetString(1),r.GetFieldValue<byte[]>(5),r.GetString(10)),title=r.GetString(6),titleVersion=r.GetInt32(7),tags=r.GetFieldValue<string[]>(8),tagsVersion=r.GetInt32(9),resourceType=r.GetString(10),youtubeVideoId=r.IsDBNull(11)?null:r.GetString(11)});
         return Ok(result);
     }
     [HttpPost("resources"),RequestSizeLimit(22*1024*1024)]
-    public async Task<IActionResult> Upload(Guid course,IFormFile file,[FromForm,StringLength(200)] string? title,CancellationToken ct)
+    public async Task<IActionResult> Upload(Guid course,IFormFile file,[FromForm,StringLength(200)] string? title,[FromForm] List<string?>? tags,CancellationToken ct)
     {
         if(await Access(course,true,ct)==null)return Forbid();
+        string[] normalizedTags;try{normalizedTags=ResourceTagPolicy.Normalize(tags);}catch(ArgumentException e){return BadRequest(new{error=e.Message});}
         if(file.Length is <=0 or >20*1024*1024)return BadRequest(new{error="請上傳 1 byte 至 20 MB 的檔案。"});
         var name=Path.GetFileName(file.FileName.Replace('\\','/'));if(string.IsNullOrWhiteSpace(name)||name.Length>200)return BadRequest(new{error="檔名無效或超過 200 字元。"});
 
         using var buffer=new MemoryStream();await file.CopyToAsync(buffer,ct);
-        await using var cmd=source.CreateCommand("INSERT INTO course_resources(course_id,file_name,content,uploaded_by,display_title) VALUES($1,$2,$3,$4,$5) RETURNING id");
+        await using var cmd=source.CreateCommand("INSERT INTO course_resources(course_id,file_name,content,uploaded_by,display_title,tags) VALUES($1,$2,$3,$4,$5,$6) RETURNING id");
         cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(name);cmd.Parameters.AddWithValue(buffer.ToArray());cmd.Parameters.AddWithValue(Actor);
-        cmd.Parameters.AddWithValue(title?.Trim()??"");
+        cmd.Parameters.AddWithValue(title?.Trim()??"");cmd.Parameters.AddWithValue(normalizedTags);
         return Ok(new{id=await cmd.ExecuteScalarAsync(ct)});
     }
     public sealed class ResourceTitleInput {
@@ -72,7 +76,7 @@ public sealed partial class CourseToolsController(NpgsqlDataSource source,Learne
     {
         var role=await Access(course,false,ct);if(role==null)return Forbid();
         // One authorized download request counts once; range/retry traffic is not counted separately.
-        await using var cmd=source.CreateCommand("UPDATE course_resources SET download_count=download_count+1 WHERE id=$1 AND course_id=$2 RETURNING file_name,content");cmd.Parameters.AddWithValue(id);cmd.Parameters.AddWithValue(course);
+        await using var cmd=source.CreateCommand("UPDATE course_resources SET download_count=download_count+1 WHERE id=$1 AND course_id=$2 AND resource_type='file' RETURNING file_name,content");cmd.Parameters.AddWithValue(id);cmd.Parameters.AddWithValue(course);
         await using var r=await cmd.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct))return NotFound();
         Response.Headers["X-Content-Type-Options"]="nosniff";return File(r.GetFieldValue<byte[]>(1),"application/octet-stream",r.GetString(0));
     }
@@ -80,7 +84,7 @@ public sealed partial class CourseToolsController(NpgsqlDataSource source,Learne
     public async Task<IActionResult> Preview(Guid course,Guid id,CancellationToken ct)
     {
         var role=await Access(course,false,ct);if(role==null)return Forbid();
-        await using var cmd=source.CreateCommand("SELECT file_name,content FROM course_resources WHERE id=$1 AND course_id=$2");
+        await using var cmd=source.CreateCommand("SELECT file_name,content FROM course_resources WHERE id=$1 AND course_id=$2 AND resource_type='file'");
         cmd.Parameters.AddWithValue(id);cmd.Parameters.AddWithValue(course);
         await using var r=await cmd.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct))return NotFound();
         var bytes=r.GetFieldValue<byte[]>(1);var type=FilePreviewPolicy.ContentType(r.GetString(0),bytes);

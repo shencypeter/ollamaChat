@@ -139,6 +139,41 @@ public class LearningWorkflowTests:IAsyncLifetime
         await Exec("UPDATE courses SET status='archived' WHERE id=$1",course);
         await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Start(course,r,student,false,null,default));
     }
+    [FormativeDatabaseFact] public async Task YouTubeTimeUsesVideoEvidenceAndStaffStatisticsExcludePractice()
+    {
+        var resource=(Guid)(await Exec("INSERT INTO course_resources(course_id,file_name,content,uploaded_by,resource_type,youtube_video_id) VALUES($1,'YouTube 課程回放',$2,$3,'youtube','M7lc1UVf-VE') RETURNING id",course,Array.Empty<byte>(),teacher))!;
+        var meta=await time.Resource(course,resource,student,false,default);Assert.Equal("video/youtube",meta.MediaType);Assert.Equal("M7lc1UVf-VE",meta.YouTubeVideoId);
+        var quiz=await Gated(resource);var session=await time.Start(course,resource,student,false,0,default);
+        clock.Advance(1);Assert.Equal(0,(await time.Heartbeat(course,resource,session.Id,student,false,new(){Active=true,Position=0.7},default)).AccumulatedSeconds);
+        clock.Advance(10);Assert.Equal(10,(await time.Heartbeat(course,resource,session.Id,student,false,new(){Active=true,Position=10.7},default)).AccumulatedSeconds);
+        clock.Advance(10);Assert.Equal(10,(await time.Heartbeat(course,resource,session.Id,student,false,new(){Active=true,Position=300},default)).AccumulatedSeconds);
+        clock.Advance(5);Assert.Equal(15,(await time.Heartbeat(course,resource,session.Id,student,false,new(){Active=true,Close=true,Position=305},default)).AccumulatedSeconds);
+        Assert.True((await workflow.Get(quiz.Id,student,default)).LearningGate!.Met);
+        await workflow.StartLearningQuiz(quiz.Id,student,default);
+        var practice=await time.Start(course,resource,teacher,true,0,default);clock.Advance(10);await time.Heartbeat(course,resource,practice.Id,teacher,true,new(){Active=true,Position=10},default);
+        var stats=System.Text.Json.JsonSerializer.SerializeToElement(await time.Statistics(course,resource,teacher,false,default));Assert.Equal(15,stats.GetProperty("totalSeconds").GetInt64());Assert.Equal(1,stats.GetProperty("watchedCount").GetInt32());Assert.Equal(2,stats.GetProperty("studentCount").GetInt32());
+        Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Statistics(course,resource,student,false,default))).StatusCode);
+        Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Statistics(course,resource,teacher,true,default))).StatusCode);
+        Assert.Equal(404,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Resource(second,resource,student,false,default))).StatusCode);
+    }
+    [FormativeDatabaseFact] public async Task PlaybackSpeedKeepsWallTimeSeparateFromContentAndRejectsSeek()
+    {
+        var resource=(Guid)(await Exec("INSERT INTO course_resources(course_id,file_name,content,uploaded_by,resource_type,youtube_video_id) VALUES($1,'Speed replay',$2,$3,'youtube','M7lc1UVf-VE') RETURNING id",course,Array.Empty<byte>(),teacher))!;
+        var quiz=await Gated(resource);
+        await Exec("UPDATE quiz_learning_requirements SET minimum_seconds=20 WHERE assignment_id=$1",quiz.Id);
+        var session=await time.Start(course,resource,student,false,0,default,2);
+        clock.Advance(10);var beat=await time.Heartbeat(course,resource,session.Id,student,false,new(){Active=true,Position=20,PlaybackRate=2},default);
+        Assert.Equal(10,beat.AccumulatedSeconds);Assert.Equal(20,beat.ContentSeconds);
+        var gate=(await workflow.Get(quiz.Id,student,default)).LearningGate!;Assert.True(gate.Met);Assert.Equal(20,gate.Requirements[0].AccumulatedSeconds);
+        await workflow.StartLearningQuiz(quiz.Id,student,default);
+        clock.Advance(10);Assert.Equal(10,(await time.Heartbeat(course,resource,session.Id,student,false,new(){Active=true,Position=300,PlaybackRate=2},default)).AccumulatedSeconds);
+        clock.Advance(10);Assert.Equal(10,(await time.Heartbeat(course,resource,session.Id,student,false,new(){Active=true,Position=320,PlaybackRate=1},default)).AccumulatedSeconds);
+        clock.Advance(5);Assert.Equal(15,(await time.Heartbeat(course,resource,session.Id,student,false,new(){Active=true,Close=true,Position=330,PlaybackRate=2},default)).AccumulatedSeconds);
+        var stats=System.Text.Json.JsonSerializer.SerializeToElement(await time.Statistics(course,resource,teacher,false,default));
+        var speed=stats.GetProperty("students").EnumerateArray().Single(x=>x.GetProperty("id").GetGuid()==student).GetProperty("playbackSpeeds")[0];
+        Assert.Equal(2,speed.GetProperty("playbackRate").GetDouble());Assert.Equal(15,speed.GetProperty("watchSeconds").GetInt64());Assert.Equal(30,speed.GetProperty("contentSeconds").GetInt64());
+        await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Start(course,resource,student,false,0,default,double.NaN));
+    }
     public async Task DisposeAsync()
     {
         if(db==null)return;

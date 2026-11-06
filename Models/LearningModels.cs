@@ -21,6 +21,8 @@ public sealed class LearningHeartbeat
 {
     public double? Position {get;set;}
     public bool Active {get;set;}
+    public bool Close {get;set;}
+    [Range(0.25,4)] public double PlaybackRate {get;set;}=1;
 }
-public sealed record LearningSession(Guid Id,long AccumulatedSeconds);
-public sealed record LearningResource(Guid Id,Guid CourseId,string Title,string FileName,string MediaType,long AccumulatedSeconds,bool CanTrack,bool IsPractice);
+public sealed record LearningSession(Guid Id,long AccumulatedSeconds,long ContentSeconds=0);
+public sealed record LearningResource(Guid Id,Guid CourseId,string Title,string FileName,string MediaType,long AccumulatedSeconds,bool CanTrack,bool IsPractice,string? YouTubeVideoId=null,long ContentSeconds=0);
