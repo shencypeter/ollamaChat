@@ -1,0 +1,12 @@
+{
+  "Ollama": {
+    "Profile": "breeze",
+    "BaseUrl": "http://192.168.1.195:11434",
+    "Model": "ycchen/breeze-7b-instruct-v1_0",
+    "TimeoutSeconds": 180,
+    "MergeAssessmentSystemMessages": true,
+    "RepeatAssessmentRequirements": true,
+    "SystemPrompt": "所有回覆一律使用臺灣繁體中文（zh-TW），不得使用簡體中文（zh-CN）。",
+    "AssessmentSampling": { "Temperature": 0, "Seed": 42, "TopP": 0.9, "TopK": 40, "NumCtx": 16384, "NumPredict": 4096 }
+  }
+}

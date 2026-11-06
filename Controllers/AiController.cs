@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using Microsoft.AspNetCore.Authorization;
 using AiTeachingAssistant.Models;
 using AiTeachingAssistant.Options;
 using AiTeachingAssistant.Services;
@@ -7,31 +7,25 @@ using Microsoft.Extensions.Options;
 
 namespace AiTeachingAssistant.Controllers;
 
-public class HomeController(
-    ILogger<HomeController> logger,
+[ApiController, Route("api/ai"), Authorize]
+public class AiController(
+    ILogger<AiController> logger,
     IChatSessionStore sessionStore,
     IMemoryOrchestrator memoryOrchestrator,
     IMarkdownRenderer markdownRenderer,
     IOllamaClient ollamaClient,
     IOptions<OllamaOptions> ollamaOptions,
-    IOptions<MemoryOptions> memoryOptions) : Controller
+    OllamaRequestInspection requestInspection) : ControllerBase
 {
-    public IActionResult Index()
-    {
-        var ollama = ollamaOptions.Value;
-        var memory = memoryOptions.Value;
-        var activeStage = AnalysisStage.GeneralChat;
-        return View(new ChatPageViewModel(
-            sessionStore.GetMessages(activeStage), ollama.Model, ollama.BaseUrl,
-            sessionStore.GetMemoryStrategy(),
-            sessionStore.GetMemoryStrategy().Equals("Summary", StringComparison.OrdinalIgnoreCase)
-                ? memory.SummaryRecentTurns
-                : memory.WindowSize,
-            activeStage));
-    }
+    [HttpGet("configuration")]
+    public IActionResult Configuration() => Ok(new {
+        model = ollamaOptions.Value.Model,
+        stages = AnalysisStageCatalog.All,
+        memoryStrategy = sessionStore.GetMemoryStrategy(),
+        messages = sessionStore.GetMessages(AnalysisStage.GeneralChat).Select(m => new { m.Role, m.Content, m.Timestamp, renderedContent = m.Role == "assistant" ? markdownRenderer.ToHtml(m.Content) : null })
+    });
 
-    [HttpPost("chat/send")]
-    [ValidateAntiForgeryToken]
+    [HttpPost("send")]
     public async Task<IActionResult> Send([FromBody] SendMessageRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid || !AnalysisStageCatalog.TryParse(request.Stage, out var stage))
@@ -47,24 +41,28 @@ public class HomeController(
         {
             var currentVersion = request.Message.Trim();
             var beforeVersion = request.BeforeMessage?.Trim();
-            var input = request.Compare
-                ? $"""
-                    請比較同一份學生作答的修改前與修改後版本，並以修改後版本是否更符合目前評閱項目的學習目標為核心提供回饋。
-
-                    修改前版本
-                    {beforeVersion}
-
-                    修改後版本
-                    {currentVersion}
-                    """
-                : currentVersion;
+            var caseAvailable = !string.IsNullOrWhiteSpace(request.CaseFacts);
+            var input = stage == AnalysisStage.GeneralChat ? currentVersion :
+                AssessmentContract.BuildInput(currentVersion, request.Compare ? beforeVersion : null, request.CaseFacts);
             sessionStore.SetActiveStage(stage);
             var history = stage == AnalysisStage.GeneralChat
                 ? sessionStore.GetMessages(stage)
                 : [];
             var context = await memoryOrchestrator.BuildContextAsync(history, input, stage, cancellationToken);
-            var (content, thinking, metrics) = await ollamaClient.ChatAsync(context.Messages, cancellationToken);
+            var (content, thinking, metrics) = stage == AnalysisStage.GeneralChat
+                ? await ollamaClient.ChatAsync(context.Messages, cancellationToken)
+                : await ollamaClient.AssessAsync(context.Messages, request.Compare, cancellationToken);
+            AssessmentScores? scores = null;
+            AssessmentResult? assessment = null;
+            if (stage != AnalysisStage.GeneralChat)
+            {
+                assessment = AssessmentResultParser.Parse(content, request.Compare, caseAvailable);
+                content = AssessmentResultParser.ToMarkdown(assessment);
+                scores = AssessmentResultParser.Scores(assessment);
+                thinking = null; // Findings are public evidence summaries, not private model thinking.
+            }
 
+            thinking = null;
             var userMessage = new ChatMessage("user", input, DateTimeOffset.UtcNow);
             var assistantMessage = new ChatMessage("assistant", content, DateTimeOffset.UtcNow, thinking);
             if (stage == AnalysisStage.GeneralChat)
@@ -81,7 +79,10 @@ public class HomeController(
                 metrics,
                 memoryDiagnostics.Strategy,
                 context.Messages.Count,
-                memoryDiagnostics));
+                memoryDiagnostics,
+                scores,
+                assessment,
+                requestInspection.Current));
         }
         catch (Exception exception) when (exception is HttpRequestException or InvalidOperationException or TaskCanceledException)
         {
@@ -89,12 +90,11 @@ public class HomeController(
             var message = exception is TaskCanceledException
                 ? "The model took too long to respond. Try again or increase Ollama:TimeoutSeconds."
                 : exception.Message;
-            return StatusCode(StatusCodes.Status502BadGateway, new { error = message });
+            return StatusCode(StatusCodes.Status502BadGateway, new AiFailure(message,requestInspection.Current));
         }
     }
 
-    [HttpPost("chat/stage")]
-    [ValidateAntiForgeryToken]
+    [HttpPost("stage")]
     public IActionResult SetAnalysisStage([FromBody] SetAnalysisStageRequest request)
     {
         if (!ModelState.IsValid || !AnalysisStageCatalog.TryParse(request.Stage, out var stage))
@@ -104,8 +104,7 @@ public class HomeController(
         return Ok(new { stage = AnalysisStageCatalog.Get(stage).Key });
     }
 
-    [HttpPost("chat/memory")]
-    [ValidateAntiForgeryToken]
+    [HttpPost("memory")]
     public IActionResult SetMemoryStrategy([FromBody] SetMemoryStrategyRequest request)
     {
         if (!ModelState.IsValid)
@@ -116,24 +115,18 @@ public class HomeController(
         return Ok(new { strategy });
     }
 
-    [HttpGet("chat/health")]
+    [HttpGet("health")]
     public async Task<IActionResult> Health(CancellationToken cancellationToken)
     {
         var result = await ollamaClient.CheckHealthAsync(cancellationToken);
         return result.Online ? Ok(result) : StatusCode(StatusCodes.Status503ServiceUnavailable, result);
     }
 
-    [HttpPost("chat/clear")]
-    [ValidateAntiForgeryToken]
+    [HttpPost("clear")]
     public IActionResult Clear()
     {
         sessionStore.Clear(AnalysisStage.GeneralChat);
         return NoContent();
     }
 
-    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-    public IActionResult Error() => View(new ErrorViewModel
-    {
-        RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier
-    });
 }

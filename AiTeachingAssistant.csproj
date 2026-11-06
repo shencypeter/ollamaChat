@@ -4,18 +4,38 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <DefaultItemExcludes>$(DefaultItemExcludes);.codex-build/**;ClientApp/node_modules/**;artifacts/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Update="Configuration\Ollama\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <PackageReference Include="HtmlSanitizer" Version="9.2.1039" />
     <PackageReference Include="LangChain.Core" Version="0.17.0" />
     <PackageReference Include="Markdig" Version="1.4.0" />
+    <PackageReference Include="Npgsql" Version="8.0.8" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
   </ItemGroup>
 
   <ItemGroup>
     <Compile Remove="tests\**\*.cs" />
+    <Content Remove="ClientApp\**\*;appsettings.Local.json;Database\**\*;wwwroot\portal\**\*" />
+    <None Remove="ClientApp\node_modules\**\*" />
+    <Content Include="Database\**\*.sql" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Remove="tests\**\*" />
     <None Remove="tests\**\*" />
   </ItemGroup>
 
+  <Target Name="BuildVueForPublish" BeforeTargets="_HandleFileConflictsForPublish">
+    <Exec WorkingDirectory="ClientApp" Command="npm ci --no-audit --no-fund" Condition="'$(SkipFrontendBuild)' != 'true'" />
+    <Exec WorkingDirectory="ClientApp" Command="npm run build" Condition="'$(SkipFrontendBuild)' != 'true'" />
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('wwwroot/portal/')) Or $([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('wwwroot\portal\'))" />
+      <VuePublishFiles Include="wwwroot/portal/**/*" />
+      <ResolvedFileToPublish Include="@(VuePublishFiles->'%(FullPath)')">
+        <RelativePath>wwwroot/portal/%(RecursiveDir)%(Filename)%(Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 </Project>

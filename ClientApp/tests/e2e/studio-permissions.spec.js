@@ -1,0 +1,62 @@
+﻿import {retryLogin} from '../helpers/auth'
+import {test,expect} from '@playwright/test'
+import {readFileSync,writeFileSync} from 'node:fs'
+const stateFile=new URL('../../../.codex-build/portal-smoke.json',import.meta.url)
+test('independent courses and platform permissions remain separate across mixed course roles',async({playwright,browser,baseURL})=>{
+ test.setTimeout(120000)
+ const state=JSON.parse(readFileSync(stateFile,'utf8')),admin=await playwright.request.newContext({baseURL}),member=await playwright.request.newContext({baseURL}),manager=await playwright.request.newContext({baseURL}),mixed=await playwright.request.newContext({baseURL})
+ async function write(ctx,path,data,method='POST',extra={}){const token=(await(await ctx.get('/api/auth/csrf')).json()).token;return ctx.fetch('/api'+path,{method,...(data?{data}:{}),...extra,headers:{'X-CSRF-TOKEN':token,...extra.headers}})}
+ async function login(ctx,u){const r=await retryLogin(ctx,{email:u.email,password:state.password});expect(r.status()).toBe(200);return r.json()}
+ await login(admin,state.accounts.find(a=>a.role==='Professor'))
+ async function account(label,role='Member',canCreateCourses=false){const r=await write(admin,'/accounts',{displayName:label,email:`qa-${state.run}-${Date.now()}-${Math.random().toString(16).slice(2)}@example.invalid`,password:state.password,role,canCreateCourses});expect(r.status()).toBe(200);const u=await r.json();const saved=JSON.parse(readFileSync(stateFile,'utf8'));saved.accounts.push(u);writeFileSync(stateFile,JSON.stringify(saved));return u}
+ const creator=await account('合成課程擁有者','Member',true),adminOnly=await account('合成純平台管理員','Administrator',false),learner=await account('合成跨課不同角色')
+ await login(member,creator);await login(manager,adminOnly);await login(mixed,learner)
+ expect((await write(manager,'/courses',{code:'DENY',title:'禁止',termCode:'QA'})).status()).toBe(403)
+ expect((await member.get('/api/accounts')).status()).toBe(403)
+ const c1=await(await write(member,'/courses',{code:'INDEPENDENT-A-'+Date.now(),title:'獨立課程甲',termCode:'QA'})).json(),c2=await(await write(member,'/courses',{code:'INDEPENDENT-B-'+Date.now(),title:'獨立課程乙',termCode:'QA'})).json(),a=`/courses/${c1.id}`,b=`/courses/${c2.id}`
+ expect((await member.get('/api'+a+'/eligible-accounts')).ok()).toBe(true)
+ expect((await write(member,a+'/members',{userId:learner.id,courseRole:'student'})).ok()).toBe(true);expect((await write(member,b+'/members',{userId:learner.id,courseRole:'teacher'})).ok()).toBe(true)
+ expect((await write(mixed,'/studio/profile',{displayName:learner.displayName,studentNumber:'QA-'+Date.now(),departmentYear:'合成'},'PUT')).ok()).toBe(true)
+ expect((await write(mixed,b+'/members',{userId:adminOnly.id,courseRole:'ta'})).status()).toBe(403)
+ expect((await write(member,a+'/members',{userId:creator.id,courseRole:'student'})).status()).toBe(400)
+ expect((await member.get('/api'+a+'/sections')).status()).toBe(404)
+ const group=await write(member,a+'/groups',{name:'課程第一組',members:[learner.id]});expect(group.status()).toBe(200)
+ expect((await write(member,a+'/groups',{name:'重複入組',members:[learner.id]})).status()).toBe(400)
+ expect((await write(member,b+'/groups',{name:'教師不可入學生組',members:[learner.id]})).status()).toBe(400)
+ async function upload(course){return (await write(member,course+'/resources',null,'POST',{multipart:{file:{name:'independent.txt',mimeType:'text/plain',buffer:Buffer.from('synthetic independent content')}}})).json()}
+ const ra=await upload(a),rb=await upload(b)
+ expect(ra.id).not.toBe(rb.id);expect((await manager.get('/api'+a+'/resources')).status()).toBe(403)
+ expect((await write(mixed,`${a}/resources/${rb.id}/download`)).status()).toBe(404)
+ expect((await write(mixed,`${a}/resources/${ra.id}/download`)).ok()).toBe(true)
+ expect((await(await member.get('/api'+b+'/resources')).json()).find(x=>x.id===rb.id).downloadCount).toBe(0)
+ expect((await write(member,`${a}/resources/${ra.id}/scope`,{sectionId:null},'PUT')).status()).toBe(404)
+ const stages=['premorbid','illnessCourse','functionalAssessment','psychosocial'];const createdCase=await(await write(member,'/studio/admin/cases',{courseId:c1.id,title:'課程私密案例',material:'合成案例',prompts:Object.fromEntries(stages.map(s=>[s,'合成提示'])),referencePoints:Object.fromEntries(stages.map(s=>[s,'私密重點']))})).json()
+ expect((await manager.get('/api/studio/admin/cases/'+createdCase.id)).status()).toBe(403)
+ expect((await mixed.get('/api/studio/admin/cases/'+createdCase.id)).status()).toBe(403)
+ expect((await write(manager,`/studio/admin/cases/${createdCase.id}/publish`,{expectedDraftVersionId:createdCase.versionId})).status()).toBe(403)
+ expect((await write(member,`/studio/admin/cases/${createdCase.id}/publish`,{expectedDraftVersionId:createdCase.versionId})).ok()).toBe(true)
+ expect((await mixed.get('/api/studio/admin/settings')).status()).toBe(403);expect((await manager.get('/api/studio/admin/settings')).ok()).toBe(true)
+ const quiz=await(await write(member,a+'/quizzes',{weight:1,assignment:{title:'正式學生與跨課教師',instructions:'合成',maxScore:100,questions:[{promptText:'合成是非',questionType:'true_false',options:[],standardAnswer:['0']}]}})).json()
+ expect((await write(member,`/assignments/${quiz.id}/publish`,{})).ok()).toBe(true)
+ const detail=await(await mixed.get('/api/assignments/'+quiz.id,{headers:{'X-Portal-View':'student'}})).json();expect(detail.courseRole).toBe('student');expect(detail.isPractice).toBe(false)
+ const submit=await write(mixed,`/assignments/${quiz.id}/my-submission`,{answers:[{questionId:detail.questions[0].id,answerText:'["0"]'}],submit:true},'POST',{headers:{'X-Portal-View':'student'}})
+ expect(submit.ok()).toBe(true)
+ expect((await(await member.get(`/api/assignments/${quiz.id}/submissions`)).json())).toHaveLength(1)
+ const report=await(await write(member,a+'/reports',{title:'混合角色正式報告',maxScore:100,weight:1})).json();expect((await write(member,`/reports/${report.id}/publish`,{})).ok()).toBe(true)
+ expect((await write(mixed,`/reports/${report.id}/submit`,null,'POST',{headers:{'X-Portal-View':'student'},multipart:{file:{name:'formal.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4\nsynthetic formal\n%%EOF')}}})).ok()).toBe(true)
+ expect((await(await mixed.get('/api/reports/'+report.id,{headers:{'X-Portal-View':'student'}})).json()).isPractice).toBe(false)
+ const attempt=await(await mixed.get(`/api/studio/cases/${createdCase.id}/attempt`,{headers:{'X-Portal-View':'student'}})).json();expect(attempt.isPractice).toBe(false)
+
+ const newSession=await(await mixed.get('/api/auth/session')).json();expect(newSession.user).toMatchObject({role:'Member',canTeach:true,hasStudentCourses:true})
+ const context=await browser.newContext({storageState:await member.storageState()}),page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(baseURL+`/courses/${c1.id}?section=students`);await expect(page.getByRole('heading',{name:'課程小組設定',exact:true})).toBeVisible();expect(await page.getByText('班別設定',{exact:true}).count()).toBe(0);await expect(page.getByRole('button',{name:'加入／更新課程學員'})).toBeVisible();await page.screenshot({path:'test-results/independent-course-teacher.png',fullPage:true})
+ await page.goto(baseURL+'/admin/cases');await expect(page.getByRole('heading',{name:'案例維護',exact:true})).toBeVisible();expect(await page.getByRole('link',{name:'A2 帳號管理'}).count()).toBe(0)
+ const mcontext=await browser.newContext({storageState:await manager.storageState()}),mp=await mcontext.newPage();await mp.goto(baseURL+'/admin/accounts');await expect(mp.getByRole('heading',{name:'平台成員',exact:false})).toBeVisible();await expect(mp.getByRole('row').filter({hasText:creator.email}).getByRole('checkbox',{name:`${creator.displayName} 可建立課程`,exact:true})).toBeChecked();await mp.screenshot({path:'test-results/platform-permissions.png',fullPage:true})
+ const changed=await write(admin,`/accounts/${creator.id}/permissions`,{role:'Member',expectedRole:'Member',canCreateCourses:false,expectedCanCreateCourses:true},'PUT');expect(changed.status()).toBe(204)
+ expect((await write(member,'/courses',{code:'REVOKED',title:'禁止',termCode:'QA'})).status()).toBe(401)
+ await login(member,creator);expect((await write(member,'/courses',{code:'REVOKED',title:'禁止',termCode:'QA'})).status()).toBe(403);expect((await member.get('/api'+a)).ok()).toBe(true)
+ expect((await write(admin,`/accounts/${creator.id}/permissions`,{role:'Member',expectedRole:'Member',canCreateCourses:true,expectedCanCreateCourses:true},'PUT')).status()).toBe(409)
+ expect((await write(manager,`/accounts/${adminOnly.id}/permissions`,{role:'Member',expectedRole:'Administrator',canCreateCourses:false,expectedCanCreateCourses:false},'PUT')).status()).toBe(409)
+ await context.close();await mcontext.close();const mobile=await browser.newContext({storageState:await mixed.storageState(),viewport:{width:390,height:844}}),sp=await mobile.newPage();await sp.goto(baseURL+`/courses/${c1.id}?section=resources`);await expect(sp.getByText('independent.txt',{exact:true})).toBeVisible();expect(await sp.getByRole('button',{name:'上傳',exact:true}).count()).toBe(0);expect(await sp.getByRole('button',{name:'切換學生視角',exact:true}).count()).toBe(0);expect(await sp.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await sp.screenshot({path:'test-results/independent-course-student.png',fullPage:true});await mobile.close();expect(errors).toEqual([])
+ for(const ctx of [admin,member,manager,mixed])await ctx.dispose()
+})
+

@@ -1,0 +1,4 @@
+{
+  "ConnectionStrings": { "Portal": "Host=YOUR_HOST;Port=5432;Database=YOUR_DATABASE;Username=YOUR_USER;Password=YOUR_PASSWORD" },
+  "Portal": { "BootstrapToken": "GENERATE_A_LONG_RANDOM_SETUP_SECRET" }
+}

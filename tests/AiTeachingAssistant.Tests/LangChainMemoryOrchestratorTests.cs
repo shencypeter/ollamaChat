@@ -1,4 +1,4 @@
-using AiTeachingAssistant.Models;
+﻿using AiTeachingAssistant.Models;
 using AiTeachingAssistant.Options;
 using AiTeachingAssistant.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,6 +10,44 @@ namespace AiTeachingAssistant.Tests;
 
 public class LangChainMemoryOrchestratorTests
 {
+    [Theory]
+    [InlineData(AnalysisStage.Premorbid)]
+    [InlineData(AnalysisStage.IllnessCourse)]
+    [InlineData(AnalysisStage.FunctionalAssessment)]
+    [InlineData(AnalysisStage.Psychosocial)]
+    public async Task CaseReferenceIsSentOnlyWithCurrentStageAndSubmission(AnalysisStage stage)
+    {
+        var (orchestrator, _, _) = CreateOrchestrator("Summary");
+        var input = AssessmentContract.BuildInput("CURRENT ANSWER", null, "CURRENT CASE");
+        var context = await orchestrator.BuildContextAsync(
+            Conversation(("user", "OTHER STAGE CASE"), ("assistant", "OLD FEEDBACK")), input, stage);
+        Assert.Equal(2, context.Messages.Count);
+        Assert.Equal(AnalysisStageInstructions.Get(stage), context.Messages[0].Content);
+        Assert.Equal(input, context.Messages[1].Content);
+        Assert.DoesNotContain(context.Messages, m => m.Content.Contains("OTHER STAGE CASE") || m.Content.Contains("OLD FEEDBACK"));
+    }
+
+    [Theory]
+    [InlineData(AnalysisStage.Premorbid)]
+    [InlineData(AnalysisStage.IllnessCourse)]
+    [InlineData(AnalysisStage.FunctionalAssessment)]
+    [InlineData(AnalysisStage.Psychosocial)]
+    public async Task TeachingStages_IncludeChineseRubricAndEvidenceCalibration(AnalysisStage stage)
+    {
+        var (orchestrator, _, _) = CreateOrchestrator("None");
+        var result = await orchestrator.BuildContextAsync([], "學生作答", stage);
+        var prompt = result.Messages[0].Content;
+
+        Assert.Contains("4 分 — 分析完整", prompt);
+        Assert.Contains("3 分 — 分析大致正確", prompt);
+        Assert.Contains("2 分 — 僅完成部分分析", prompt);
+        Assert.Contains("1 分 — 分析不足", prompt);
+        Assert.Contains("學生的結論不是結論本身的證據", prompt);
+        Assert.Contains("不能因未附案例本身機械式扣分", prompt);
+        Assert.Contains("不可仍給 4 分", prompt);
+        Assert.Contains("justification 必須將上述發現與所選級別相連", prompt);
+    }
+
     [Fact]
     public async Task WindowMemory_PreservesTheRolesAndContentOfTheConversation()
     {
@@ -279,6 +317,9 @@ public class LangChainMemoryOrchestratorTests
         public Task<(string Content, string? Thinking, RequestMetrics Metrics)> ChatAsync(
             IReadOnlyList<OllamaMessage> messages,
             CancellationToken cancellationToken) => throw new NotSupportedException();
+
+        public Task<(string Content, string? Thinking, RequestMetrics Metrics)> AssessAsync(
+            IReadOnlyList<OllamaMessage> messages, bool compare, CancellationToken cancellationToken) => throw new NotSupportedException();
 
         public Task<string> SummarizeAsync(
             string existingSummary,

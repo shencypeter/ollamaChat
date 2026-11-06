@@ -1,0 +1,156 @@
+{
+  "source": "依平台課後作業四面向與作答要求編寫之教學草案；虛構片段，待教授審核，非學生答案或模型校準資料。",
+  "courseCode": "LEARN-101",
+  "weight": 1,
+  "assignment": {
+    "title": "課後案例分析：作業內容理解測驗",
+    "instructions": "依「課後作業：案例分析」之四面向與作答要求作答：病前功能、疾病病程、目前功能、心理社會條件。以案例證據為依據，不補寫未提供的事實，資料不足須註明；原報告每部分約150～300字。\n本測驗10題，每題10分，共100分；5單選、3多選、2是非，客觀題自動批改，多選須全部吻合才得分。第8–9題為本卷提供的虛構片段，不使用學生私人報告。正式成績仍由教師確認發布。",
+    "maxScore": 100,
+    "allowRevisions": false,
+    "questions": [
+      {
+        "promptText": "依課後案例分析作業要求，下列哪一項屬於病前功能？",
+        "questionType": "single",
+        "options": [
+          "問題出現以前的工作、人際與日常生活表現",
+          "目前的睡眠情況",
+          "接受協助後的變化",
+          "尚未提供的診斷結果"
+        ],
+        "standardAnswer": [
+          0
+        ],
+        "points": 10
+      },
+      {
+        "promptText": "整理疾病病程時，何種呈現最合適？",
+        "questionType": "single",
+        "options": [
+          "依推測的嚴重程度排列",
+          "按開始出現問題、後續變化到目前的時間順序整理",
+          "只寫目前狀況",
+          "自行補上每個症狀的確切日期"
+        ],
+        "standardAnswer": [
+          1
+        ],
+        "points": 10
+      },
+      {
+        "promptText": "作業要求分析目前功能，下列哪些面向應依案例資料檢視？（多選）",
+        "questionType": "multiple",
+        "options": [
+          "工作／學業",
+          "家庭生活",
+          "社交互動",
+          "日常生活"
+        ],
+        "standardAnswer": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "points": 10
+      },
+      {
+        "promptText": "心理社會條件的分析，何者最符合本作業要求？",
+        "questionType": "single",
+        "options": [
+          "有家人就代表支持充足",
+          "僅列出疾病名稱",
+          "根據資料分析支持來源、可用資源及限制",
+          "假設未提到的家庭衝突"
+        ],
+        "standardAnswer": [
+          2
+        ],
+        "points": 10
+      },
+      {
+        "promptText": "若案例未提供發病前的學業表現，最適當的寫法是？",
+        "questionType": "single",
+        "options": [
+          "學業一定良好",
+          "資料不足，無法判斷其病前學業表現",
+          "由目前狀態反推過去表現",
+          "省略限制並判定病前功能正常"
+        ],
+        "standardAnswer": [
+          1
+        ],
+        "points": 10
+      },
+      {
+        "promptText": "為使四個部分看起來完整，可以加入案例未提供的事實。",
+        "questionType": "true_false",
+        "options": [
+          "是",
+          "非"
+        ],
+        "standardAnswer": [
+          1
+        ],
+        "points": 10
+      },
+      {
+        "promptText": "每一部分約150～300字，但是否有案例依據仍須另外檢查。",
+        "questionType": "true_false",
+        "options": [
+          "是",
+          "非"
+        ],
+        "standardAnswer": [
+          0
+        ],
+        "points": 10
+      },
+      {
+        "promptText": "【虛構練習片段】個案過去能自行購物；近兩個月改由家人陪同。何者是片段直接支持的結論？",
+        "questionType": "single",
+        "options": [
+          "已確定喪失所有生活能力",
+          "購物時的協助需求較過去增加",
+          "所有變化均由單一疾病造成",
+          "已證實無法管理金錢"
+        ],
+        "standardAnswer": [
+          1
+        ],
+        "points": 10
+      },
+      {
+        "promptText": "【同一虛構片段】家人願意陪同，但平日需上班。哪些分析有據可循？（多選）",
+        "questionType": "multiple",
+        "options": [
+          "家人可提供部分陪伴支持",
+          "陪伴時間可能受工作安排限制",
+          "家庭關係一定惡劣",
+          "應把支持與其限制一併記錄"
+        ],
+        "standardAnswer": [
+          0,
+          1,
+          3
+        ],
+        "points": 10
+      },
+      {
+        "promptText": "完成課後案例報告前，哪些檢查符合要求？（多選）",
+        "questionType": "multiple",
+        "options": [
+          "四個分析面向都有回應",
+          "重要判斷能指出案例依據",
+          "資料不足處清楚註明",
+          "把合理推測改寫成已確認事實"
+        ],
+        "standardAnswer": [
+          0,
+          1,
+          2
+        ],
+        "points": 10
+      }
+    ]
+  }
+}

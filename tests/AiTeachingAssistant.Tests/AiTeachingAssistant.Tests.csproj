@@ -24,4 +24,7 @@
     <ProjectReference Include="..\..\AiTeachingAssistant.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="../AssessmentEvaluation/fixtures.json" Link="evaluation-fixtures.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

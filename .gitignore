@@ -44,3 +44,13 @@ Desktop.ini
 
 # Codex local build artifacts
 .codex-build/
+
+# Synthetic evaluation run output (may contain submitted content)
+tests/AssessmentEvaluation/results/
+
+# Vue build and browser test artifacts
+ClientApp/node_modules/
+ClientApp/playwright-report/
+ClientApp/test-results/
+wwwroot/portal/
+App_Data/

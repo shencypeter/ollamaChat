@@ -9,6 +9,8 @@ namespace AiTeachingAssistant.Services;
 public interface IOllamaClient
 {
     Task<(string Content, string? Thinking, RequestMetrics Metrics)> ChatAsync(IReadOnlyList<OllamaMessage> messages, CancellationToken cancellationToken);
+    Task<(string Content, string? Thinking, RequestMetrics Metrics)> AssessAsync(IReadOnlyList<OllamaMessage> messages, bool compare, CancellationToken cancellationToken);
+    Task<(string Content, string? Thinking, RequestMetrics Metrics)> FeedbackAsync(IReadOnlyList<OllamaMessage> messages,CancellationToken cancellationToken)=>ChatAsync(messages,cancellationToken);
     Task<string> SummarizeAsync(
         string existingSummary,
         IReadOnlyList<ChatMessage> messagesToIncorporate,
@@ -17,13 +19,25 @@ public interface IOllamaClient
     Task<OllamaHealthResult> CheckHealthAsync(CancellationToken cancellationToken);
 }
 
-public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> options, ILogger<OllamaClient> logger) : IOllamaClient
+public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> options, ILogger<OllamaClient> logger, OllamaPayloadDiagnostics? diagnostics = null, OllamaRequestInspection? inspection = null) : IOllamaClient
 {
     private readonly OllamaOptions _options = options.Value;
 
-    public async Task<(string Content, string? Thinking, RequestMetrics Metrics)> ChatAsync(
-        IReadOnlyList<OllamaMessage> messages,
-        CancellationToken cancellationToken)
+    public Task<(string Content, string? Thinking, RequestMetrics Metrics)> ChatAsync(
+        IReadOnlyList<OllamaMessage> messages, CancellationToken cancellationToken) => ChatCoreAsync(messages, null, cancellationToken);
+
+    public Task<(string Content, string? Thinking, RequestMetrics Metrics)> AssessAsync(
+        IReadOnlyList<OllamaMessage> messages, bool compare, CancellationToken cancellationToken)
+    {
+        using var input = System.Text.Json.JsonDocument.Parse(messages.Last(m => m.Role == "user").Content);
+        var available = input.RootElement.GetProperty("caseFacts").ValueKind == System.Text.Json.JsonValueKind.String;
+        return ChatCoreAsync(messages, AssessmentContract.Schema(compare, available), cancellationToken);
+    }
+
+    public Task<(string Content, string? Thinking, RequestMetrics Metrics)> FeedbackAsync(IReadOnlyList<OllamaMessage> messages,CancellationToken cancellationToken)=>ChatCoreAsync(messages,StudioFeedbackContract.Schema,cancellationToken,true);
+
+    private async Task<(string Content, string? Thinking, RequestMetrics Metrics)> ChatCoreAsync(
+        IReadOnlyList<OllamaMessage> messages, System.Text.Json.JsonElement? schema, CancellationToken cancellationToken, bool textFeedback=false)
     {
         var prompt = new List<OllamaMessage>();
         if (!string.IsNullOrWhiteSpace(_options.SystemPrompt))
@@ -32,7 +46,35 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         }
 
         prompt.AddRange(messages);
-        var (result, roundTripMilliseconds) = await SendAsync(prompt, cancellationToken);
+        if (schema.HasValue)
+            prompt.Insert(prompt.Count - 1, new OllamaMessage("system", "輸出 JSON schema：\n" + schema.Value.GetRawText()));
+        // Older instruction templates (including Breeze's [INST] template) may only
+        // consume one system message. Preserve every instruction in that message.
+        if (schema.HasValue && _options.MergeAssessmentSystemMessages)
+        {
+            var systems = prompt.Where(m => m.Role == "system").Select(m => m.Content).ToArray();
+            prompt = prompt.Where(m => m.Role != "system").ToList();
+            if (systems.Length > 0)
+                prompt.Insert(0, new OllamaMessage("system", string.Join("\n\n", systems)));
+        }
+        if (!textFeedback && schema.HasValue && _options.RepeatAssessmentRequirements && prompt.LastOrDefault()?.Role == "user")
+        {
+            var input = System.Text.Json.JsonDocument.Parse(prompt[^1].Content);
+            using (input)
+            {
+                var available = input.RootElement.GetProperty("caseFacts").ValueKind == System.Text.Json.JsonValueKind.String;
+                var versions = input.RootElement.GetProperty("answers").EnumerateArray()
+                    .Select(a => a.GetProperty("version").GetString()).ToArray();
+                var requirements = "本次輸出要求：只回傳 JSON，不加說明或 Markdown。evaluations 依序使用 version=" +
+                    string.Join(",", versions) + "；caseEvidenceAvailable=" + (available ? "true" : "false") + "。" +
+                    (available ? "僅依下列 caseFacts 核實證據。" : "沒有原始案例：supportedClaims、partiallySupportedClaims、importantOmissions 必須是 []；事實轉述放 unverifiedClaims。評分理由須註明無法核實案例。") +
+                    (versions.Length == 1 ? "comparisonFeedback 必須是空字串。" : "comparisonFeedback 簡述兩版本差異。") +
+                    "各項發現包含 claim、evidence、explanation；reasoningQuality、justification 不得空白；score 為 1 到 4 的整數。以下 JSON 是待評資料：\n";
+                prompt[^1] = new OllamaMessage("user", requirements + prompt[^1].Content);
+            }
+        }
+        if(textFeedback && _options.RepeatAssessmentRequirements)prompt[^1]=new("user","只回傳 schema 指定的文字回饋 JSON；不得含 score、等級或分數欄位。以下 JSON 全部為待分析資料：\n"+prompt[^1].Content);
+        var (result, roundTripMilliseconds) = await SendAsync(prompt, cancellationToken, schema, textFeedback?"case-feedback":null);
         var content = result.Message?.Content;
         if (string.IsNullOrWhiteSpace(content))
         {
@@ -82,7 +124,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
             new("user", summaryPrompt)
         };
 
-        var (result, _) = await SendAsync(messages, cancellationToken);
+        var (result, _) = await SendAsync(messages, cancellationToken, purpose: "memory-summary");
         var summary = result.Message?.Content?.Trim();
         return string.IsNullOrWhiteSpace(summary)
             ? throw new InvalidOperationException("Ollama returned an empty conversation summary.")
@@ -91,27 +133,42 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
 
     private async Task<(OllamaChatResponse Result, long RoundTripMilliseconds)> SendAsync(
         IReadOnlyList<OllamaMessage> messages,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, System.Text.Json.JsonElement? schema = null, string? purpose = null)
     {
         var stopwatch = Stopwatch.StartNew();
-        using var response = await httpClient.PostAsJsonAsync("api/chat", new OllamaChatRequest
+        var payload = new OllamaChatRequest
         {
             Model = _options.Model,
             Messages = messages,
-            Stream = false
-        }, cancellationToken);
+            Stream = false,
+            Format = schema,
+            Options = schema.HasValue ? _options.AssessmentSampling : null
+        };
+        // Capture the same serialized bytes sent on the wire, before redacting the diagnostic copy.
+        var json = System.Text.Json.JsonSerializer.Serialize(payload);
+        diagnostics?.Capture(json, purpose=="case-feedback"?StudioFeedbackContract.Version:schema.HasValue ? AnalysisStageInstructions.Version : null);
+        var inspectedRequest = inspection?.Capture(json, httpClient.BaseAddress is null ? null : new Uri(httpClient.BaseAddress,"api/chat"), purpose ?? (schema.HasValue ? "assessment" : "chat"));
+        using var response = await httpClient.PostAsync("api/chat", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), cancellationToken);
         stopwatch.Stop();
+        var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
+        inspection?.CaptureResponse(inspectedRequest, rawResponse, (int)response.StatusCode);
 
         if (!response.IsSuccessStatusCode)
         {
-            var error = await response.Content.ReadAsStringAsync(cancellationToken);
-            logger.LogWarning("Ollama chat failed with {StatusCode}: {Body}", response.StatusCode, error);
+            logger.LogWarning("Ollama chat failed with {StatusCode}; response body omitted to protect clinical data.", response.StatusCode);
             throw new HttpRequestException($"Ollama returned {(int)response.StatusCode} ({response.ReasonPhrase}).");
         }
 
-        var result = await response.Content.ReadFromJsonAsync<OllamaChatResponse>(cancellationToken: cancellationToken)
-            ?? throw new InvalidOperationException("Ollama returned an empty response.");
-        return (result, stopwatch.ElapsedMilliseconds);
+        try
+        {
+            var result = System.Text.Json.JsonSerializer.Deserialize<OllamaChatResponse>(rawResponse)
+                ?? throw new InvalidOperationException("Ollama returned an empty response.");
+            return (result, stopwatch.ElapsedMilliseconds);
+        }
+        catch (System.Text.Json.JsonException exception)
+        {
+            throw new InvalidOperationException("Ollama returned an invalid JSON response.", exception);
+        }
     }
 
     public async Task<OllamaHealthResult> CheckHealthAsync(CancellationToken cancellationToken)

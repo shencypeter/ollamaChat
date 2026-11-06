@@ -1,0 +1,184 @@
+[
+  {
+    "id": "premorbid-1",
+    "stage": "premorbid",
+    "caseFacts": "發病前兩年，個案每週在社區菜圃值班三次，能依清單安排澆水；遇到臨時換班會向協調員求助。每月與兩位鄰居共餐。資料未描述財務管理能力。",
+    "answer": "個案在發病前已完全無法安排活動，也沒有任何人際接觸，因此全面失去生活能力。",
+    "provisionalTarget": 1,
+    "humanReviewed": false,
+    "group": "premorbid",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "premorbid-2",
+    "stage": "premorbid",
+    "caseFacts": "發病前兩年，個案每週在社區菜圃值班三次，能依清單安排澆水；遇到臨時換班會向協調員求助。每月與兩位鄰居共餐。資料未描述財務管理能力。",
+    "answer": "個案能定期值班並與鄰居共餐，因此所有生活領域均完全獨立，從未需要他人協助。",
+    "provisionalTarget": 2,
+    "humanReviewed": false,
+    "group": "premorbid",
+    "expectsUnsupported": true
+  },
+  {
+    "id": "premorbid-3",
+    "stage": "premorbid",
+    "caseFacts": "發病前兩年，個案每週在社區菜圃值班三次，能依清單安排澆水；遇到臨時換班會向協調員求助。每月與兩位鄰居共餐。資料未描述財務管理能力。",
+    "answer": "固定值班並依清單澆水顯示能維持例行活動；臨時換班需協調員協助，顯示變動安排時需要支持。",
+    "provisionalTarget": 3,
+    "humanReviewed": false,
+    "group": "premorbid",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "premorbid-4",
+    "stage": "premorbid",
+    "caseFacts": "發病前兩年，個案每週在社區菜圃值班三次，能依清單安排澆水；遇到臨時換班會向協調員求助。每月與兩位鄰居共餐。資料未描述財務管理能力。",
+    "answer": "發病前能維持每週三次值班且依清單澆水，支持例行任務與活動安排能力；臨時換班需向協調員求助，顯示情境變動時需要支持，不能概括為所有安排均能獨立完成。每月與兩位鄰居共餐反映持續的社區互動，但不代表所有人際領域皆無困難。案例未描述財務能力，無法判定此面向。",
+    "provisionalTarget": 4,
+    "humanReviewed": false,
+    "group": "premorbid",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "premorbid-4-paraphrase",
+    "stage": "premorbid",
+    "caseFacts": "發病前兩年，個案每週在社區菜圃值班三次，能依清單安排澆水；遇到臨時換班會向協調員求助。每月與兩位鄰居共餐。資料未描述財務管理能力。",
+    "answer": "每週三次菜圃輪值與按清單澆水，說明發病前能執行固定任務。碰到換班仍須協調員幫忙，所以獨立性應限於例行情境。固定每月和兩位鄰居吃飯說明有維持互動，尚不能據此概括整體人際功能。財務能力並無資料，暫不判斷。",
+    "provisionalTarget": 4,
+    "humanReviewed": false,
+    "group": "premorbid",
+    "equivalentTo": "premorbid-4",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "illnessCourse-1",
+    "stage": "illnessCourse",
+    "caseFacts": "一月仍每天整理店面。三月起每週兩次未到店，自述睡眠變少。五月暫停店務。七月在家人協助下恢復每週一次店務。案例未說明變化的原因。",
+    "answer": "七月完全停止店務，一月已無法工作，因此整年持續單向惡化。",
+    "provisionalTarget": 1,
+    "humanReviewed": false,
+    "group": "illnessCourse",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "illnessCourse-2",
+    "stage": "illnessCourse",
+    "caseFacts": "一月仍每天整理店面。三月起每週兩次未到店，自述睡眠變少。五月暫停店務。七月在家人協助下恢復每週一次店務。案例未說明變化的原因。",
+    "answer": "三月出勤減少、五月停工，必然證明家人支持導致疾病惡化；七月恢復店務表示已完全康復。",
+    "provisionalTarget": 2,
+    "humanReviewed": false,
+    "group": "illnessCourse",
+    "expectsUnsupported": true
+  },
+  {
+    "id": "illnessCourse-3",
+    "stage": "illnessCourse",
+    "caseFacts": "一月仍每天整理店面。三月起每週兩次未到店，自述睡眠變少。五月暫停店務。七月在家人協助下恢復每週一次店務。案例未說明變化的原因。",
+    "answer": "一月每天整理店面，三月出勤減少且睡眠變少，五月停工，七月恢復每週一次店務，顯示先惡化再部分改善。",
+    "provisionalTarget": 3,
+    "humanReviewed": false,
+    "group": "illnessCourse",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "illnessCourse-4",
+    "stage": "illnessCourse",
+    "caseFacts": "一月仍每天整理店面。三月起每週兩次未到店，自述睡眠變少。五月暫停店務。七月在家人協助下恢復每週一次店務。案例未說明變化的原因。",
+    "answer": "一月仍維持每日店務；三月開始每週兩次缺勤並自述睡眠變少，為明顯變化；五月停務反映功能進一步下降。七月在家人協助下恢復每週一次，屬部分恢復，尚未回到每日店務的基準。時間上相伴不等於已證實因果，案例未交代變化原因，也不足以判定診斷或完全康復。",
+    "provisionalTarget": 4,
+    "humanReviewed": false,
+    "group": "illnessCourse",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "functionalAssessment-1",
+    "stage": "functionalAssessment",
+    "caseFacts": "作業觀察中，個案可在安靜環境依三步驟卡完成分類。增加背景交談時漏掉兩個步驟。另一次採買演練能核對價格，但未發現找零短少。資料未提供標準化測驗分數。",
+    "answer": "分類與找零都完全正確，所以沒有任何功能限制。",
+    "provisionalTarget": 1,
+    "humanReviewed": false,
+    "group": "functionalAssessment",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "functionalAssessment-2",
+    "stage": "functionalAssessment",
+    "caseFacts": "作業觀察中，個案可在安靜環境依三步驟卡完成分類。增加背景交談時漏掉兩個步驟。另一次採買演練能核對價格，但未發現找零短少。資料未提供標準化測驗分數。",
+    "answer": "背景交談時漏步驟，因此個案所有情境都無法理解指令，且一定無法獨立生活。",
+    "provisionalTarget": 2,
+    "humanReviewed": false,
+    "group": "functionalAssessment",
+    "expectsUnsupported": true
+  },
+  {
+    "id": "functionalAssessment-3",
+    "stage": "functionalAssessment",
+    "caseFacts": "作業觀察中，個案可在安靜環境依三步驟卡完成分類。增加背景交談時漏掉兩個步驟。另一次採買演練能核對價格，但未發現找零短少。資料未提供標準化測驗分數。",
+    "answer": "安靜時依卡完成分類，交談時漏步驟，顯示環境干擾可能影響任務表現；不能推論所有情境都無法理解指令。",
+    "provisionalTarget": 3,
+    "humanReviewed": false,
+    "group": "functionalAssessment",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "functionalAssessment-4",
+    "stage": "functionalAssessment",
+    "caseFacts": "作業觀察中，個案可在安靜環境依三步驟卡完成分類。增加背景交談時漏掉兩個步驟。另一次採買演練能核對價格，但未發現找零短少。資料未提供標準化測驗分數。",
+    "answer": "安靜環境依三步驟卡完成分類，反映有提示下可完成該任務；交談時漏兩步驟顯示干擾情境下表現下降，但不能據此判定普遍理解障礙。採買能核對價格而未發現找零短少，顯示價格核對與金錢查核表現不一致，需區分能力面向。這些是特定作業觀察，不能外推為所有生活情境的獨立程度，亦無標準化分數可供推論。",
+    "provisionalTarget": 4,
+    "humanReviewed": false,
+    "group": "functionalAssessment",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "psychosocial-1",
+    "stage": "psychosocial",
+    "caseFacts": "個案近期搬遷後交通時間增加，因而減少參加社區活動。姊姊每週協助備餐一次，個案說這讓生活較容易安排。與房東討論租金時感到壓力。未提供童年經驗。",
+    "answer": "個案沒有任何壓力或支持來源，生活安排完全不受社會環境影響。",
+    "provisionalTarget": 1,
+    "humanReviewed": false,
+    "group": "psychosocial",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "psychosocial-2",
+    "stage": "psychosocial",
+    "caseFacts": "個案近期搬遷後交通時間增加，因而減少參加社區活動。姊姊每週協助備餐一次，個案說這讓生活較容易安排。與房東討論租金時感到壓力。未提供童年經驗。",
+    "answer": "交通增加與租金壓力證明姊姊備餐使個案依賴且造成全部困難。",
+    "provisionalTarget": 2,
+    "humanReviewed": false,
+    "group": "psychosocial",
+    "expectsUnsupported": true
+  },
+  {
+    "id": "psychosocial-3",
+    "stage": "psychosocial",
+    "caseFacts": "個案近期搬遷後交通時間增加，因而減少參加社區活動。姊姊每週協助備餐一次，個案說這讓生活較容易安排。與房東討論租金時感到壓力。未提供童年經驗。",
+    "answer": "交通時間增加使社區活動減少，租金討論是壓力來源；姊姊每週備餐是支持資源。",
+    "provisionalTarget": 3,
+    "humanReviewed": false,
+    "group": "psychosocial",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "psychosocial-4",
+    "stage": "psychosocial",
+    "caseFacts": "個案近期搬遷後交通時間增加，因而減少參加社區活動。姊姊每週協助備餐一次，個案說這讓生活較容易安排。與房東討論租金時感到壓力。未提供童年經驗。",
+    "answer": "搬遷後交通時間增加，案例明確連結到社區活動減少，顯示參與機會受到環境限制。租金討論引發壓力；姊姊每週備餐一次且個案認為有助安排生活，是可辨識的家庭支持。這些因素可能影響適應，但不能據此斷言任何單一因素造成全部困難，亦無資料推測童年經驗。",
+    "provisionalTarget": 4,
+    "humanReviewed": false,
+    "group": "psychosocial",
+    "expectsUnsupported": false
+  },
+  {
+    "id": "historical-original-no-case",
+    "stage": "premorbid",
+    "caseFacts": null,
+    "answer": "個案在發病前應該具有良好的生活功能，能完成學業，也有工作經驗，表示認知能力和人際互動都沒有問題。雖然個案平常朋友不多，但這可能只是個性內向，不影響社會適應。整體而言，個案病前功能正常，目前的困難主要都是疾病造成的。",
+    "provisionalTarget": 2,
+    "humanReviewed": false,
+    "group": "historical",
+    "expectsUnsupported": true,
+    "historicalPreviouslyExposed": true
+  }
+]

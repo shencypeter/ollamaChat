@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using AiTeachingAssistant.Models;
 using AiTeachingAssistant.Options;
@@ -19,7 +20,7 @@ public interface IChatSessionStore
     void Clear(AnalysisStage stage);
 }
 
-public sealed class ChatSessionStore(IHttpContextAccessor httpContextAccessor, IOptions<MemoryOptions> options) : IChatSessionStore
+public sealed class ChatSessionStore(IHttpContextAccessor httpContextAccessor, IOptions<MemoryOptions> options,LearnerExperience? experience=null) : IChatSessionStore
 {
     private const string HistoryPrefix = "qwen-chat-history-v2:";
     private const string LegacyHistoryKey = "qwen-chat-history-v1";
@@ -30,6 +31,8 @@ public sealed class ChatSessionStore(IHttpContextAccessor httpContextAccessor, I
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly MemoryOptions _options = options.Value;
 
+    private string UserScope => "portal:" + (httpContextAccessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anonymous") + (experience?.IsPractice==true?":practice:":":");
+
     private ISession Session => httpContextAccessor.HttpContext?.Session
         ?? throw new InvalidOperationException("No active HTTP session is available.");
 
@@ -39,11 +42,11 @@ public sealed class ChatSessionStore(IHttpContextAccessor httpContextAccessor, I
         var json = Session.GetString(key);
         if (string.IsNullOrWhiteSpace(json) && stage == AnalysisStage.Premorbid)
         {
-            json = Session.GetString(LegacyHistoryKey);
+            json = Session.GetString(UserScope + LegacyHistoryKey);
             if (!string.IsNullOrWhiteSpace(json))
             {
                 Session.SetString(key, json);
-                Session.Remove(LegacyHistoryKey);
+                Session.Remove(UserScope + LegacyHistoryKey);
             }
         }
         return string.IsNullOrWhiteSpace(json)
@@ -59,20 +62,20 @@ public sealed class ChatSessionStore(IHttpContextAccessor httpContextAccessor, I
 
     public AnalysisStage GetActiveStage()
     {
-        var key = Session.GetString(ActiveStageKey);
+        var key = Session.GetString(UserScope + ActiveStageKey);
         return AnalysisStageCatalog.TryParse(key, out var stage)
             ? stage
             : AnalysisStage.Premorbid;
     }
 
     public void SetActiveStage(AnalysisStage stage) =>
-        Session.SetString(ActiveStageKey, AnalysisStageCatalog.Get(stage).Key);
+        Session.SetString(UserScope + ActiveStageKey, AnalysisStageCatalog.Get(stage).Key);
 
-    public string GetMemoryStrategy() => Session.GetString(StrategyKey) ?? _options.Strategy;
+    public string GetMemoryStrategy() => Session.GetString(UserScope + StrategyKey) ?? _options.Strategy;
 
     public void SetMemoryStrategy(string strategy)
     {
-        Session.SetString(StrategyKey, strategy);
+        Session.SetString(UserScope + StrategyKey, strategy);
         foreach (var option in AnalysisStageCatalog.All)
             ClearSummaryMemory(option.Stage);
     }
@@ -83,11 +86,11 @@ public sealed class ChatSessionStore(IHttpContextAccessor httpContextAccessor, I
         var json = Session.GetString(key);
         if (string.IsNullOrWhiteSpace(json) && stage == AnalysisStage.Premorbid)
         {
-            json = Session.GetString(LegacySummaryKey);
+            json = Session.GetString(UserScope + LegacySummaryKey);
             if (!string.IsNullOrWhiteSpace(json))
             {
                 Session.SetString(key, json);
-                Session.Remove(LegacySummaryKey);
+                Session.Remove(UserScope + LegacySummaryKey);
             }
         }
         return string.IsNullOrWhiteSpace(json)
@@ -107,6 +110,6 @@ public sealed class ChatSessionStore(IHttpContextAccessor httpContextAccessor, I
         ClearSummaryMemory(stage);
     }
 
-    private static string StageKey(string prefix, AnalysisStage stage) =>
-        prefix + AnalysisStageCatalog.Get(stage).Key;
+    private string StageKey(string prefix, AnalysisStage stage) =>
+        UserScope + prefix + AnalysisStageCatalog.Get(stage).Key;
 }

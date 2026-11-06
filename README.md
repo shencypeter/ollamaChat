@@ -1,202 +1,133 @@
-# 中山大學 AI 個案分析助教系統
+﻿> 2026-11-03 implementation: courses are independent teaching groups with direct membership, groups and resources; sections and cross-course resource sharing are removed. Platform Administrator/Member and independent course-creation permission replace global teaching titles; teaching/student access follows each course membership. Migrations 015–016 are applied locally; pre-existing section data must be mapped before 016 (it fails closed). See [course implementation](docs/course-only-spec.md) and [permission implementation](docs/role-permissions-spec.md). Existing sessions must sign in again.
 
-以 ASP.NET Core MVC 建置的臨床心理學個案分析 AI 教學助教原型。應用程式透過 Ollama `/api/chat` 呼叫可替換的內部 LLM；LangChain.NET 短期記憶只用於一般對話工作區。
+> 2026-10-29 最新補充：[課程管理與課程工作區](docs/course-hub.md) 已加回主導覽。課程資源、學員、小組、線上測驗、PDF 作業、成績與案例均以所屬課程串接，維持目前 S／T／A 與人工成績／文字 AI 的區分。
 
-> 本專案供課程教學與原型驗證使用，不是臨床診斷、治療或緊急醫療工具。
+> 2026-10-29 現行站台：S1–S3a 學生案例學習、T1–T4 教師歷程／統計／匯出、A1–A6 管理；教授兼任管理者。新案例提供純文字 AI 回饋、不給分，舊資料保留但舊導覽不再顯示。另有線上／課後命題測驗與 PDF 報告作業，人工成績連動到加權成績管理。請先讀 [案例站台](docs/case-studio.md) 與 [測驗／PDF／成績管理](docs/learning-assessments.md)，下方原課程平台說明保留其歷史範圍。資料庫需明確套用 001–009；目前本機預覽仍為 http://127.0.0.1:5097 。
 
-## 功能
+# NSYSU Learn — Vue + ASP.NET Core Web API
 
-- 三個清楚分工的工作區：助教評閱、版本比較、一般對話
-- 「助教評閱」接受一份目前作答，並可選擇病前功能、疾病病程、功能評估結果或心理社會條件
-- 「版本比較」接受修改前與修改後兩版作答，並依所選評閱項目檢查改善、退步與待釐清之處
-- 兩種助教評閱都不保存或傳送其他請求中的舊版本與先前回饋
-- 「一般對話」只套用 zh-TW 規則，並保留短期記憶模式供 POC 測試
-- 後端注入 AI 助教角色、提示注入防護及各階段教學規則；學生作答內容不由前端改寫
-- 一般對話支援 `None`、`Window`、`Buffer`、`Summary` 四種記憶模式
-- 保留 Ollama 的 `user`／`assistant` 角色，不使用有相容性問題的 LangChain.NET `WithHistory()`
-- 支援模型選用的 `thinking` 欄位，並以可收合的「AI 思考過程」呈現
-- AI 回覆支援經安全清理的 Markdown，包括清單、標題、表格、引言與程式碼區塊
-- 顯示 Ollama 處理時間、輸入／生成 Token、生成速度、快取及記憶狀態
-- `/api/tags` 連線檢查
-- 繁體中文（zh-TW）介面與回覆規則
+An e-learning POC with a Teams-inspired collaboration workspace, light/dark themes, PostgreSQL-backed accounts and courses, individual assignment publishing/submission, and an AI teaching portal.
 
-## 工作區模式
+## Run locally
 
-| 工作區 | 輸入 | 可選脈絡 | 記憶 | 結果呈現 |
-|---|---|---|---|---|
-| **助教評閱** | 一份目前作答 | 病前功能、疾病病程、功能評估結果、心理社會條件 | 無；每次請求完全獨立 | 單一 TA 回饋面板，不使用聊天泡泡 |
-| **版本比較** | 修改前與修改後兩份作答 | 病前功能、疾病病程、功能評估結果、心理社會條件 | 無；只比較本次提供的兩版 | 單一比較回饋面板，指出改善、退步與待釐清之處 |
-| **一般對話** | 一般聊天訊息 | 無助教評閱脈絡，只套用 zh-TW 規則 | `None`、`Window`、`Buffer`、`Summary` | 保留左右對齊的聊天介面與工作階段紀錄 |
+Requirements: .NET 8 SDK, Node 22.22+ LTS (or a supported newer LTS), PostgreSQL 16+, and the configured on-prem Ollama service for AI requests. Vue assets are bundled locally; the UI does not require a CDN.
 
-一般對話的記憶選單位於傳送按鈕旁。助教評閱與版本比較不顯示記憶選項，後端也會強制忽略所有既有歷史；這不是只有前端隱藏。
-
-三個工作區共用 Ollama 連線檢查、Markdown 回覆、可收合的 AI 思考過程與請求遙測。
-
-## 技術需求
-
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- 可連線的 [Ollama](https://ollama.com/) 伺服器
-- Ollama 中已安裝欲使用的聊天模型，例如 `qwen3:8b` 或相容的 Llama 模型
-
-目前預設內部端點為：
-
-```text
-http://IAN02:11434
-```
-
-### 查看 IAN02 可用模型
-
-在 Windows 開啟「遠端桌面連線」（`mstsc`），連線至 `IAN02`。登入後開啟命令提示字元，執行：
-
-```bat
-D:\>ollama list
-```
-
-目前安裝的模型清單（2026-09-30 快照）：
-
-```text
-NAME                                ID              SIZE      MODIFIED
-phi4:14b                            ac896e5b8b34    9.1 GB    11 months ago
-dengcao/Qwen3-Reranker-8B:Q3_K_M    74081eb12b5f    4.1 GB    12 months ago
-gpt-oss:20b                         aa4295ac10c3    13 GB     13 months ago
-deepseek-coder:1.3b                 3ddd2d3fc8d2    776 MB    16 months ago
-nomic-embed-text:latest             0a109f422b47    274 MB    17 months ago
-qwen2.5-coder:1.5b-base             02e0f2817a89    986 MB    17 months ago
-qwen3:8b                            e4b5fd7f8af0    5.2 GB    17 months ago
-mxbai-embed-large:latest            468836162de7    669 MB    17 months ago
-codegemma:7b                        0c96700aaada    5.0 GB    17 months ago
-codellama:13b                       9f438cb9cd58    7.4 GB    17 months ago
-gemma3:27b                          a418f5838eaf    17 GB     18 months ago
-gemma3:12b                          f4031aab637d    8.1 GB    18 months ago
-deepseek-coder-v2:16b               63fb193b3a9b    8.9 GB    18 months ago
-llama3.1:8b                         46e0c10c039e    4.9 GB    18 months ago
-```
-
-`ollama list` 的實際輸出是模型可用性的準確來源；上方清單只記錄建立文件當時的狀態。
-
-## 快速開始
+The local, gitignored `appsettings.Local.json` holds `ConnectionStrings:Portal` and the generated `Portal:BootstrapToken`. The database password is not stored in tracked configuration or browser code. Environment variables override configuration (`ConnectionStrings__Portal`, `Portal__BootstrapToken`). A redacted configuration example is in `docs/portal-config.example.json`.
 
 ```powershell
-git clone https://github.com/shencypeter/ollamaChat.git
-cd ollamaChat
-dotnet restore AI_TeachingAssistant.sln
-dotnet run --project AiTeachingAssistant.csproj
+# Build Vue assets first, then run the API and SPA on the same origin.
+cd ClientApp
+npm ci
+npm run build
+cd ..
+dotnet run --launch-profile http
 ```
 
-開啟 ASP.NET Core 顯示的網址，然後按「檢查 Ollama」確認 `/api/tags` 可連線。
+Open http://localhost:5084 . On an empty account database, the login page offers one-time setup for the first professor. Use the initialization code from `Portal:BootstrapToken` in your local configuration, choose your email and a password of at least 12 characters. The token is never sent to the browser automatically. Setup is locked transactionally after the first account exists. No demo passwords or automatic role-switching are enabled.
 
-## 設定
+Professors can create Professor / TeachingAssistant / Student accounts, create courses, and manage membership for courses they own. Course teachers and TAs can create/edit draft individual assignments, publish or close them, and review submitted answers. Students can save drafts, reload them, and submit once before the deadline. Both have access to their enrolled courses and the standalone AI portal. Course teacher/TA/student membership is distinct from platform account permissions. Students cannot create courses, enumerate platform accounts or view the staff roster API. Accounts are password-hashed; cookies are HttpOnly; API writes require an antiforgery header. Password changes sign out the current session.
 
-主要設定位於 [`appsettings.json`](appsettings.json)：
+For separate frontend development, run `dotnet run --launch-profile http` and `npm run dev` in `ClientApp`. Open http://127.0.0.1:5173 . Vite proxies `/api` to the backend; set `API_PROXY_TARGET` to override the backend address. Frontend routes use Vue Router history; ASP.NET serves the built SPA for page routes and keeps unknown `/api` routes as JSON 404 responses.
 
-```json
-{
-  "Ollama": {
-    "BaseUrl": "http://IAN02:11434",
-    "Model": "llama3.1:8b",
-    "TimeoutSeconds": 180,
-    "SystemPrompt": "..."
-  },
-  "Memory": {
-    "Strategy": "Window",
-    "WindowSize": 6,
-    "SummaryRecentTurns": 3,
-    "SummaryMaxCharacters": 2000,
-    "MaxStoredMessages": 40
-  }
-}
-```
+## Database
 
-設定也可透過 ASP.NET Core 環境變數覆寫：
+`Database/001_elearning.sql` contains the supplied domain DDL unchanged in meaning. Its outer transaction is handled by the migration runner. `002_portal_auth.sql` adds local credentials linked to `app_users`; course role definitions remain in `course_members`. The migration ledger tracks checksums and uses an advisory lock. Migrations do not run automatically when the website starts.
 
 ```powershell
-$env:Ollama__BaseUrl = "http://IAN02:11434"
-$env:Ollama__Model = "llama3.1:8b"
-dotnet run --project AiTeachingAssistant.csproj
+dotnet run --no-launch-profile -- --inspect-database
+dotnet run --no-launch-profile -- --migrate
 ```
 
-### 記憶模式
+The original two migrations were applied and committed to the supplied database on 2026-10-22; the server reported PostgreSQL 18.6. Re-running the migration command safely skipped both applied versions. No production user or course is seeded automatically. The connection string is read from configuration and is never echoed by the migration runner.
 
-助教評閱與版本比較固定採用單次獨立請求，不傳送其他評閱的作答或回饋。下列記憶模式只作用於「一般對話」工作區。
+## Structure
 
-| 模式 | 傳送給模型的對話內容 |
-|---|---|
-| `None` | zh-TW 系統訊息與目前訊息 |
-| `Window` | 最近 `WindowSize` 個完整回合 |
-| `Buffer` | 工作階段內保存的全部訊息，受 `MaxStoredMessages` 限制 |
-| `Summary` | 舊對話的累進摘要，加上最近 `SummaryRecentTurns` 個原始回合 |
+- `ClientApp/`: Vue 3 single-file components, Vue Router, Vite, component/API unit tests and Playwright browser tests.
+- `Controllers/`: authenticated JSON Web API for accounts, authentication, courses and AI.
+- `Services/PortalAccountStore.cs`: PostgreSQL-backed accounts and password verification.
+- `Services/ChatSessionStore.cs`: server-side AI conversation state, scoped to authenticated user and analysis stage.
+- `Services/AnalysisStageInstructions.cs`, `AssessmentContract.cs`, `AssessmentResultParser.cs`: evidence-first rubric prompts, Ollama schema and validation.
+- `Database/`: explicit transactional SQL migrations.
+- `Views/` and the old `wwwroot/js/site.js` / `wwwroot/css/site.css`: retained legacy MVC reference; no controller routes render these views. The active frontend is Vue.
 
-切換記憶模式會清除累進摘要，使 Summary 能從一般對話的現有紀錄重新建立一致狀態。
+## API
 
-## Ollama 訊息結構
+| Route | Access / purpose |
+| --- | --- |
+| `GET /api/auth/csrf` | Establish request antiforgery token |
+| `GET /api/auth/session` | Current authenticated user and setup availability |
+| `POST /api/auth/bootstrap` | First professor only; requires configured setup token |
+| `POST /api/auth/login`, `/logout`, `/password` | Sign in/out and change password |
+| `GET/POST /api/accounts` | Professor-only account list/create |
+| `GET /api/courses` | Current user's active course memberships |
+| `POST /api/courses` | Professor creates a draft course and owner membership |
+| `GET /api/courses/{id}/members` | Course teachers/TAs can read roster |
+| `POST /api/courses/{id}/members` | Owning professor assigns or updates membership |
+| `GET/POST /api/courses/{id}/assignments` | Course members list assignments; course staff creates drafts |
+| `GET/PUT /api/assignments/{id}` | Member reads; course staff edits a draft |
+| `POST /api/assignments/{id}/publish`, `/close` | Course staff changes publication status |
+| `GET/POST /api/assignments/{id}/my-submission` | Student reads, saves or submits own answers |
+| `GET /api/assignments/{id}/submissions` | Course staff lists submitted work only |
+| `GET /api/assignments/{id}/submissions/{submissionId}` | Course staff reads submission/revision history |
+| `GET /api/ai/configuration` | Model, stages, account-scoped chat state and memory setting |
+| `POST /api/ai/send` | Review, compare or general chat |
+| `POST /api/ai/memory`, `/clear`, `/stage` | Existing AI workspace controls |
+| `GET /api/ai/health` | Check configured Ollama availability |
 
-「助教評閱」請求依序包含：
+The AI portal preserves all four assessment stages, optional case reference, independent before/after scores, structured findings, general chat, the four memory modes, sanitized Markdown for chat and request telemetry. Drafts are held in the Vue component by stage and review/compare mode. Assessments do not import previous submissions; conversations are additionally isolated by authenticated account.
 
-```text
-system    全域 zh-TW 規則
-system    AI 助教角色、安全界線及目前分析階段的專屬教學規則
-user      本次提交的一份作答
-```
+Professors and teaching assistants can expand the read-only Ollama inspection panel after a request to review the exact assembled request, HTTP status and corresponding raw Ollama JSON response. The backend removes every `thinking` field before returning this inspection, does not expose unparsed non-JSON response text, and never includes the inspection for students. Inspection data remains request/page scoped and is not written to chat history, logs or the database.
 
-「版本比較」請求依序包含：
+AI portal requests remain standalone practice and do not yet create submissions, answer revisions, evaluation runs or official grades in PostgreSQL. Those workflows need course assignments/questions and rubric records first; no fake foreign-key records are inserted. Individual assignment authoring, publication, draft saving, revision history, immutable submission and staff review are now implemented for P0. P1 now adds optional submission revisions and comparison, reusable course rubrics, manual grade drafts and explicit feedback release. Group work and AI integration into actual submissions remain later phases. See [P1 teaching workflows](docs/p1-teaching.md). See [P0 delivery notes](docs/p0-assignments.md).
 
-```text
-system    全域 zh-TW 規則
-system    AI 助教角色、安全界線及目前分析階段的專屬教學規則
-user      本次修改前版本＋本次修改後版本
-```
-
-「一般對話」依記憶模式包含：
-
-```text
-system    全域 zh-TW 規則
-system    較早對話的 Summary（僅 Summary 模式且摘要存在時）
-user / assistant    近期一般對話
-user      本次輸入的原文
-```
-
-`thinking` 是選用回應欄位。模型未回傳時，介面只顯示正式回答，不會產生空白的思考泡泡。
-
-## 工作階段與資料範圍
-
-目前原型使用 ASP.NET Core `ISession` 與記憶體快取：
-
-- 對話不寫入資料庫
-- 每個瀏覽器工作階段有獨立資料
-- 助教評閱結果只顯示在目前頁面，不寫入 session 對話歷史
-- 一般對話使用獨立且穩定的 session key 保存畫面紀錄
-- Summary 記憶只供一般對話使用
-- 清除對話只清除一般對話紀錄
-- 預設工作階段閒置期限為四小時
-
-若要部署多個應用程式執行個體，應將 `IDistributedCache` 換成 Redis 或其他共用儲存。
-
-## 安全界線
-
-- 模型產生的 Markdown 先停用原始 HTML，再經 HTML sanitizer 清理
-- 學生作答、引用文字及貼上的指令均被系統提示視為不受信任內容
-- 提示詞防護只能降低提示注入風險，不能視為絕對安全邊界
-- 正式系統仍應加入身分驗證、授權、稽核與資料保存政策
-
-## 建置與測試
+## Tests
 
 ```powershell
-dotnet build AI_TeachingAssistant.sln --configuration Release
-dotnet test tests/AiTeachingAssistant.Tests/AiTeachingAssistant.Tests.csproj --configuration Release
+dotnet test tests/AiTeachingAssistant.Tests/AiTeachingAssistant.Tests.csproj
+cd ClientApp
+npm test
 ```
 
-測試涵蓋一般對話記憶模式、角色保留、Summary 累進摘要、案例分析單次評閱、專屬系統提示，以及 Markdown 安全清理。
+Browser tests use a real local API and the PostgreSQL database. They create clearly identified temporary QA users and courses, and mock **only** AI generation responses to verify UI behavior without making inference calls. See `docs/vue-api-migration.md` for reproducible fixture preparation and cleanup. This UI verification does not establish LLM grading accuracy.
 
-GitHub Actions 會在 `main` 的 push 與 pull request 上執行 Release build 和測試。
+## Publish
 
-## 專案結構
-
-```text
-Controllers/     MVC 與聊天 API 端點
-Models/          DTO、對話模型與分析階段定義
-Options/         Ollama 與記憶設定
-Services/        Ollama client、記憶編排、階段提示與 Markdown renderer
-Views/           Razor UI
-wwwroot/         CSS、JavaScript 與靜態資源
-tests/           xUnit regression tests
+```powershell
+dotnet publish -c Release -o artifacts/portal
 ```
+
+Publish runs `npm ci` and `npm run build`, and includes generated Vue assets. `appsettings.Local.json`, frontend source/dependencies and synthetic test data are excluded from publish. Configure the connection string and bootstrap token at the destination via environment variables or managed secrets. `-p:SkipFrontendBuild=true` can reuse already built assets. Authentication cookies require HTTPS outside Development. The current in-process session/cache setup targets a single-instance POC.
+
+## Independent LLM calibration evaluation
+
+See [the evaluation workflow](tests/AssessmentEvaluation/README.md) for synthetic fixtures, schema/payload verification and human grading review. Production prompt `rubric-evidence-v2` contains no answer-specific key. The [calibration implementation report](tests/AssessmentEvaluation/IMPLEMENTATION.md) records the earlier live-model limitations; the Vue migration does not change that evidence.
+
+## P1 assessment and teaching workflows
+
+See [P1 policies, database changes, APIs and November 15 demo](docs/p1-teaching.md). Apply `Database/003_teaching_workflows.sql` with the existing migration command before running the updated API. Existing assignments retain their locked-after-submit behavior by default. New draft assignments can explicitly enable revisions and select a course rubric. Grades belong to a submitted snapshot and require explicit release before students can see feedback. This phase does not invoke AI grading.
+
+## Student pre-submission formative AI feedback
+
+The Vue assignment page now offers Save Draft, Ask AI, and Submit to Teacher/TA as distinct actions. AI evaluates a saved answer revision only, marks older feedback stale, and remains optional. Results are private to the owning student and never create or release official grades. Apply `Database/004_formative_feedback.sql` using the existing `--migrate` command before running the updated API. See [workflow, privacy, persistence and tests](docs/formative-feedback.md).
+
+This currently covers private drafts before the first official submission. Existing post-submission P1 revisions remain direct immutable submissions. Questions need a configured analysis stage; no fallback to general chat is used. Standalone AI memory and staff-only request/response inspection remain separate.
+
+## 2026-10-29：教師／助教學生體驗
+
+教師與助教可切換學生視角，使用本人隔離的 practice 草稿、形成性回饋與提交，不變更帳號／課程角色，不計正式提交或成績。005 遷移新增 submissions.is_practice；原學生流程保留，staff 仍不能讀正式學生私人回饋。一般對話記憶另分 namespace，practice 不擷取或顯示原始 Ollama 診斷。完整政策、限制及驗證見學生體驗文件。
+
+[學生體驗文件](docs/student-experience.md)
+
+## 2026-10-30 學生體驗提交更新
+
+本人學生視角現可提交目前線上／課後測驗、PDF 作業及案例練習；教學視角可從獨立本人練習紀錄人工評分測驗／PDF，再於學生視角查看練習成績。正式成績／統計隔離。此政策取代先前禁止練習提交敘述；操作、011 遷移與驗證見 docs/practice-assessments.md。
+
+## 2026-10-30 客觀題自動批改更新
+
+新提交的目前測驗由系統批改客觀題，多選採全對得分；教師只評申論，純客觀正式成績僅需發布，混合題待申論完成。練習沿用相同規則但與正式成績隔離。012 已套用，舊人工提交不追溯重算。詳見 docs/quiz-autograding.md。
+
+測驗出題與閱讀頁提供題型配分組成表，申論題可保存教師限定的評分參考；013 遷移及操作見 docs/quiz-autograding.md（2026-10-30）。
+
+## 2026-11-04 學習歷程與測驗教材門檻
+
+學生可由「我的學習歷程」查看本人平台內跨課／學期修課、評量進度、待辦、正式提交及已公布成績。課程資源新增 PDF／圖片／MP4／WebM 閱讀器計時，測驗可逐教材設定最低有效秒數，全部達標並開始測驗後才取得題目／寫入作答。需套用新增017遷移，沿用001–016；不回填舊時間或改動歷史成績。正式／練習與跨課權限保留。計時政策、量測限制與後續範圍見 [學習歷程規格](docs/learning-history-spec.md)。

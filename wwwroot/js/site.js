@@ -83,7 +83,12 @@
       ? `<details class="feedback-thinking"><summary>${escapeHtml(thinking.replace(/\r\n/g, '\n').split('\n')[0].trim())}</summary><div>${escapeHtml(thinking)}</div></details>`
       : '';
     target.classList.add('has-response');
-    target.innerHTML = `${thinkingHtml}<p class="feedback-title">${title}</p><div class="markdown-body">${body.renderedContent}</div>`;
+    const scoreCard = (label, score) => `<div class="assessment-score"><span>${label}</span><strong>${Number.isInteger(score) && score >= 1 && score <= 4 ? score : '—'} / 4</strong></div>`;
+    const scores = body.scores;
+    const scoresHtml = scores ? `<div class="assessment-scores" aria-label="評分結果">${scores.score != null
+      ? scoreCard('作答評分', scores.score)
+      : scoreCard('修改前評分', scores.beforeScore) + scoreCard('修改後評分', scores.afterScore)}</div>` : '';
+    target.innerHTML = `${thinkingHtml}<p class="feedback-title">${title}</p>${scoresHtml}<div class="markdown-body">${body.renderedContent}</div>`;
   };
   const setFormBusy = (form, busy) => {
     form.querySelectorAll('button,textarea,select').forEach(element => { element.disabled = busy; });
@@ -115,7 +120,7 @@
     target.innerHTML = '<div class="feedback-empty"><strong>AI 正在評閱…</strong><span>正在檢查作答與所選階段的學習目標。</span></div>';
     setMetric('metricState', 'AI 思考中…');
     try {
-      const body = await postChat(reviewForm, { message:value, stage:document.querySelector('#reviewStage').value, compare:false });
+      const body = await postChat(reviewForm, { message:value, caseFacts:document.querySelector('#reviewCaseFacts').value, stage:document.querySelector('#reviewStage').value, compare:false });
       renderFeedback(target, body, 'TA 評閱結果');
       updateMetrics(body, 'review');
     } catch (error) {
@@ -137,7 +142,7 @@
     target.innerHTML = '<div class="feedback-empty"><strong>AI 正在比較…</strong><span>正在檢查修改帶來的改善與變化。</span></div>';
     setMetric('metricState', 'AI 思考中…');
     try {
-      const body = await postChat(compareForm, { message:afterValue, beforeMessage:beforeValue, stage:document.querySelector('#compareStage').value, compare:true });
+      const body = await postChat(compareForm, { message:afterValue, beforeMessage:beforeValue, caseFacts:document.querySelector('#compareCaseFacts').value, stage:document.querySelector('#compareStage').value, compare:true });
       renderFeedback(target, body, 'TA 版本比較結果');
       updateMetrics(body, 'compare');
     } catch (error) {

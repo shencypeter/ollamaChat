@@ -57,8 +57,10 @@
                     </select>
                 </label>
             </div>
+            <partial name="_AssessmentRubric" />
             <form class="assessment-form" id="reviewForm">
                 @Html.AntiForgeryToken()
+                <label class="submission-field" for="reviewCaseFacts"><span>本次案例資料（選填）</span><textarea id="reviewCaseFacts" rows="4" maxlength="24000" placeholder="貼上可供核對的原始案例；留空時評分為暫定，不核實事實與遺漏。"></textarea></label>
                 <label class="submission-field" for="reviewInput">
                     <span>學生作答</span>
                     <textarea id="reviewInput" rows="9" maxlength="8000" placeholder="貼上要評閱的目前版本…"></textarea>
@@ -79,8 +81,10 @@
                     </select>
                 </label>
             </div>
+            <partial name="_AssessmentRubric" />
             <form class="assessment-form" id="compareForm">
                 @Html.AntiForgeryToken()
+                <label class="submission-field" for="compareCaseFacts"><span>本次兩版共用案例資料（選填）</span><textarea id="compareCaseFacts" rows="4" maxlength="24000" placeholder="只用於本次所選階段的比較，不帶入其他階段。"></textarea></label>
                 <div class="revision-grid">
                     <label class="submission-field" for="beforeInput"><span>修改前版本</span><textarea id="beforeInput" rows="8" maxlength="8000" placeholder="貼上學生原本的作答…"></textarea></label>
                     <label class="submission-field" for="afterInput"><span>修改後版本</span><textarea id="afterInput" rows="8" maxlength="8000" placeholder="貼上學生修改後的作答…"></textarea></label>

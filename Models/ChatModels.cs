@@ -13,6 +13,9 @@ public sealed class SendMessageRequest
     [StringLength(8000)]
     public string? BeforeMessage { get; set; }
 
+    [StringLength(24000)]
+    public string? CaseFacts { get; set; }
+
     public bool Compare { get; set; }
 
     [Required]
@@ -45,7 +48,15 @@ public sealed record ChatReply(
     RequestMetrics Metrics,
     string MemoryStrategy,
     int ContextMessages,
-    MemoryDiagnostics Memory);
+    MemoryDiagnostics Memory,
+    AssessmentScores? Scores = null,
+    AssessmentResult? Assessment = null,
+    [property: JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] Services.OllamaInspection? RequestInspection = null);
+
+public sealed record AiFailure(string Error,
+    [property: JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] Services.OllamaInspection? RequestInspection = null);
+
+public sealed record AssessmentScores(int? Score, int? BeforeScore, int? AfterScore);
 
 public sealed record MemoryContext(
     IReadOnlyList<OllamaMessage> Messages,
@@ -87,6 +98,12 @@ internal sealed class OllamaChatRequest
 
     [JsonPropertyName("stream")]
     public bool Stream { get; init; }
+
+    [JsonPropertyName("format"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public System.Text.Json.JsonElement? Format { get; init; }
+
+    [JsonPropertyName("options"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public AssessmentSampling? Options { get; init; }
 }
 
 public sealed record OllamaMessage(
