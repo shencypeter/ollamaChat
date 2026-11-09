@@ -25,5 +25,5 @@ export function resourceTagChoices(resources){
 }
 export function filterResources(resources,{tag='',query='',untagged=false}={}){
  const q=query.normalize('NFKC').trim().toLowerCase(),selected=tag.toLowerCase()
- return resources.filter(r=>(!untagged||!(r.tags||[]).length)&&(!selected||(r.tags||[]).some(t=>t.toLowerCase()===selected))&&(!q||[r.title,r.fileName,...r.tags||[]].filter(Boolean).join(' ').normalize('NFKC').toLowerCase().includes(q)))
+ return resources.filter(r=>(!untagged||!(r.tags||[]).length)&&(!selected||(r.tags||[]).some(t=>t.toLowerCase()===selected))&&(!q||[r.title,r.fileName,r.summary,...r.tags||[]].filter(Boolean).join(' ').normalize('NFKC').toLowerCase().includes(q)))
 }

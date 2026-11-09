@@ -174,15 +174,83 @@ public class LearningWorkflowTests:IAsyncLifetime
         Assert.Equal(2,speed.GetProperty("playbackRate").GetDouble());Assert.Equal(15,speed.GetProperty("watchSeconds").GetInt64());Assert.Equal(30,speed.GetProperty("contentSeconds").GetInt64());
         await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Start(course,resource,student,false,0,default,double.NaN));
     }
+    private async Task<(Guid Assignment,Guid Snapshot,Guid Question)> ShowcaseEssay(bool closed=false)
+    {
+        var a=await Quiz(course);await workflow.Transition(a.Id,teacher,"published",default);
+        var saved=await workflow.Save(a.Id,student,new(){Submit=true,Answers=[new(){QuestionId=a.Questions[0].Id,Text="PRIVATE synthetic source answer"}]},default);
+        var snapshot=(Guid)(await Exec("SELECT id FROM submission_revisions WHERE submission_id=$1",saved.Id!.Value))!;
+        await Exec("INSERT INTO grades(submission_revision_id,grader_user_id,score,released_at) VALUES($1,$2,80,now())",snapshot,teacher);
+        if(closed)await workflow.Transition(a.Id,teacher,"closed",default);
+        return(a.Id,snapshot,a.Questions[0].Id);
+    }
+    private static ShowcasePublishInput Approval(int version)=>new(){ExpectedVersion=version,Anonymized=true,Authorized=true,NoAnswerLeak=true,AuthorizationReference="synthetic-policy-approval"};
+    [FormativeDatabaseFact]public async Task ShowcasePublishesOnlyReviewedSnapshotAndSupportsTaWithdrawal()
+    {
+        var source=await ShowcaseEssay();var show=new CourseShowcases(db);
+        await Exec("UPDATE course_members SET course_role='ta' WHERE course_id=$1 AND user_id=$2",course,peer);
+        var id=await show.Create(course,peer,false,new(){SnapshotId=source.Snapshot,QuestionId=source.Question},default);
+        Assert.Equal(404,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Get(course,id,student,false,false,default))).StatusCode);
+        Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Sources(course,student,false,default))).StatusCode);
+        await show.Save(course,id,peer,false,new(){Title="Anonymous example",Background="Reviewed prompt",Answer="Anonymous answer",Notes="Teaching notes",ExpectedVersion=1},null,default);
+        Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Publish(course,id,peer,false,Approval(2),default))).StatusCode);
+        Assert.Equal(409,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Publish(course,id,teacher,false,Approval(2),default))).StatusCode);
+        await workflow.Transition(source.Assignment,teacher,"closed",default);
+        Assert.Equal(400,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Publish(course,id,teacher,false,new(){ExpectedVersion=2},default))).StatusCode);
+        await show.Publish(course,id,teacher,false,Approval(2),default);
+        var visible=Assert.IsType<ShowcasePublic>(await show.Get(course,id,student,false,false,default));Assert.Equal("Anonymous answer",visible.Answer);
+        await Assert.ThrowsAsync<PostgresException>(()=>Exec("UPDATE course_showcase_versions SET answer='tampered' WHERE showcase_id=$1 AND revision=2",id));
+        await Assert.ThrowsAsync<PostgresException>(()=>Exec("UPDATE course_showcase_publications SET authorization_reference='tampered' WHERE showcase_id=$1",id));
+        var json=System.Text.Json.JsonSerializer.Serialize(visible);Assert.DoesNotContain("PRIVATE",json);Assert.DoesNotContain("Snapshot",json);Assert.DoesNotContain(student.ToString(),json);
+        await show.Save(course,id,teacher,false,new(){Title="Changed draft",Background="",Answer="Not yet public",Notes="",ExpectedVersion=3},null,default);
+        Assert.Equal("Anonymous answer",Assert.IsType<ShowcasePublic>(await show.Get(course,id,student,false,false,default)).Answer);
+        Assert.Equal(409,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Publish(course,id,teacher,false,Approval(3),default))).StatusCode);
+        await show.Withdraw(course,id,peer,false,4,default);await show.Withdraw(course,id,peer,false,1,default);
+        Assert.Equal(1L,(long)(await Exec("SELECT count(*) FROM course_showcase_publications WHERE showcase_id=$1 AND revision=2 AND approved_by=$2",id,teacher))!);
+        await show.Publish(course,id,teacher,false,Approval(5),default);
+        Assert.Equal(2L,(long)(await Exec("SELECT count(*) FROM course_showcase_publications WHERE showcase_id=$1",id))!);
+        await show.Withdraw(course,id,peer,false,6,default);
+        Assert.Equal(404,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Get(course,id,student,false,false,default))).StatusCode);
+    }
+    [FormativeDatabaseFact]public async Task ShowcasePdfRequiresSeparateCopyAndOldAttachmentDisappearsWhenWithdrawn()
+    {
+        var report=(Guid)(await Exec("INSERT INTO report_assignments(course_id,title,max_score,status,created_by) VALUES($1,'Synthetic PDF',100,'closed',$2) RETURNING id",course,teacher))!;
+        var original="%PDF-1.4 PRIVATE ORIGINAL"u8.ToArray();var safe="%PDF-1.4 ANONYMOUS COPY"u8.ToArray();
+        var submitted=(Guid)(await Exec("INSERT INTO report_submissions(report_id,student_id,file_name,content,score,graded_by,graded_at) VALUES($1,$2,'PRIVATE-name.pdf',$3,90,$4,now()) RETURNING id",report,student,original,teacher))!;
+        var show=new CourseShowcases(db);var id=await show.Create(course,teacher,false,new(){ReportSubmissionId=submitted},default);
+        Assert.Equal(400,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Publish(course,id,teacher,false,Approval(1),default))).StatusCode);
+        Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Upload(course,id,student,false,1,safe,default))).StatusCode);
+        await show.Upload(course,id,teacher,false,1,safe,default);await show.Publish(course,id,teacher,false,Approval(2),default);
+        Assert.Equal(safe,await show.Attachment(course,id,student,false,false,default));
+        Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Attachment(course,id,student,false,true,default))).StatusCode);
+        await Exec("UPDATE report_assignments SET status='published' WHERE id=$1",report);
+        Assert.Equal(404,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Attachment(course,id,student,false,false,default))).StatusCode);
+        await Exec("UPDATE report_assignments SET status='closed' WHERE id=$1",report);
+        await Exec("UPDATE courses SET status='archived' WHERE id=$1",course);
+        Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Save(course,id,teacher,false,new(){Title="blocked",ExpectedVersion=3},null,default))).StatusCode);
+        await show.Withdraw(course,id,teacher,false,3,default);
+        Assert.Equal(404,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Attachment(course,id,student,false,false,default))).StatusCode);
+        Assert.Equal(original,(byte[])(await Exec("SELECT content FROM report_submissions WHERE id=$1",submitted))!);
+    }
+    [FormativeDatabaseFact]public async Task ShowcaseRejectsCrossCoursePracticeAndUnreleasedSources()
+    {
+        var source=await ShowcaseEssay(true);var show=new CourseShowcases(db);
+        Assert.Equal(404,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Create(second,teacher,false,new(){SnapshotId=source.Snapshot,QuestionId=source.Question},default))).StatusCode);
+        Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Create(course,teacher,true,new(){SnapshotId=source.Snapshot,QuestionId=source.Question},default))).StatusCode);
+        await Exec("UPDATE grades SET released_at=NULL WHERE submission_revision_id=$1",source.Snapshot);
+        Assert.Equal(404,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Create(course,teacher,false,new(){SnapshotId=source.Snapshot,QuestionId=source.Question},default))).StatusCode);
+    }
     public async Task DisposeAsync()
     {
         if(db==null)return;
         var cs=new[]{course,second,taught};
         foreach(var sql in new[]{
+            "DELETE FROM course_showcases WHERE course_id=ANY($1)",
             "DELETE FROM quiz_learning_starts WHERE assignment_id IN (SELECT id FROM assignments WHERE course_id=ANY($1))",
             "DELETE FROM quiz_learning_requirements WHERE assignment_id IN (SELECT id FROM assignments WHERE course_id=ANY($1))",
             "DELETE FROM learning_time_sessions WHERE resource_id IN (SELECT id FROM course_resources WHERE course_id=ANY($1))",
             "DELETE FROM course_grade_scores WHERE course_id=ANY($1)","DELETE FROM course_grade_items WHERE course_id=ANY($1)",
+            "DELETE FROM report_submissions WHERE report_id IN (SELECT id FROM report_assignments WHERE course_id=ANY($1))",
+            "DELETE FROM report_assignments WHERE course_id=ANY($1)",
             "DELETE FROM grades WHERE submission_revision_id IN (SELECT r.id FROM submission_revisions r JOIN submissions s ON s.id=r.submission_id JOIN assignments a ON a.id=s.assignment_id WHERE a.course_id=ANY($1))",
             "DELETE FROM quiz_grading WHERE snapshot_id IN (SELECT r.id FROM submission_revisions r JOIN submissions s ON s.id=r.submission_id JOIN assignments a ON a.id=s.assignment_id WHERE a.course_id=ANY($1))",
             "DELETE FROM submission_revisions WHERE submission_id IN (SELECT s.id FROM submissions s JOIN assignments a ON a.id=s.assignment_id WHERE a.course_id=ANY($1))",

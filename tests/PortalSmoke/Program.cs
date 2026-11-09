@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using AiTeachingAssistant.Models;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
@@ -31,11 +31,15 @@ if(args.Contains("--cleanup"))
         "SELECT EXISTS(SELECT 1 FROM course_grade_scores s JOIN courses c ON c.id=s.course_id WHERE c.owner_user_id=ANY($1) AND (NOT(s.student_id=ANY($1)) OR NOT(s.updated_by=ANY($1))))",
         "SELECT EXISTS(SELECT 1 FROM course_grade_items i JOIN courses c ON c.id=i.course_id WHERE c.owner_user_id=ANY($1) AND NOT(i.created_by=ANY($1)))",
         "SELECT EXISTS(SELECT 1 FROM exam_attempts a JOIN exams e ON e.id=a.exam_id JOIN courses c ON c.id=e.course_id WHERE c.owner_user_id=ANY($1) AND NOT(a.student_id=ANY($1)))",
+        "SELECT EXISTS(SELECT 1 FROM course_showcases s JOIN courses c ON c.id=s.course_id WHERE c.owner_user_id=ANY($1) AND NOT(s.created_by=ANY($1)))",
+        "SELECT EXISTS(SELECT 1 FROM course_showcase_publications p JOIN course_showcases s ON s.id=p.showcase_id JOIN courses c ON c.id=s.course_id WHERE c.owner_user_id=ANY($1) AND NOT(p.approved_by=ANY($1)))",
+        "SELECT EXISTS(SELECT 1 FROM course_showcase_versions v JOIN course_showcases s ON s.id=v.showcase_id JOIN courses c ON c.id=s.course_id WHERE c.owner_user_id=ANY($1) AND NOT(v.created_by=ANY($1)))",
         "SELECT EXISTS(SELECT 1 FROM course_resources r JOIN courses c ON c.id=r.course_id WHERE c.owner_user_id=ANY($1) AND NOT(r.uploaded_by=ANY($1)))",
         "SELECT EXISTS(SELECT 1 FROM assignment_discussions d WHERE d.assignment_id IN ("+scope+") AND NOT(d.author_id=ANY($1)))",
         "SELECT EXISTS(SELECT 1 FROM course_group_members m JOIN course_groups g ON g.id=m.group_id JOIN courses c ON c.id=g.course_id WHERE c.owner_user_id=ANY($1) AND NOT(m.user_id=ANY($1)))"})
     {await using var check=new NpgsqlCommand(guardSql,conn,tx);check.Parameters.AddWithValue(ids);if(await check.ExecuteScalarAsync() is true)throw new Exception("Cleanup would touch a non-QA course-tool record; refusing.");}
     foreach(var sql in new[]{
+        "DELETE FROM course_showcases WHERE course_id IN (SELECT id FROM courses WHERE owner_user_id=ANY($1))",
         "DELETE FROM quiz_learning_starts WHERE assignment_id IN ("+scope+")",
         "DELETE FROM quiz_learning_requirements WHERE assignment_id IN ("+scope+")",
         "DELETE FROM learning_time_sessions WHERE resource_id IN (SELECT r.id FROM course_resources r JOIN courses c ON c.id=r.course_id WHERE c.owner_user_id=ANY($1))",

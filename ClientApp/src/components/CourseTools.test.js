@@ -14,7 +14,7 @@ it('lets students filter course materials while hiding authoring controls',async
 it('keeps unsaved tags and their original version when another resource reloads',async()=>{
  const w=render();await flushPromises();for(const card of w.findAll('.resource-card'))await card.findAll('button').find(b=>b.text()==='編輯標籤').trigger('click')
  await w.get('input[aria-label="第一份 標籤"]').setValue('第3週');await w.get('input[aria-label="第二份 標籤"]').setValue('第4週');resources[1].tagsVersion=5
- await w.findAll('.resource-card')[0].find('form').trigger('submit');await flushPromises();expect(w.get('input[aria-label="第二份 標籤"]').element.value).toBe('第4週')
- api.mockRejectedValueOnce(Object.assign(new Error('標籤已被其他操作更新'),{status:409}));await w.findAll('.resource-card')[1].find('form').trigger('submit');await flushPromises();expect(api).toHaveBeenCalledWith('/courses/course/resources/b/tags',{method:'PUT',body:{tags:['第4週'],expectedVersion:4}});expect(w.get('[role="alert"]').text()).toContain('標籤已被其他操作更新');expect(w.get('input[aria-label="第二份 標籤"]').element.value).toBe('第4週');w.unmount()
+ await w.findAll('.resource-card').find(c=>c.text().includes('第一份')).find('form').trigger('submit');await flushPromises();expect(w.get('input[aria-label="第二份 標籤"]').element.value).toBe('第4週')
+ api.mockRejectedValueOnce(Object.assign(new Error('標籤已被其他操作更新'),{status:409}));await w.findAll('.resource-card').find(c=>c.text().includes('第二份')).find('form').trigger('submit');await flushPromises();expect(api).toHaveBeenCalledWith('/courses/course/resources/b/tags',{method:'PUT',body:{tags:['第4週'],expectedVersion:4}});expect(w.get('[role="alert"]').text()).toContain('標籤已被其他操作更新');expect(w.get('input[aria-label="第二份 標籤"]').element.value).toBe('第4週');w.unmount()
 })
 
