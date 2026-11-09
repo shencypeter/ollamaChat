@@ -44,3 +44,8 @@
 - 測驗learningGate的accumulatedSeconds為門檻計入秒數，影片採內容、文件採實際；本人歷程原實際時數不混入倍速換算時間。
 
 播放器事件依據：[YouTube 官方 IFrame API 文件](https://developers.google.com/youtube/iframe_api_reference)。
+
+
+## 2026-11-09 後續規格（未實作）
+
+會議新增的授課日期與教師摘要，及日期查詢／分組提案見 [教材單元補充](teaching-material-metadata-spec.md)。現有上傳日期／週次tag／逐字稿不能視為這些欄位已完成。是否建立獨立每堂課單元待確認；本輪不改既有觀看／倍速／測驗門檻。整體差距見 [會議入口](meeting-2026-11-06-gap-spec.md)。
