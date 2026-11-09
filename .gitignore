@@ -22,7 +22,6 @@ coverage.*
 *.sln.docstates
 
 # Local configuration and secrets
-appsettings.Local.json
 appsettings.*.Local.json
 *.secrets.json
 .env

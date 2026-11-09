@@ -19,7 +19,7 @@ An e-learning POC with a Teams-inspired collaboration workspace, light/dark them
 
 Requirements: .NET 8 SDK, Node 22.22+ LTS (or a supported newer LTS), PostgreSQL 16+, and the configured on-prem Ollama service for AI requests. Vue assets are bundled locally; the UI does not require a CDN.
 
-The local, gitignored `appsettings.Local.json` holds `ConnectionStrings:Portal` and the generated `Portal:BootstrapToken`. The database password is not stored in tracked configuration or browser code. Environment variables override configuration (`ConnectionStrings__Portal`, `Portal__BootstrapToken`). A redacted configuration example is in `docs/portal-config.example.json`.
+As explicitly requested on 2026-11-09, `appsettings.Local.json` is tracked and includes the shared development database connection string and setup secret. Cloning either repository provides these local settings. Environment variables still override configuration (`ConnectionStrings__Portal`, `Portal__BootstrapToken`). Keep actual values out of Markdown, browser code, and command output. The redacted template remains in `docs/portal-config.example.json`. Publish still excludes this local file; configure the deployed application separately.
 
 ```powershell
 # Build Vue assets first, then run the API and SPA on the same origin.

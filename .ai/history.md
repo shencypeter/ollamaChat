@@ -447,3 +447,10 @@
 - 5107原政策3項browser通過後，依使用者答覆改門檻並重新驗證最終5097共3項通過：PDF／WebM、跨課歷程／門檻、新逐字稿／學生唯讀／HTML純文字／清除與409／教師UI編輯／1倍切2倍／實際少於25秒而內容達25秒解鎖／快轉不膨脹／正式統計。測試合成播放器的緩衝回播回呼補狀態檢查，避免按暫停後測試碼自行恢復播放；手機及統計截圖已檢視。未宣稱真人影片完成率或注意力驗收，本輪未重跑實際YouTube播放或模型測試。
 - 部署replay-release至p0-publish，核對命令列後更新本專案預覽；最終5097 PID41988，contentRoot專案根／webroot發布wwwroot，session200，下次重查。QA合成帳號／課程／教材／逐字稿／計時／提交及state已清理，僅停止本次5107 PID39940；未停止使用者開發程序，未提交／推送。
 - 更新elearning、agents、course-materials、learning-history-spec及README，以新確認的內容時間政策取代舊限制；歷史原決策保留。
+
+
+## 2026-11-09：依使用者要求追蹤團隊開發連線設定
+
+- 使用者明確確認將實際資料庫連線與設定秘密保留在repo，且推至原origin及paladin兩目的地；僅appsettings.Local.json納入實際設定，Markdown不寫值。
+- 移除該檔.gitignore規則、更新README及agents的現行交接；原設定值未改，環境變數覆寫及publish排除原行為保留。會議gap文件與其他待提交修改不納本次連線設定commit，既有pre-vue Ollama分支不移動。
+- 驗證本機JSON可解析、只含ConnectionStrings:Portal及Portal:BootstrapToken兩項，沒有輸出值；本次設定追蹤／文件變更不跑產品測試、不連DB或執行模型，不改執行中服務。
