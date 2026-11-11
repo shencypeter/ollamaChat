@@ -21,6 +21,7 @@ public sealed class LearningTimeController(LearningTime learning,AssignmentWorkf
         if(await cmd.ExecuteScalarAsync(ct) is not byte[] bytes)return NotFound();
         Response.Headers["X-Content-Type-Options"]="nosniff";return File(bytes,meta.MediaType);
     });
+    [AiTeachingAssistant.Services.CourseCapability("statistics")]
     [HttpGet("api/courses/{course:guid}/resources/{id:guid}/learning/statistics")]
     public Task<IActionResult> Statistics(Guid course,Guid id,CancellationToken ct)=>Run(async()=>Ok(await learning.Statistics(course,id,Actor,experience.IsPractice,ct)));
     [HttpPost("api/courses/{course:guid}/resources/{id:guid}/learning/sessions")]

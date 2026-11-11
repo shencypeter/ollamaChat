@@ -30,7 +30,7 @@ public sealed class CourseShowcases(NpgsqlDataSource source)
    SELECT a.title,a.instructions,''::text,u.display_name,a.status='closed'
    FROM report_submissions s JOIN report_assignments a ON a.id=s.report_id JOIN app_users u ON u.id=s.student_id
    JOIN course_members m ON m.user_id=u.id AND m.course_id=a.course_id AND m.course_role='student' AND m.status='active'
-   WHERE s.id=$1 AND a.course_id=$2 AND NOT s.is_practice AND s.score IS NOT NULL AND u.status='active'
+   WHERE s.id=$1 AND a.course_id=$2 AND NOT s.is_practice AND s.group_id IS NULL AND s.published_score IS NOT NULL AND u.status='active'
    """:"""
    SELECT a.title,q.prompt_text,v->>'text',u.display_name,a.status='closed' AND NOT a.allow_revisions
    FROM submission_revisions r JOIN submissions s ON s.id=r.submission_id JOIN assignments a ON a.id=s.assignment_id
@@ -54,7 +54,7 @@ public sealed class CourseShowcases(NpgsqlDataSource source)
   await using var db=await source.OpenConnectionAsync(ct);var role=await Access(db,course,actor,practice,false,ct);if(role is not ("teacher" or "ta"))throw Error(403,"只有本課教學人員可選來源。");
   var candidates=new List<(Guid? Snapshot,Guid? Question,Guid? Report)>();
   await using(var c=new NpgsqlCommand("SELECT r.id,q.id FROM submission_revisions r JOIN submissions s ON s.id=r.submission_id JOIN assignments a ON a.id=s.assignment_id JOIN assignment_questions q ON q.assignment_id=a.id AND q.question_type='essay' WHERE a.course_id=$1 AND NOT s.is_practice AND s.status='submitted' ORDER BY r.submitted_at DESC,r.id,q.sort_order LIMIT 200",db)){Add(c,course);await using var r=await c.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))candidates.Add((r.GetGuid(0),r.GetGuid(1),null));}
-  await using(var c=new NpgsqlCommand("SELECT s.id FROM report_submissions s JOIN report_assignments a ON a.id=s.report_id WHERE a.course_id=$1 AND NOT s.is_practice AND s.score IS NOT NULL ORDER BY s.submitted_at DESC,s.id LIMIT 200",db)){Add(c,course);await using var r=await c.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))candidates.Add((null,null,r.GetGuid(0)));}
+  await using(var c=new NpgsqlCommand("SELECT s.id FROM report_submissions s JOIN report_assignments a ON a.id=s.report_id WHERE a.course_id=$1 AND NOT s.is_practice AND s.group_id IS NULL AND s.published_score IS NOT NULL ORDER BY s.submitted_at DESC,s.id LIMIT 200",db)){Add(c,course);await using var r=await c.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))candidates.Add((null,null,r.GetGuid(0)));}
   var rows=new List<object>();foreach(var c in candidates){try{var v=await SourceContent(db,course,c.Snapshot,c.Question,c.Report,false,false,ct);rows.Add(new{snapshotId=c.Snapshot,questionId=c.Question,reportSubmissionId=c.Report,kind=c.Report.HasValue?"pdf":"essay",title=v.Title,studentName=v.Student,canPublish=v.Closed});}catch(AssignmentWorkflowException e)when(e.StatusCode==404){}}
   return rows;
  }

@@ -1,12 +1,12 @@
-﻿import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindExperience, experience, setStudentExperience } from './experience'
 import { api, resetCsrf } from '../api'
 afterEach(() => { localStorage.clear(); bindExperience(null); resetCsrf(); vi.unstubAllGlobals() })
 describe('student experience is a view, not a different identity', () => {
-  it('allows professor and TA to select student view and persists per account', () => {
+  it('allows professor and TA to select student view and starts each login in the authorized perspective', () => {
     for (const role of ['Administrator', 'Member']) {
       const user = { id: role, role,canTeach:true }; bindExperience(user); setStudentExperience(true); expect(experience.student).toBe(true); expect(user.role).toBe(role)
-      bindExperience(null); bindExperience(user); expect(experience.student).toBe(true)
+      bindExperience(null); bindExperience(user); expect(experience.student).toBe(false)
       bindExperience({ id: 'another', role,canTeach:true }); expect(experience.student).toBe(false)
     }
   })

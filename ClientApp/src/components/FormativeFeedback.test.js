@@ -49,11 +49,11 @@ describe('private formative feedback', () => {
 describe('student submission actions', () => {
   const question = { id: 'q', promptText: 'synthetic', sortOrder: 1, stageCode: 'premorbid' }
   const own = { id: 's', status: 'draft', version: 1, answers: [{ questionId: 'q', text: 'saved', currentRevisionId: 'r1', revisions: [] }] }
-  it('allows private practice submission in staff student experience', async () => {
+  it('removes draft and submission actions in student preview', async () => {
     api.mockImplementation(path => Promise.resolve(path === '/assignments/a' ? { id: 'a', courseId: 'c', courseRole: 'student', courseStatus: 'active', status: 'published', isPractice: true, title: 'synthetic', questions: [question] } : path.endsWith('/my-submission') ? own : []))
     wrapper = mount(AssignmentView, { global: { stubs: { RouterLink: { template: '<a><slot /></a>' }, TeachingPanel: true } } }); await flushPromises()
     const submit = wrapper.findAll('button').find(b => b.text() === '提交給教師／助教')
-    expect(submit.exists()).toBe(true); expect(submit.attributes('disabled')).toBeUndefined(); expect(wrapper.text()).toContain('提交自己的練習作答')
+    expect(submit).toBeUndefined();expect(wrapper.findAll('button').some(b=>b.text()==='儲存草稿')).toBe(false)
     expect(wrapper.findAll('button').some(b => b.text() === '請 AI 提供回饋')).toBe(false)
   })
   it('offers save and submit without assignment AI actions or AI confirmation', async () => {

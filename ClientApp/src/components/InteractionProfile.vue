@@ -1,0 +1,11 @@
+<script setup>
+import {ref,onMounted} from 'vue'
+import {api} from '../api'
+const props=defineProps({studentId:String,courseId:String}),data=ref(null),error=ref(''),busy=ref(false),kind=ref(''),selected=ref(props.courseId||''),page=ref(1)
+const labels={learning:'閱讀／觀看',like:'按讚',comment:'留言'}
+async function load(){busy.value=true;error.value='';try{const q=new URLSearchParams({page:page.value,kind:kind.value});if(props.studentId)q.set('student',props.studentId);if(selected.value)q.set('course',selected.value);data.value=await api(`/interaction-profile?${q}`)}catch(e){data.value=null;error.value=e.message}finally{busy.value=false}}
+function filter(){page.value=1;load()}
+function turn(delta){page.value+=delta;load()}
+onMounted(load)
+</script>
+<template><section class="surface form-surface interaction-panel"><h2>教材互動紀錄<span v-if="data"> · {{data.name}}</span></h2><p v-if="error" class="error-box" role="alert">{{error}}</p><div class="form-grid"><label>課程<select aria-label="互動課程" v-model="selected" :disabled="busy||!!courseId" @change="filter"><option value="">全部修課</option><option v-for="c in data?.courses||[]" :key="c.id" :value="c.id">{{c.title}}</option></select></label><label>互動類型<select aria-label="互動類型" v-model="kind" :disabled="busy" @change="filter"><option value="">全部互動</option><option v-for="(label,key) in labels" :key="key" :value="key">{{label}}</option></select></label></div><p v-if="busy" role="status">載入中…</p><template v-if="data"><p>{{data.total}} 項教材互動；紀錄不代表理解或完課。</p><article v-for="item in data.items" :key="`${item.resourceId}:${item.kind}`" class="question-editor"><p class="muted">{{item.courseTitle}} · {{labels[item.kind]}}</p><RouterLink :to="`/courses/${item.courseId}/materials/${item.resourceId}`">{{item.title}}</RouterLink><p>{{new Date(item.lastAt).toLocaleString()}}</p><p v-if="item.kind==='learning'">實際時間 {{item.seconds}} 秒 · 內容時間 {{item.contentSeconds}} 秒</p></article><p v-if="!data.total">目前沒有符合條件的教材互動。</p><nav v-if="data.total>20" class="studio-actions" aria-label="教材互動分頁"><button class="button secondary" :disabled="busy||page<=1" @click="turn(-1)">上一頁</button><span>第 {{data.page}} 頁</span><button class="button secondary" :disabled="busy||page*20>=data.total" @click="turn(1)">下一頁</button></nav></template></section></template>

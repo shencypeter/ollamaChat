@@ -24,6 +24,7 @@ public sealed partial class CourseToolsController
         return await r.ReadAsync(ct)?Ok(new{transcript=r.GetString(0),transcriptVersion=r.GetInt32(1)}):NotFound();
     }
 
+    [AiTeachingAssistant.Services.CourseCapability("materials")]
     [HttpPut("resources/{id:guid}/transcript")]
     public async Task<IActionResult> SaveTranscript(Guid course,Guid id,ResourceTranscriptInput input,CancellationToken ct)
     {

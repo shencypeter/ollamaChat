@@ -38,31 +38,34 @@ public sealed partial class AssignmentWorkflow(NpgsqlDataSource source, TimeProv
     private async Task<AssignmentDetail> Load(NpgsqlConnection conn, Guid id, Guid actor, bool forUpdate, CancellationToken ct)
     {
         AssignmentDetail a;
+        bool requiresStart;
         await using (var cmd = new NpgsqlCommand("""
-            SELECT a.id,a.course_id,c.title,m.course_role,c.status,a.title,a.instructions,a.status,a.opens_at,a.due_at,a.submission_mode,a.allow_revisions,a.max_score,a.rubric_id,EXISTS(SELECT 1 FROM course_grade_items i WHERE i.source_assignment_id=a.id)
+            SELECT a.id,a.course_id,c.title,m.course_role,c.status,a.title,a.instructions,a.status,a.opens_at,a.due_at,a.submission_mode,a.allow_revisions,a.max_score,a.rubric_id,EXISTS(SELECT 1 FROM course_grade_items i WHERE i.source_assignment_id=a.id),a.time_limit_minutes,a.requires_start,(SELECT started_at FROM quiz_learning_starts WHERE assignment_id=a.id AND user_id=$2 AND is_practice=$3),a.notify_students
             FROM assignments a JOIN courses c ON c.id=a.course_id
             LEFT JOIN course_members m ON m.course_id=c.id AND m.user_id=$2 AND m.status='active'
             WHERE a.id=$1
             """ + (forUpdate ? " FOR UPDATE OF a" : ""), conn))
         {
-            Add(cmd, id); Add(cmd, actor);
+            Add(cmd, id); Add(cmd, actor);Add(cmd,Practice);
             await using var r = await cmd.ExecuteReaderAsync(ct);
             if (!await r.ReadAsync(ct)) throw new AssignmentWorkflowException(404, "找不到作業。");
             if (r.IsDBNull(3)) throw new AssignmentWorkflowException(403, "你不是本課程的有效成員。");
             var role = Practice?"student":r.GetString(3); var status = r.GetString(7);
             if (!AssignmentPolicy.IsStaff(role) && status == "draft") throw new AssignmentWorkflowException(404, "找不到已發布的作業。");
             if (r.GetString(10) != "individual") throw new AssignmentWorkflowException(409, "本階段只支援個人作業。");
-            a = new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), role, r.GetString(4), r.GetString(5), r.GetString(6), status, ReadDate(r, 8), ReadDate(r, 9), [], "",r.GetBoolean(11),r.GetDecimal(12),r.IsDBNull(13)?null:r.GetGuid(13),false,r.GetBoolean(14));
+            requiresStart=r.GetBoolean(16);
+            a = new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), role, r.GetString(4), r.GetString(5), r.GetString(6), status, ReadDate(r, 8), ReadDate(r, 9), [], "",r.GetBoolean(11),r.GetDecimal(12),r.IsDBNull(13)?null:r.GetGuid(13),false,r.GetBoolean(14),null,r.IsDBNull(15)?null:r.GetInt32(15),ReadDate(r,17),r.GetBoolean(18));
         }
         var gate=await LearningTime.Gate(conn,id,actor,Practice,ct);
+        gate=gate with{RequiresStart=requiresStart&&!Practice};
         a=a with{LearningGate=gate};
         var questions = new List<AssignmentQuestion>();
-        if(!AssignmentPolicy.IsStaff(a.CourseRole)&&gate.Locked)
+        if(!AssignmentPolicy.IsStaff(a.CourseRole)&&(gate.Locked || a.OpensAt>clock.GetUtcNow()))
             return a with{EditVersion="",IsPractice=Practice};
-        await using (var cmd = new NpgsqlCommand("SELECT id,prompt_text,stage_code,sort_order,question_type,options::text,standard_answer::text,max_score,grading_guidance FROM assignment_questions WHERE assignment_id=$1 ORDER BY sort_order", conn))
+        await using (var cmd = new NpgsqlCommand("SELECT id,prompt_text,stage_code,sort_order,question_type,options::text,standard_answer::text,max_score,grading_guidance,section_title FROM assignment_questions WHERE assignment_id=$1 ORDER BY sort_order", conn))
         {
             Add(cmd, id); await using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct)) questions.Add(new(r.GetGuid(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2), r.GetInt32(3),r.GetString(4),JsonSerializer.Deserialize<List<string>>(r.GetString(5)),AssignmentPolicy.IsStaff(a.CourseRole)?JsonSerializer.Deserialize<List<int>>(r.GetString(6)):null,r.IsDBNull(7)?null:r.GetDecimal(7),AssignmentPolicy.IsStaff(a.CourseRole)?r.GetString(8):null));
+            while (await r.ReadAsync(ct)) questions.Add(new(r.GetGuid(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2), r.GetInt32(3),r.GetString(4),JsonSerializer.Deserialize<List<string>>(r.GetString(5)),AssignmentPolicy.IsStaff(a.CourseRole)?JsonSerializer.Deserialize<List<int>>(r.GetString(6)):null,r.IsDBNull(7)?null:r.GetDecimal(7),AssignmentPolicy.IsStaff(a.CourseRole)?r.GetString(8):null,r.GetString(9)));
         }
         a = a with { Questions = questions, IsPractice=Practice };
         return a with { EditVersion = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(a)))) };
@@ -92,8 +95,8 @@ public sealed partial class AssignmentWorkflow(NpgsqlDataSource source, TimeProv
         for (var i=0; i<request.Questions.Count; i++)
         {
             var q=request.Questions[i];
-            await using var cmd=new NpgsqlCommand("INSERT INTO assignment_questions(assignment_id,prompt_text,stage_code,sort_order,question_type,options,standard_answer,max_score,grading_guidance) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9)",conn);
-            Add(cmd,id);Add(cmd,q.PromptText.Trim());cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType=NpgsqlDbType.Text,Value=string.IsNullOrWhiteSpace(q.StageCode)?DBNull.Value:q.StageCode });Add(cmd,i+1);Add(cmd,q.QuestionType);Add(cmd,JsonSerializer.Serialize(q.QuestionType=="true_false"?new List<string>{"是","非"}:q.Options));Add(cmd,JsonSerializer.Serialize(q.StandardAnswer));cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlDbType.Numeric,Value=(object?)q.Points??DBNull.Value});Add(cmd,q.GradingGuidance);await cmd.ExecuteNonQueryAsync(ct);
+            await using var cmd=new NpgsqlCommand("INSERT INTO assignment_questions(assignment_id,prompt_text,stage_code,sort_order,question_type,options,standard_answer,max_score,grading_guidance,section_title) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10)",conn);
+            Add(cmd,id);Add(cmd,q.PromptText.Trim());cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType=NpgsqlDbType.Text,Value=string.IsNullOrWhiteSpace(q.StageCode)?DBNull.Value:q.StageCode });Add(cmd,i+1);Add(cmd,q.QuestionType);Add(cmd,JsonSerializer.Serialize(q.QuestionType=="true_false"?new List<string>{"是","非"}:q.Options));Add(cmd,JsonSerializer.Serialize(q.StandardAnswer));cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlDbType.Numeric,Value=(object?)q.Points??DBNull.Value});Add(cmd,q.GradingGuidance);Add(cmd,q.SectionTitle.Trim());await cmd.ExecuteNonQueryAsync(ct);
         }
     }
     public async Task<AssignmentDetail> Create(Guid course, Guid actor, SaveAssignmentRequest request, CancellationToken ct)
@@ -117,8 +120,8 @@ public sealed partial class AssignmentWorkflow(NpgsqlDataSource source, TimeProv
         if(a.IsQuiz && (request.AllowRevisions || request.RubricId.HasValue))Fail(400,"線上測驗採一次提交與直接人工評分。");
         if(request.ExpectedEditVersion!=a.EditVersion)Fail(409,"作業已被其他人修改，請重新載入後再編輯。");
         await using(var guard=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM submissions WHERE assignment_id=$1)",conn)) {Add(guard,id);if(await guard.ExecuteScalarAsync(ct) is true)Fail(409,"已有作答紀錄，無法變更題目。");}
-        await using(var cmd=new NpgsqlCommand("UPDATE assignments SET title=$2,instructions=$3,opens_at=$4,due_at=$5 WHERE id=$1",conn))
-        {Add(cmd,id);Add(cmd,request.Title.Trim());Add(cmd,request.Instructions);Date(cmd,request.OpensAt);Date(cmd,request.DueAt);await cmd.ExecuteNonQueryAsync(ct);}
+        await using(var cmd=new NpgsqlCommand("UPDATE assignments SET title=$2,instructions=$3,opens_at=$4,due_at=$5,time_limit_minutes=$6,requires_start=(requires_start OR $6 IS NOT NULL),notify_students=$7 WHERE id=$1",conn))
+        {Add(cmd,id);Add(cmd,request.Title.Trim());Add(cmd,request.Instructions);Date(cmd,request.OpensAt);Date(cmd,request.DueAt);cmd.Parameters.AddWithValue(NpgsqlDbType.Integer,(object?)request.TimeLimitMinutes??DBNull.Value);Add(cmd,request.NotifyStudents);await cmd.ExecuteNonQueryAsync(ct);}
         await using(var delete=new NpgsqlCommand("DELETE FROM assignment_questions WHERE assignment_id=$1",conn)){Add(delete,id);await delete.ExecuteNonQueryAsync(ct);}
         await WriteTeachingOptions(conn,id,a.CourseId,request,ct);
         if(!a.IsQuiz&&request.LearningRequirements.Count>0)Fail(400,"教材時間門檻僅適用線上測驗。");
@@ -165,7 +168,9 @@ public sealed partial class AssignmentWorkflow(NpgsqlDataSource source, TimeProv
     public async Task<SubmissionDetail> Own(Guid id,Guid actor,CancellationToken ct)
     {
         await using var conn=await source.OpenConnectionAsync(ct);var a=await Load(conn,id,actor,false,ct);
-        if(a.CourseRole!="student")Fail(403,"此頁只提供課程學生查看自己的作答。");return await LoadSubmission(conn,a,actor,ct);
+        if(a.CourseRole!="student")Fail(403,"此頁只提供課程學生查看自己的作答。");
+        if(Practice)return new(null,id,actor,"","not_started",0,null,a.Questions.Select(q=>new SubmissionAnswer(q.Id,"",null,[])).ToArray());
+        return await LoadSubmission(conn,a,actor,ct);
     }
     public async Task<SubmissionDetail> Save(Guid id,Guid actor,SaveSubmissionRequest request,CancellationToken ct)
     {
@@ -173,7 +178,10 @@ public sealed partial class AssignmentWorkflow(NpgsqlDataSource source, TimeProv
         // Serializes assignment state changes and saves; the version prevents stale-tab overwrites.
         var a=await Load(conn,id,actor,true,ct);
         AssignmentPolicy.RequireWritable(a.CourseRole,a.Status,a.CourseStatus,a.OpensAt,a.DueAt,clock.GetUtcNow());
-        await LearningTime.RequireStarted(conn,id,actor,Practice,ct);
+        if(Practice)Fail(403,"學生視角預覽無法儲存作答。");
+        if(a.LearningGate?.Locked==true)Fail(409,"請先開始測驗。");
+        if(a.TimeLimitMinutes is int minutes && (a.StartedAt==null || clock.GetUtcNow()>=a.StartedAt.Value.AddMinutes(minutes)))
+            Fail(409,"測驗作答時間已截止。");
         if(request.Answers is null || request.Answers.Count!=a.Questions.Count || request.Answers.Select(x=>x.QuestionId).Distinct().Count()!=a.Questions.Count || request.Answers.Any(x=>!a.Questions.Any(q=>q.Id==x.QuestionId)))Fail(400,"作答必須對應本作業的全部題目，不能含其他作業題目。");
         if(request.Submit && request.Answers!.Any(x=>string.IsNullOrWhiteSpace(x.Text)&&(!a.IsQuiz||a.Questions.Single(q=>q.Id==x.QuestionId).QuestionType=="essay")))Fail(400,"提交前請完成每一道題目。");
         foreach(var input in request.Answers!) QuestionPolicy.ValidateAnswer(a.Questions.Single(q=>q.Id==input.QuestionId),input.Text,request.Submit);
@@ -221,6 +229,37 @@ public sealed partial class AssignmentWorkflow(NpgsqlDataSource source, TimeProv
             """,conn);Add(cmd,id);
         await using var r=await cmd.ExecuteReaderAsync(ct);var result=new List<SubmissionListItem>();
         while(await r.ReadAsync(ct))result.Add(new(r.GetGuid(0),r.GetGuid(1),r.GetString(2),r.GetFieldValue<DateTimeOffset>(3),r.GetInt32(4),r.GetString(5)));return result;
+    }
+    public async Task<IReadOnlyList<object>> ClassRoster(Guid id,Guid actor,CancellationToken ct)
+    {
+        await using var conn=await source.OpenConnectionAsync(ct);
+        var assignment=await Load(conn,id,actor,false,ct);
+        AssignmentPolicy.RequireStaff(assignment.CourseRole);
+        await using var cmd=new NpgsqlCommand("""
+            SELECT u.id,u.student_number,u.display_name,s.id,s.submitted_at,g.score,g.released_at,
+                   (SELECT sum((mark->>'autoScore')::numeric) FROM jsonb_array_elements(q.findings) mark),
+                   EXISTS(SELECT 1 FROM jsonb_array_elements(q.findings) mark WHERE mark->>'questionType'='essay'),
+                   start.started_at
+            FROM course_members m JOIN app_users u ON u.id=m.user_id AND u.status='active'
+            LEFT JOIN submissions s ON s.assignment_id=$1 AND s.student_user_id=u.id AND s.status='submitted' AND NOT s.is_practice AND s.attempt_no=1
+            LEFT JOIN LATERAL (SELECT id FROM submission_revisions WHERE submission_id=s.id ORDER BY revision_no DESC LIMIT 1) r ON true
+            LEFT JOIN quiz_grading q ON q.snapshot_id=r.id
+            LEFT JOIN LATERAL (SELECT score,released_at FROM grades WHERE submission_revision_id=r.id ORDER BY graded_at DESC,id DESC LIMIT 1) g ON true
+            LEFT JOIN quiz_learning_starts start ON start.assignment_id=$1 AND start.user_id=u.id AND NOT start.is_practice
+            WHERE m.course_id=$2 AND m.course_role='student' AND m.status='active'
+            ORDER BY u.student_number NULLS LAST,u.display_name,u.id
+            """,conn);
+        Add(cmd,id);Add(cmd,assignment.CourseId);
+        var rows=new List<object>();
+        await using var reader=await cmd.ExecuteReaderAsync(ct);
+        while(await reader.ReadAsync(ct)){
+            var submitted=ReadDate(reader,4);var start=ReadDate(reader,9);
+            rows.Add(new{studentId=reader.GetGuid(0),studentNumber=reader.IsDBNull(1)?null:reader.GetString(1),studentName=reader.GetString(2),
+                id=reader.IsDBNull(3)?(Guid?)null:reader.GetGuid(3),submittedAt=submitted,total=reader.IsDBNull(5)?(decimal?)null:reader.GetDecimal(5),
+                released=!reader.IsDBNull(6),objective=reader.IsDBNull(7)?(decimal?)null:reader.GetDecimal(7),hasEssays=reader.GetBoolean(8),
+                elapsedSeconds=(long?)(submitted-start)?.TotalSeconds});
+        }
+        return rows;
     }
     public async Task<SubmissionDetail> Review(Guid id,Guid submission,Guid actor,CancellationToken ct)
     {

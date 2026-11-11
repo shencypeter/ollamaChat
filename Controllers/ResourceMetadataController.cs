@@ -26,6 +26,7 @@ public sealed partial class CourseToolsController
         return await r.ReadAsync(ct)?Ok(new{summary=r.GetString(0),metadataVersion=r.GetInt32(1),teachingDate=r.IsDBNull(2)?(DateOnly?)null:r.GetFieldValue<DateOnly>(2)}):NotFound();
     }
 
+    [AiTeachingAssistant.Services.CourseCapability("materials")]
     [HttpPut("resources/{id:guid}/metadata")]
     public async Task<IActionResult> SaveMetadata(Guid course,Guid id,ResourceMetadataInput input,CancellationToken ct)
     {

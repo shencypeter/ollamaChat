@@ -9,6 +9,7 @@ public sealed partial class AssignmentWorkflow
         await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);
         var a=await Load(conn,id,actor,true,ct);
         AssignmentPolicy.RequireWritable(a.CourseRole,a.Status,a.CourseStatus,a.OpensAt,a.DueAt,clock.GetUtcNow());
+        if(Practice)Fail(403,"學生視角預覽無法開始測驗。");
         if(!a.IsQuiz)Fail(400,"此項目不是線上測驗。");
         var gate=await LearningTime.Gate(conn,id,actor,Practice,ct);
         if(!gate.Met)Fail(409,"教材有效閱讀／觀看時間尚未達標，請先完成教材學習。");

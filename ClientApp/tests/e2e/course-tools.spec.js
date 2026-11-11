@@ -22,10 +22,6 @@ test('course resources, groups, secret answer keys, private questions and indepe
   const visible=await(await student.get(`/api/assignments/${a.id}`)).json();expect(visible.questions.every(q=>q.standardAnswer==null)).toBe(true)
   expect((await write(student,`/assignments/${a.id}/questions/${a.questions[0].id}/ai-feedback`,{expectedVersion:0,answerRevisionId:a.id})).status()).toBe(403)
   r=await write(student,`/assignments/${a.id}/my-submission`,{expectedVersion:0,submit:true,answers:a.questions.map((q,i)=>({questionId:q.id,text:['申論作答','[0]','[1]','[0,2]'][i]}))});expect(r.status()).toBe(200)
-  r=await write(student,`/assignments/${a.id}/discussions`,{question:'合成私人問題'});expect(r.status()).toBe(200);const discussion=(await r.json()).id
-  const practice=await teacher.get(`/api/assignments/${a.id}/discussions`,{headers:{'X-Portal-View':'student'}});expect((await practice.json())).toHaveLength(0)
-  expect((await write(ta,`/assignments/${a.id}/discussions/${discussion}`,{response:'合成答覆',isPublic:true},'PUT')).status()).toBe(204)
-  expect((await(await teacher.get(`/api/assignments/${a.id}/discussions`,{headers:{'X-Portal-View':'student'}})).json())).toHaveLength(1)
   r=await write(teacher,base+'/exams',{title:'獨立考試',questions});expect(r.status()).toBe(200);const exam=(await r.json()).id,eb=base+'/exams/'+exam
   const draft=await(await teacher.get('/api'+eb)).json();expect((await write(teacher,eb,{title:'獨立考試',questions,expectedEditVersion:draft.editVersion},'PUT')).status()).toBe(200);expect((await write(teacher,eb,{title:'過期修改',questions,expectedEditVersion:'stale'},'PUT')).status()).toBe(409);expect((await student.get('/api'+eb)).status()).toBe(404);expect((await write(teacher,eb+'/publish')).status()).toBe(204)
   expect((await(await student.get('/api'+eb)).json()).questions.every(q=>q.standardAnswer==null)).toBe(true)

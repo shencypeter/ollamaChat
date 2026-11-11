@@ -11,10 +11,10 @@ public sealed record LearningRequirement(Guid ResourceId,string Title,int Minimu
 {
     public bool Met=>AccumulatedSeconds>=MinimumSeconds;
 }
-public sealed record LearningGate(bool Started,IReadOnlyList<LearningRequirement> Requirements)
+public sealed record LearningGate(bool Started,IReadOnlyList<LearningRequirement> Requirements,bool RequiresStart=false)
 {
     public bool Met=>Requirements.All(r=>r.Met);
-    public bool Locked=>Requirements.Count>0&&!Started;
+    public bool Locked=>(RequiresStart||Requirements.Count>0)&&!Started;
 }
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class LearningHeartbeat

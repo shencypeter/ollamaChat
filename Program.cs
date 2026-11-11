@@ -1,4 +1,4 @@
-﻿using System.Security.Claims;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
 using AiTeachingAssistant.Models;
 using AiTeachingAssistant.Options;
@@ -90,7 +90,7 @@ app.Use(async(context,next)=>
 {
     var experience=context.RequestServices.GetRequiredService<LearnerExperience>();
     if(context.User.Identity?.IsAuthenticated==true){
-        var parts=context.Request.Path.Value?.Split('/',StringSplitOptions.RemoveEmptyEntries)??[];
+        var parts=context.Request.Path.Value?.ToLowerInvariant().Split('/',StringSplitOptions.RemoveEmptyEntries)??[];
         Guid? course=null;string? lookup=null;Guid target=Guid.Empty;
         if(parts.Length>=3 && parts[0]=="api" && Guid.TryParse(parts[2],out target)) {
             if(parts[1]=="courses")course=target;
@@ -103,11 +103,36 @@ app.Use(async(context,next)=>
         }
         var db=context.RequestServices.GetRequiredService<NpgsqlDataSource>();
         if(lookup!=null){await using var cmd=db.CreateCommand(lookup);cmd.Parameters.AddWithValue(target);course=await cmd.ExecuteScalarAsync(context.RequestAborted) as Guid?;}
-        if(course.HasValue){await using var cmd=db.CreateCommand("SELECT course_role FROM course_members WHERE course_id=$1 AND user_id=$2 AND status='active'");cmd.Parameters.AddWithValue(course.Value);cmd.Parameters.AddWithValue(Guid.Parse(context.User.FindFirstValue(ClaimTypes.NameIdentifier)!));experience.CourseRole=await cmd.ExecuteScalarAsync(context.RequestAborted) as string??"none";}
+        if(course.HasValue){
+            await using var cmd=db.CreateCommand("SELECT m.course_role,c.status,m.ta_restrictions FROM course_members m JOIN courses c ON c.id=m.course_id WHERE c.id=$1 AND m.user_id=$2 AND m.status='active'");
+            cmd.Parameters.AddWithValue(course.Value);
+            cmd.Parameters.AddWithValue(Guid.Parse(context.User.FindFirstValue(ClaimTypes.NameIdentifier)!));
+            await using var reader=await cmd.ExecuteReaderAsync(context.RequestAborted);
+            experience.CourseRole=await reader.ReadAsync(context.RequestAborted)?reader.GetString(0):"none";
+            var capability=context.GetEndpoint()?.Metadata.GetMetadata<CourseCapabilityAttribute>();
+            if(experience.CourseRole=="ta" && capability!=null && reader.GetFieldValue<string[]>(2).Contains(capability.Capability)){
+                context.Response.StatusCode=403;return;
+            }
+            if((experience.CourseRole=="student" || (experience.Requested && experience.CourseRole=="ta")) && reader.GetString(1)=="draft"){
+                context.Response.StatusCode=404;return;
+            }
+        }
     }
     if(context.Request.Headers.TryGetValue(LearnerExperience.Header,out var view) &&
        (view!="student" || context.User.Identity?.IsAuthenticated!=true || !LearnerExperience.IsStaff(context.User)))
     {context.Response.StatusCode=403;await context.Response.WriteAsJsonAsync(new{error="只有課程教師／助教可切換學生體驗模式。"});return;}
+    if(experience.Requested) {
+        var path=context.Request.Path;
+        // The former practice mode also had GET actions which initialized case attempts.
+        // Only the course portal's read surfaces participate in the read-only preview.
+        var allowed=path.StartsWithSegments("/api/courses") || path.StartsWithSegments("/api/assignments")
+            || path.StartsWithSegments("/api/reports") || path.StartsWithSegments("/api/notifications");
+        if(!allowed || !HttpMethods.IsGet(context.Request.Method) || experience.CourseRole is "student" or "none"){
+            context.Response.StatusCode=403;
+            await context.Response.WriteAsJsonAsync(new{error="學生視角預覽只提供任教課程的唯讀內容。"});
+            return;
+        }
+    }
     if(experience.IsPractice &&
        ((context.GetEndpoint()?.Metadata.GetOrderedMetadata<Microsoft.AspNetCore.Authorization.IAuthorizeData>().Any(a=>!string.IsNullOrEmpty(a.Roles))??false) ||
         context.Request.Path.Value?.TrimEnd('/').EndsWith("/members",StringComparison.OrdinalIgnoreCase)==true ||

@@ -5,7 +5,7 @@ import {loadYouTubeApi} from '../utils/youtubePlayer'
 vi.mock('../utils/youtubePlayer',()=>({loadYouTubeApi:vi.fn()}))
 let player,options,wrapper
 beforeEach(()=>{
- vi.useFakeTimers();player={getCurrentTime:vi.fn(()=>0),getPlaybackRate:vi.fn(()=>1),getPlayerState:vi.fn(()=>1),getIframe:()=>document.createElement('iframe'),destroy:vi.fn()}
+ vi.useFakeTimers();player={pauseVideo:vi.fn(),getCurrentTime:vi.fn(()=>0),getPlaybackRate:vi.fn(()=>1),getPlayerState:vi.fn(()=>1),getIframe:()=>document.createElement('iframe'),destroy:vi.fn()}
  loadYouTubeApi.mockResolvedValue({Player:vi.fn(function(_host,settings){options=settings;return player})})
 })
 afterEach(()=>{wrapper?.unmount();vi.useRealTimers();vi.clearAllMocks()})
@@ -19,4 +19,9 @@ it('shows embed failures instead of pretending playback earns credit',async()=>{
 })
 it('does not create a player after its view has been disposed',async()=>{
  let resolve;loadYouTubeApi.mockReturnValueOnce(new Promise(r=>resolve=r));wrapper=mount(YouTubeReplay,{props:{videoId:'M7lc1UVf-VE'}});wrapper.unmount();const ctor=vi.fn();resolve({Player:ctor});await flushPromises();expect(ctor).not.toHaveBeenCalled()
+})
+
+it('pauses a hidden embed when playback starts and never requests autoplay',async()=>{
+ const hidden=vi.spyOn(document,'visibilityState','get').mockReturnValue('hidden')
+ try{wrapper=mount(YouTubeReplay,{props:{videoId:'M7lc1UVf-VE'}});await flushPromises();options.events.onStateChange({data:1});expect(player.pauseVideo).toHaveBeenCalledOnce();expect(options.playerVars.autoplay).toBe(0)}finally{hidden.mockRestore()}
 })

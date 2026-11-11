@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using AiTeachingAssistant.Controllers;
 using AiTeachingAssistant.Models;
 using AiTeachingAssistant.Options;
@@ -41,19 +41,15 @@ public class FormativeWorkflowTests
         var assistant=new AssignmentWorkflow(f.Source,TimeProvider.System,Practice(f.Ta,PortalRoles.Member));
         Assert.True((await practice.Get(a.Id,f.Teacher,default)).IsPractice);Assert.Equal("student",(await practice.Get(a.Id,f.Teacher,default)).CourseRole);
         var firstRequest=f.SaveRequest(a,s,"teacher practice");firstRequest.ExpectedVersion=0;
-        var saved=await practice.Save(a.Id,f.Teacher,firstRequest,default);
-        var ai=await practice.AskFeedback(a.Id,a.Questions[0].Id,f.Teacher,f.Request(saved),new FakeModel(),f.Options,default);Assert.Equal("completed",ai.Status);
-        Assert.Empty(await assistant.Feedback(a.Id,a.Questions[0].Id,f.Ta,default));Assert.Empty(await f.Workflow.Feedback(a.Id,a.Questions[0].Id,f.Student,default));
-        await practice.Save(a.Id,f.Teacher,f.SaveRequest(a,saved,"teacher practice",true),default);
-        var submitted=await practice.Own(a.Id,f.Teacher,default);Assert.Equal("submitted",submitted.Status);
-        Assert.Empty(await f.Workflow.Submitted(a.Id,f.Teacher,default));Assert.Equal(0,(await f.Workflow.List(f.Course,f.Teacher,default)).Single().SubmittedCount);
-        Assert.Equal(404,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>f.Workflow.Review(a.Id,submitted.Id!.Value,f.Teacher,default))).StatusCode);
-        Assert.Single(await practice.Snapshots(a.Id,submitted.Id!.Value,f.Teacher,default));var snapshotId=Guid.NewGuid();
-        Assert.Equal(404,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>f.Workflow.SaveGrade(a.Id,snapshotId,f.Teacher,new(){Score=100},default))).StatusCode);
-        Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>assistant.Snapshots(a.Id,submitted.Id!.Value,f.Ta,default))).StatusCode);
+        foreach(var (view,actor) in new[]{(practice,f.Teacher),(assistant,f.Ta)}){
+            foreach(var submit in new[]{false,true}){
+                firstRequest.Submit=submit;
+                Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>view.Save(a.Id,actor,firstRequest,default))).StatusCode);
+            }
+            Assert.Null((await view.Own(a.Id,actor,default)).Id);
+        }
+        Assert.Empty(await f.Workflow.Submitted(a.Id,f.Teacher,default));
         Assert.Equal("saved synthetic answer",(await f.Workflow.Own(a.Id,f.Student,default)).Answers[0].Text);
-        var assistantSaved=await assistant.Save(a.Id,f.Ta,new(){ExpectedVersion=0,Answers=a.Questions.Select(q=>new AnswerInput{QuestionId=q.Id,Text="TA practice"}).ToList()},default);
-        Assert.NotEqual(saved.Id,assistantSaved.Id);
         var draft=await f.Workflow.Create(f.Course,f.Teacher,new(){Title="private teaching draft",Questions=[new(){PromptText="test"}]},default);
         Assert.Equal(404,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>practice.Get(draft.Id,f.Teacher,default))).StatusCode);
     }

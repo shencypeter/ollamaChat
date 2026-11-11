@@ -4,7 +4,8 @@ import {api} from '../api'
 import {setCourseExperience} from '../composables/experience'
 import {formatDate} from '../utils/assignments'
 const courses=ref([]),items=ref([]),tasks=ref([]),total=ref(0),page=ref(1),busy=ref(false),error=ref('')
-const course=ref(''),term=ref(''),kind=ref(''),from=ref(''),until=ref('')
+const props=defineProps({boundCourse:String})
+const course=ref(props.boundCourse||''),term=ref(''),kind=ref(''),from=ref(''),until=ref('')
 const labels={quiz:'線上測驗',report:'PDF 作業',case:'案例提交',offline:'線下成績',material:'教材學習'}
 const states={todo:'尚未提交',overdue:'逾期未交',upcoming:'尚未開放',closed:'已關閉未交',pending:'已提交，待公布成績',graded:'已公布成績',submitted:'已正式提交',studied:'已有有效學習時間'}
 const terms=computed(()=>[...new Set(courses.value.map(c=>c.term))])
@@ -21,7 +22,7 @@ async function load(reset=false){if(reset)page.value=1;const request=++generatio
  }catch(e){if(request===generation)error.value=e.message}finally{if(request===generation)busy.value=false}}
 function changeTerm(){if(course.value&&!visibleCourses.value.some(c=>c.id===course.value))course.value='';load(true)}
 async function move(delta){page.value+=delta;await load()}
-onMounted(async()=>{setCourseExperience(false);try{courses.value=await api('/learning-history/courses');await load()}catch(e){error.value=e.message}})
+onMounted(async()=>{setCourseExperience(false);try{courses.value=(await api('/learning-history/courses')).filter(c=>!props.boundCourse||c.id===props.boundCourse);await load()}catch(e){error.value=e.message}})
 </script>
 <template>
 <section class="page-heading"><div><p class="eyebrow">MY LEARNING</p><h1>我的學習歷程</h1><p class="muted">彙整本人在平台內的正式修課、提交與已公布成績。</p></div><button class="button secondary" :disabled="busy" @click="load()">重新載入歷程</button></section>
@@ -29,13 +30,13 @@ onMounted(async()=>{setCourseExperience(false);try{courses.value=await api('/lea
 <p v-if="error" class="error-box" role="alert">{{error}}</p>
 <section class="surface form-surface"><form class="history-filters" @submit.prevent="load(true)">
 <label>學期<select aria-label="學期" v-model="term" @change="changeTerm"><option value="">所有學期</option><option v-for="t in terms" :key="t">{{t}}</option></select></label>
-<label>課程<select aria-label="課程" v-model="course" @change="load(true)"><option value="">所有修課</option><option v-for="c in courses.filter(c=>!term||c.term===term)" :key="c.id" :value="c.id">{{c.code}} · {{c.title}}</option></select></label>
+<label>課程<select aria-label="課程" :disabled="!!boundCourse" v-model="course" @change="load(true)"><option value="">所有修課</option><option v-for="c in courses.filter(c=>!term||c.term===term)" :key="c.id" :value="c.id">{{c.code}} · {{c.title}}</option></select></label>
 <label>活動類型<select aria-label="活動類型" v-model="kind" @change="load(true)"><option value="">所有類型</option><option v-for="(label,key) in labels" :key="key" :value="key">{{label}}</option></select></label>
 <label>紀錄起日<input v-model="from" type="date" /></label><label>紀錄迄日<input v-model="until" type="date" :min="from||undefined" /></label><button class="button primary" :disabled="busy">查詢</button>
 </form><p class="field-hint">日期依裝置時區篩選提交／成績公布事件；未有事件日期的待辦不列入日期查詢。</p></section>
 <section class="gradebook-summary" aria-label="修課概況"><div><span>修課數</span><strong>{{visibleCourses.length}}</strong></div><div><span>已交／已開放評量</span><strong>{{count.submitted}} / {{count.required}}</strong></div><div><span>待公布成績</span><strong>{{count.pending}}</strong></div></section>
 <section class="surface form-surface"><h2>我的修課與評量進度</h2><p class="field-hint">提交進度包含已開放測驗與 PDF 作業，不代表完課或學分；平均依各課既有成績權重計算。</p>
-<div class="history-courses"><article v-for="c in visibleCourses" :key="c.id" class="question-editor"><p class="eyebrow">{{c.term}} · {{c.code}}</p><h3><RouterLink :to="`/courses/${c.id}`">{{c.title}}</RouterLink></h3><p>{{c.status==='archived'?'課程已封存':'修課中'}} · 平台加入 {{formatDate(c.joinedAt)}}</p><p>{{c.required?`評量已提交 ${c.submitted} / ${c.required}`:'無應交評量'}}</p><progress v-if="c.required" :value="c.submitted" :max="c.required" :aria-label="`${c.title} 評量提交進度`"></progress><p>課內加權平均：<strong>{{c.average==null?'尚無成績':c.average.toFixed(2)}}</strong></p></article></div><p v-if="!visibleCourses.length" class="muted">目前沒有符合條件的修課紀錄。</p></section>
+<div class="history-courses"><article v-for="c in visibleCourses" :key="c.id" class="question-editor"><p class="eyebrow">{{c.term}} · {{c.code}}</p><h3><RouterLink :to="`/courses/${c.id}`">{{c.title}}</RouterLink></h3><p>{{c.status==='archived'?'課程已封存':'修課中'}} · 平台加入 {{formatDate(c.joinedAt)}}</p><p>{{c.required?`評量已提交 ${c.submitted} / ${c.required}`:'無應交評量'}}</p><progress v-if="c.required" :value="c.submitted" :max="c.required" :aria-label="`${c.title} 評量提交進度`"></progress><p>課內已發布總成績：<strong>{{c.average==null?'尚無成績':c.average.toFixed(2)}}</strong></p></article></div><p v-if="!visibleCourses.length" class="muted">目前沒有符合條件的修課紀錄。</p></section>
 <section class="surface form-surface"><h2>學習待辦</h2><p class="field-hint">依所選課程／學期列出最多 10 項，優先顯示最近截止項目；不包含封存課程。</p><ul class="history-tasks"><li v-for="t in tasks" :key="t.id"><RouterLink :to="t.url">{{t.title}}</RouterLink> · {{name(t.courseId)}}<span class="status-badge">{{states[t.state]}}</span><span>截止 {{formatDate(t.dueAt)}}</span></li></ul><p v-if="!tasks.length" class="muted">目前沒有待交評量。</p></section>
 <section class="surface form-surface" :aria-busy="busy"><h2>活動與成績時間軸</h2><p role="status" v-if="busy">載入歷程中…</p><p v-else class="muted">共 {{total}} 筆；同一測驗以最新正式提交版本呈現。</p>
 <article v-for="item in items" :key="`${item.kind}:${item.id}`" class="question-editor history-event"><p class="eyebrow">{{labels[item.kind]}} · {{name(item.courseId)}}</p><h3><RouterLink :to="item.url">{{item.title}}</RouterLink></h3><p><span class="status-badge">{{states[item.state]}}</span><span v-if="item.revision"> · 提交版本 {{item.revision}}</span></p><time v-if="item.occurredAt">{{formatDate(item.occurredAt)}}</time><p v-else>尚無提交紀錄 · 截止 {{formatDate(item.dueAt)}}</p><p v-if="item.effectiveSeconds!=null">累積有效學習時間：{{Math.floor(item.effectiveSeconds/60)}} 分 {{item.effectiveSeconds%60}} 秒</p><p v-if="item.score!=null">得分：<strong>{{item.score}} / {{item.maxScore}}</strong></p><p v-if="item.feedback" class="history-feedback">教師評語：{{item.feedback}}</p></article>

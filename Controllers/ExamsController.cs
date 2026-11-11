@@ -30,7 +30,7 @@ public sealed class ExamsController(NpgsqlDataSource source,LearnerExperience ex
     [HttpGet]public Task<IActionResult> List(Guid course,CancellationToken ct)=>Run(async()=>{
         var access=await Access(course,ct);await using var cmd=source.CreateCommand("SELECT id,title,status,opens_at,due_at FROM exams WHERE course_id=$1 AND ($2 OR status<>'draft') ORDER BY created_at DESC");cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(AssignmentPolicy.IsStaff(access.Role));await using var r=await cmd.ExecuteReaderAsync(ct);var result=new List<object>();while(await r.ReadAsync(ct))result.Add(new{id=r.GetGuid(0),title=r.GetString(1),status=r.GetString(2),opensAt=r.IsDBNull(3)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(3),dueAt=r.IsDBNull(4)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(4)});return Ok(result);
     });
-    [HttpPost, HttpPut("{id:guid}")]public Task<IActionResult> Create(Guid course,ExamInput input,CancellationToken ct,Guid? id=null)=>Run(async()=>{
+    [CourseCapability("assessments"),HttpPost, HttpPut("{id:guid}")]public Task<IActionResult> Create(Guid course,ExamInput input,CancellationToken ct,Guid? id=null)=>Run(async()=>{
         var access=await Access(course,ct);if(!AssignmentPolicy.IsStaff(access.Role)||access.Status=="archived")return Forbid();
         if(string.IsNullOrWhiteSpace(input.Title)||input.Questions.Any(q=>q==null||string.IsNullOrWhiteSpace(q.PromptText)) || (input.OpensAt.HasValue&&input.DueAt<=input.OpensAt))return BadRequest(new{error="請確認考試名稱、題目與時間。"});
         foreach(var q in input.Questions)QuestionPolicy.Validate(q);
@@ -47,7 +47,7 @@ public sealed class ExamsController(NpgsqlDataSource source,LearnerExperience ex
         await using var version=source.CreateCommand("SELECT md5(title || instructions || questions::text || coalesce(opens_at::text,'') || coalesce(due_at::text,'')) FROM exams WHERE id=$1");version.Parameters.AddWithValue(id);var editVersion=staff?(string?)await version.ExecuteScalarAsync(ct):null;
         return Ok(new{id,editVersion,title=exam.Title,instructions=exam.Instructions,status=exam.Status,opensAt=exam.Open,dueAt=exam.Due,staff,isPractice=experience.IsPractice,questions=visible?exam.Questions.Select((q,i)=>new{id=i.ToString(),q.PromptText,q.StageCode,q.QuestionType,options=q.QuestionType=="true_false"?new List<string>{"是","非"}:q.Options,standardAnswer=staff?q.StandardAnswer:null}).ToArray():[]});
     });
-    [HttpPost("{id:guid}/{actionName}")]public Task<IActionResult> Transition(Guid course,Guid id,string actionName,CancellationToken ct)=>Run(async()=>{
+    [CourseCapability("assessments"),HttpPost("{id:guid}/{actionName}")]public Task<IActionResult> Transition(Guid course,Guid id,string actionName,CancellationToken ct)=>Run(async()=>{
         var access=await Access(course,ct);if(!AssignmentPolicy.IsStaff(access.Role)||access.Status=="archived")return Forbid();
         if(actionName is not ("publish" or "close"))return NotFound();await using var cmd=source.CreateCommand("UPDATE exams SET status=$3 WHERE id=$1 AND course_id=$2 AND status=$4");cmd.Parameters.AddWithValue(id);cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(actionName=="publish"?"published":"closed");cmd.Parameters.AddWithValue(actionName=="publish"?"draft":"published");return await cmd.ExecuteNonQueryAsync(ct)==1?NoContent():Conflict(new{error="考試狀態已變更。"});
     });

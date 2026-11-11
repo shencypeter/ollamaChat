@@ -12,7 +12,7 @@ test('online quiz and PDF report grades synchronize once into weighted grade man
  const learner=state.accounts.find(a=>a.role==='Student'),assistant=state.accounts.find(a=>a.role==='TeachingAssistant')
  await write(student,'/studio/profile',{displayName:'測驗學生',studentNumber:'QA-'+state.run,departmentYear:'合成系級'},'PUT')
  const otherResponse=await write(teacher,'/accounts',{displayName:'另一位測驗學生',email:`qa-${state.run}-assessment-${Date.now()}@example.invalid`,password:state.password,role:'Member'});expect(otherResponse.status()).toBe(200);const other=await otherResponse.json();const saved=JSON.parse(readFileSync(stateFile,'utf8'));saved.accounts.push(other);writeFileSync(stateFile,JSON.stringify(saved));await login(peer,other)
- const course=await(await write(teacher,'/courses',{code:'ASSESS-'+Date.now(),title:'測驗與 PDF 作業合成課程',termCode:'115-1'})).json(),base=`/courses/${course.id}`,gb=base+'/gradebook'
+ const course=await(await write(teacher,'/courses',{code:'ASSESS-'+Date.now(),title:'測驗與作業合成課程',termCode:'115-1'})).json(),base=`/courses/${course.id}`,gb=base+'/gradebook'
  for(const [userId,courseRole] of [[learner.id,'student'],[other.id,'student'],[assistant.id,'ta']])expect((await write(teacher,base+'/members',{userId,courseRole})).status()).toBe(204)
  await write(teacher,base+'/assignments',{title:'舊式作業保留但不列出',questions:[{promptText:'舊式題目'}]})
  const tcontext=await browser.newContext({storageState:await teacher.storageState()}),page=await tcontext.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto(baseURL+'/assessments?course='+course.id)

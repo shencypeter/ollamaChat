@@ -81,12 +81,27 @@ public class LearningWorkflowTests:IAsyncLifetime
         Assert.Equal(1L,(long)(await Exec("SELECT count(*) FROM submissions WHERE assignment_id=ANY($1)",new[]{a.Id,future.Id}))!);
         await workflow.ReleaseGrade(a.Id,snapshots[0].Id,grade.Id,teacher,default);
         quiz=(await history.Activities(student,null,"115-1","quiz",null,null,1,20,false,default)).Items.Single();Assert.Equal(0m,quiz.Score);Assert.Equal("不可提前公開",quiz.Feedback);
-        Assert.Equal(0m,(await history.Courses(student,default)).Single(x=>x.Id==course).Average);
+        Assert.Null((await history.Courses(student,default)).Single(x=>x.Id==course).Average);
         Assert.Single((await history.Activities(student,null,null,null,null,null,1,1,false,default)).Items);
         await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>history.Activities(student,null,null,null,null,null,0,20,false,default));
         await Exec("UPDATE courses SET status='archived' WHERE id=$1",second);
         Assert.Empty((await history.Activities(student,second,null,null,null,null,1,20,true,default)).Items);
         Assert.Equal(2,(await history.Courses(student,default)).Count);
+    }
+    [FormativeDatabaseFact] public async Task TimedQuizRejectsEarlyAccessAndExpiredSavesDespiteRepeatedStart()
+    {
+        var opens=clock.GetUtcNow().AddSeconds(10);
+        var draft=await Quiz(course,opens:opens);
+        await workflow.Update(draft.Id,teacher,new(){Title=draft.Title,OpensAt=opens,TimeLimitMinutes=1,ExpectedEditVersion=draft.EditVersion,Questions=[new(){PromptText="合成測驗"}]},default);
+        await workflow.Transition(draft.Id,teacher,"published",default);
+        Assert.Empty((await workflow.Get(draft.Id,student,default)).Questions);
+        await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>workflow.StartLearningQuiz(draft.Id,student,default));
+        clock.Advance(10);await workflow.StartLearningQuiz(draft.Id,student,default);
+        var exam=await workflow.Get(draft.Id,student,default);Assert.Single(exam.Questions);
+        clock.Advance(60);await workflow.StartLearningQuiz(draft.Id,student,default);
+        Assert.Equal(exam.StartedAt,(await workflow.Get(draft.Id,student,default)).StartedAt);
+        var error=await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>workflow.Save(draft.Id,student,new(){Submit=true,Answers=[new(){QuestionId=exam.Questions[0].Id,Text="synthetic"}]},default));
+        Assert.Equal(409,error.StatusCode);Assert.Null((await workflow.Own(draft.Id,student,default)).Id);
     }
     [FormativeDatabaseFact] public async Task GatesRequireEveryResourceAndAnExplicitStartAndKeepEvidenceAfterStart()
     {
@@ -128,8 +143,7 @@ public class LearningWorkflowTests:IAsyncLifetime
     [FormativeDatabaseFact] public async Task PracticeTimeNeverQualifiesFormalStudentAndDeadlineStillApplies()
     {
         var r=await Resource(course);var a=await Gated(r);
-        var session=await time.Start(course,r,teacher,true,null,default);clock.Advance(10);
-        Assert.Equal(10,(await time.Heartbeat(course,r,session.Id,teacher,true,new(){Active=true},default)).AccumulatedSeconds);
+        await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Start(course,r,teacher,true,null,default));
         Assert.Equal(0,(await time.Resource(course,r,teacher,false,default)).AccumulatedSeconds);
         Assert.False((await workflow.Get(a.Id,student,default)).LearningGate!.Met);
         var own=await time.Start(course,r,student,false,null,default);clock.Advance(10);await time.Heartbeat(course,r,own.Id,student,false,new(){Active=true},default);
@@ -150,7 +164,7 @@ public class LearningWorkflowTests:IAsyncLifetime
         clock.Advance(5);Assert.Equal(15,(await time.Heartbeat(course,resource,session.Id,student,false,new(){Active=true,Close=true,Position=305},default)).AccumulatedSeconds);
         Assert.True((await workflow.Get(quiz.Id,student,default)).LearningGate!.Met);
         await workflow.StartLearningQuiz(quiz.Id,student,default);
-        var practice=await time.Start(course,resource,teacher,true,0,default);clock.Advance(10);await time.Heartbeat(course,resource,practice.Id,teacher,true,new(){Active=true,Position=10},default);
+        await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Start(course,resource,teacher,true,0,default));
         var stats=System.Text.Json.JsonSerializer.SerializeToElement(await time.Statistics(course,resource,teacher,false,default));Assert.Equal(15,stats.GetProperty("totalSeconds").GetInt64());Assert.Equal(1,stats.GetProperty("watchedCount").GetInt32());Assert.Equal(2,stats.GetProperty("studentCount").GetInt32());
         Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Statistics(course,resource,student,false,default))).StatusCode);
         Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Statistics(course,resource,teacher,true,default))).StatusCode);
@@ -215,7 +229,7 @@ public class LearningWorkflowTests:IAsyncLifetime
     {
         var report=(Guid)(await Exec("INSERT INTO report_assignments(course_id,title,max_score,status,created_by) VALUES($1,'Synthetic PDF',100,'closed',$2) RETURNING id",course,teacher))!;
         var original="%PDF-1.4 PRIVATE ORIGINAL"u8.ToArray();var safe="%PDF-1.4 ANONYMOUS COPY"u8.ToArray();
-        var submitted=(Guid)(await Exec("INSERT INTO report_submissions(report_id,student_id,file_name,content,score,graded_by,graded_at) VALUES($1,$2,'PRIVATE-name.pdf',$3,90,$4,now()) RETURNING id",report,student,original,teacher))!;
+        var submitted=(Guid)(await Exec("INSERT INTO report_submissions(report_id,student_id,file_name,content,score,published_score,graded_by,graded_at) VALUES($1,$2,'PRIVATE-name.pdf',$3,90,90,$4,now()) RETURNING id",report,student,original,teacher))!;
         var show=new CourseShowcases(db);var id=await show.Create(course,teacher,false,new(){ReportSubmissionId=submitted},default);
         Assert.Equal(400,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Publish(course,id,teacher,false,Approval(1),default))).StatusCode);
         Assert.Equal(403,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>show.Upload(course,id,student,false,1,safe,default))).StatusCode);

@@ -11,12 +11,13 @@ public sealed class GradeItemInput
 }
 public sealed class GradeScoreInput
 {
+    public bool Publish {get;set;}
     public Guid StudentId { get; set; }
     public decimal? Score { get; set; }
     [Range(0,int.MaxValue)] public int ExpectedVersion { get; set; }
 }
 public sealed record GradeItem(Guid Id,string Title,string Category,decimal MaxScore,decimal Weight,int Version,Guid? SourceAssignmentId=null,Guid? SourceReportId=null);
-public sealed record GradeScore(Guid ItemId,Guid StudentId,decimal? Score,int Version);
+public sealed record GradeScore(Guid ItemId,Guid StudentId,decimal? Score,int Version,decimal? PublishedScore=null);
 public sealed record GradeStudent(Guid Id,string DisplayName,string? StudentNumber);
 public sealed record StudentAverage(Guid StudentId,decimal? Average,int RecordedCount);
 public sealed record ItemAverage(Guid ItemId,decimal? Average,int RecordedCount);

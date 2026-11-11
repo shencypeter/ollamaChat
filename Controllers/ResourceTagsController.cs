@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 
 namespace AiTeachingAssistant.Controllers;
@@ -13,6 +13,7 @@ public sealed partial class CourseToolsController
         public int ExpectedVersion {get;set;}
     }
 
+    [AiTeachingAssistant.Services.CourseCapability("materials")]
     [HttpPut("resources/{id:guid}/tags")]
     public async Task<IActionResult> SaveTags(Guid course,Guid id,ResourceTagsInput input,CancellationToken ct)
     {

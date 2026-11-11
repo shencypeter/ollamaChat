@@ -5,6 +5,23 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using AiTeachingAssistant.Services;
 var root=Path.GetFullPath(args[0]);var file=Path.Combine(root,".codex-build","portal-smoke.json");
+if(args.Contains("--group-upgrade")){
+    await GroupUpgrade.Run(root);return;
+}
+if(args.Contains("--drop-test-schema")){
+    await GroupUpgrade.Drop();return;
+}
+if(args.Contains("--assessed-demo")){
+    await AssessedDemo.Seed(root);return;
+}
+if(args.Contains("--activate-demo-classmates")){
+    await DemoClassmateAccounts.Activate(root);return;
+}
+if(args.Contains("--course-demo"))
+{
+    await CourseDemo.Seed();
+    return;
+}
 using var config=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root,"appsettings.Local.json")));
 await using var db=NpgsqlDataSource.Create(config.RootElement.GetProperty("ConnectionStrings").GetProperty("Portal").GetString()!);
 if(args.Contains("--cleanup"))
@@ -21,6 +38,9 @@ if(args.Contains("--cleanup"))
     await using(var check=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM submissions WHERE assignment_id IN ("+scope+") AND (course_group_id IS NOT NULL OR NOT(student_user_id=ANY($1))))",conn,tx))
     {check.Parameters.AddWithValue(ids);if(await check.ExecuteScalarAsync() is true)throw new Exception("Cleanup would touch a non-QA submission; refusing.");}
     foreach(var guardSql in new[]{
+        "SELECT EXISTS(SELECT 1 FROM course_questions q JOIN courses c ON c.id=q.course_id WHERE c.owner_user_id=ANY($1) AND (NOT(q.author_id=ANY($1)) OR (q.answered_by IS NOT NULL AND NOT(q.answered_by=ANY($1)))))",
+        "SELECT EXISTS(SELECT 1 FROM resource_likes l JOIN course_resources r ON r.id=l.resource_id JOIN courses c ON c.id=r.course_id WHERE c.owner_user_id=ANY($1) AND NOT(l.user_id=ANY($1)))",
+        "SELECT EXISTS(SELECT 1 FROM resource_comments m JOIN course_resources r ON r.id=m.resource_id JOIN courses c ON c.id=r.course_id WHERE c.owner_user_id=ANY($1) AND NOT(m.author_id=ANY($1)))",
         "SELECT EXISTS(SELECT 1 FROM quiz_learning_starts s JOIN assignments a ON a.id=s.assignment_id JOIN courses c ON c.id=a.course_id WHERE c.owner_user_id=ANY($1) AND NOT(s.user_id=ANY($1)))",
         "SELECT EXISTS(SELECT 1 FROM learning_time_sessions s JOIN course_resources r ON r.id=s.resource_id JOIN courses c ON c.id=r.course_id WHERE c.owner_user_id=ANY($1) AND NOT(s.user_id=ANY($1)))",
         "SELECT EXISTS(SELECT 1 FROM report_submissions s JOIN report_assignments r ON r.id=s.report_id JOIN courses c ON c.id=r.course_id WHERE c.owner_user_id=ANY($1) AND (NOT(s.student_id=ANY($1)) OR (s.graded_by IS NOT NULL AND NOT(s.graded_by=ANY($1)))))",
@@ -39,6 +59,8 @@ if(args.Contains("--cleanup"))
         "SELECT EXISTS(SELECT 1 FROM course_group_members m JOIN course_groups g ON g.id=m.group_id JOIN courses c ON c.id=g.course_id WHERE c.owner_user_id=ANY($1) AND NOT(m.user_id=ANY($1)))"})
     {await using var check=new NpgsqlCommand(guardSql,conn,tx);check.Parameters.AddWithValue(ids);if(await check.ExecuteScalarAsync() is true)throw new Exception("Cleanup would touch a non-QA course-tool record; refusing.");}
     foreach(var sql in new[]{
+        "DELETE FROM notification_reads WHERE user_id=ANY($1)",
+        "DELETE FROM course_questions WHERE course_id IN (SELECT id FROM courses WHERE owner_user_id=ANY($1))",
         "DELETE FROM course_showcases WHERE course_id IN (SELECT id FROM courses WHERE owner_user_id=ANY($1))",
         "DELETE FROM quiz_learning_starts WHERE assignment_id IN ("+scope+")",
         "DELETE FROM quiz_learning_requirements WHERE assignment_id IN ("+scope+")",

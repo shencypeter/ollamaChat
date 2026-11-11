@@ -79,3 +79,18 @@
 @media(max-width:1150px){.studio-three-pane { grid-template-columns:1fr; }.studio-pane { max-height:none; }}
 
 .studio-case-card { display:block; min-width:0; overflow-wrap:anywhere; margin:16px 0; }
+
+/* Mobile navigation must win over generic icon-button display rules. */
+@media(min-width:761px){.global-bar .mobile-menu{display:none}}
+@media(max-width:760px){.global-bar .mobile-menu{display:inline-flex}}
+.interaction-text{white-space:pre-wrap;overflow-wrap:anywhere}.interaction-panel,.resource-share{min-width:0;overflow-wrap:anywhere}.interaction-panel .studio-actions{flex-wrap:wrap}.course-navigation a{display:inline-flex;align-items:center;gap:6px}.resource-share .button{margin:4px}.interaction-panel textarea{width:100%;max-width:100%}
+
+.notification-badge{display:inline-flex!important;align-items:center;justify-content:center;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:#d62839;color:#fff;font:700 11px/1 sans-serif;flex-shrink:0;vertical-align:middle;letter-spacing:0;box-shadow:0 0 0 2px var(--surface)}.workspace-sidebar nav .notification-badge{margin-left:auto}.activity-rail>a>.notification-badge{position:absolute;right:5px;top:4px}.global-bar .mobile-menu{position:relative}.mobile-menu>.notification-badge{position:absolute;right:-8px;top:-6px;box-shadow:0 0 0 2px var(--topbar)}.course-notification-links{display:flex;gap:12px;flex-wrap:wrap}.course-notification-links a{display:inline-flex;align-items:center;gap:5px;font-size:12px}
+
+@media(min-width:761px){.workspace-shell{grid-template-columns:clamp(190px,18vw,250px) minmax(0,1fr)}}
+
+@media(max-width:580px){
+ .global-bar{gap:8px;padding-inline:12px}.global-bar .brand>span:last-child{display:none}
+ .global-bar .global-actions{gap:6px;margin-left:auto}.global-bar .global-user{padding:0}.global-bar .user-copy{display:none}
+ .global-bar .experience-toggle{padding-inline:8px}.workspace-sidebar .sidebar-bottom{padding-top:14px}
+}

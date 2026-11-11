@@ -15,12 +15,12 @@ public sealed class LearningHistory(NpgsqlDataSource source,TimeProvider clock)
 {
     private const string CoursesSql="""
         SELECT c.id,c.code,c.title,c.term_code,c.status,m.joined_at
-        FROM courses c JOIN course_members m ON m.course_id=c.id
+        FROM courses c JOIN course_members m ON m.course_id=c.id AND c.status<>'draft'
         WHERE m.user_id=$1 AND m.course_role='student' AND m.status='active'
         """;
     private const string ActivitiesSql="""
         WITH mine AS (
-          SELECT c.id FROM courses c JOIN course_members m ON m.course_id=c.id
+          SELECT c.id FROM courses c JOIN course_members m ON m.course_id=c.id AND c.status<>'draft'
           WHERE m.user_id=$1 AND m.course_role='student' AND m.status='active'
         ), activities AS (
           SELECT a.id,a.course_id,'quiz'::text kind,a.title,
@@ -37,13 +37,14 @@ public sealed class LearningHistory(NpgsqlDataSource source,TimeProvider clock)
           WHERE a.status<>'draft'
           UNION ALL
           SELECT a.id,a.course_id,'report',a.title,
-            CASE WHEN s.id IS NOT NULL THEN CASE WHEN s.score IS NOT NULL THEN 'graded' ELSE 'pending' END
+            CASE WHEN s.id IS NOT NULL THEN CASE WHEN COALESCE(own.published_score,CASE WHEN s.group_id IS NULL THEN s.published_score END) IS NOT NULL THEN 'graded' ELSE 'pending' END
                  WHEN a.opens_at>$2 THEN 'upcoming' WHEN a.status='closed' THEN 'closed'
                  WHEN a.due_at<=$2 THEN 'overdue' ELSE 'todo' END,
-            a.opens_at,a.due_at,COALESCE(s.graded_at,s.submitted_at),s.score,a.max_score,COALESCE(s.feedback,''),'/reports/'||a.id::text,NULL::int,NULL::bigint
+            a.opens_at,a.due_at,COALESCE(s.graded_at,s.submitted_at),COALESCE(own.published_score,CASE WHEN s.group_id IS NULL THEN s.published_score END),a.max_score,COALESCE(s.published_feedback,''),'/reports/'||a.id::text,NULL::int,NULL::bigint
           FROM report_assignments a JOIN mine ON mine.id=a.course_id
-          LEFT JOIN report_submissions s ON s.report_id=a.id AND s.student_id=$1 AND NOT s.is_practice
-          WHERE a.status<>'draft'
+          LEFT JOIN report_snapshot own ON own.report_id=a.id AND own.student_id=$1
+          LEFT JOIN report_submissions s ON s.report_id=a.id AND (s.id=own.submission_id OR s.group_id IS NULL AND s.student_id=$1) AND NOT s.is_practice
+          WHERE a.status<>'draft' AND (a.submission_mode='individual' OR EXISTS(SELECT 1 FROM report_group_audience WHERE report_id=a.id AND student_id=$1))
           UNION ALL
           SELECT a.id,c.course_id,'case',v.title,'submitted',NULL::timestamptz,NULL::timestamptz,a.submitted_at,
             NULL::numeric,NULL::numeric,''::text,'/student/cases/'||c.id::text,NULL::int,NULL::bigint
@@ -52,10 +53,10 @@ public sealed class LearningHistory(NpgsqlDataSource source,TimeProvider clock)
           WHERE a.student_id=$1 AND NOT a.is_practice AND a.submitted_at IS NOT NULL
           UNION ALL
           SELECT i.id,i.course_id,'offline',i.title,'graded',NULL::timestamptz,NULL::timestamptz,s.updated_at,
-            s.score,i.max_score,''::text,'/assessment-grades?course='||i.course_id::text,NULL::int,NULL::bigint
+            s.published_score,i.max_score,''::text,'/assessment-grades?course='||i.course_id::text,NULL::int,NULL::bigint
           FROM course_grade_items i JOIN mine ON mine.id=i.course_id
           JOIN course_grade_scores s ON s.item_id=i.id AND s.student_id=$1
-          WHERE i.source_assignment_id IS NULL AND i.source_report_id IS NULL AND s.score IS NOT NULL
+          WHERE i.source_assignment_id IS NULL AND i.source_report_id IS NULL AND s.published_score IS NOT NULL
           UNION ALL
           SELECT r.id,r.course_id,'material',COALESCE(NULLIF(r.display_title,''),r.file_name),'studied',NULL::timestamptz,NULL::timestamptz,max(s.last_seen_at),
             NULL::numeric,NULL::numeric,''::text,'/courses/'||r.course_id::text||'/materials/'||r.id::text,NULL::int,(floor(sum(s.credited_milliseconds)/1000.0))::bigint
@@ -83,10 +84,7 @@ public sealed class LearningHistory(NpgsqlDataSource source,TimeProvider clock)
         {await using var r=await cmd.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))stats[r.GetGuid(0)]=(r.GetInt32(1),r.GetInt32(2),r.GetInt32(3));}
         var averages=new Dictionary<Guid,decimal>();
         await using(var cmd=new NpgsqlCommand("""
-            SELECT i.course_id,round(sum(s.score/i.max_score*100*i.weight)/sum(i.weight),2)
-            FROM course_grade_items i JOIN course_grade_scores s ON s.item_id=i.id AND s.student_id=$1
-            JOIN course_members m ON m.course_id=i.course_id AND m.user_id=$1 AND m.course_role='student' AND m.status='active'
-            WHERE s.score IS NOT NULL GROUP BY i.course_id
+            SELECT f.course_id,f.published_total FROM course_final_grades f WHERE f.student_id=$1 AND f.published_total IS NOT NULL
             """,conn))
         {cmd.Parameters.AddWithValue(actor);await using var r=await cmd.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))averages[r.GetGuid(0)]=r.GetDecimal(1);}
         var result=new List<LearningCourse>();

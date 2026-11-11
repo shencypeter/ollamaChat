@@ -5,6 +5,7 @@ public sealed class AssignmentQuestionInput
 {
     [Required, StringLength(8000)] public string PromptText { get; set; } = "";
     [StringLength(40)] public string? StageCode { get; set; }
+    [StringLength(120)] public string SectionTitle {get;set;}="";
     public string QuestionType { get; set; } = "essay";
     public List<string> Options { get; set; } = [];
     public List<int> StandardAnswer { get; set; } = [];
@@ -13,8 +14,11 @@ public sealed class AssignmentQuestionInput
 }
 public sealed class SaveAssignmentRequest
 {
+    public Guid? UnitId { get; set; }
     [Required, StringLength(200)] public string Title { get; set; } = "";
     [StringLength(24000)] public string Instructions { get; set; } = "";
+    [Range(1,1440)] public int? TimeLimitMinutes {get;set;}
+    public bool NotifyStudents {get;set;}=true;
     public DateTimeOffset? OpensAt { get; set; }
     public DateTimeOffset? DueAt { get; set; }
     [Required, MinLength(1), MaxLength(20)] public List<AssignmentQuestionInput> Questions { get; set; } = [];
@@ -36,10 +40,10 @@ public sealed class SaveSubmissionRequest
     public bool Submit { get; set; }
 }
 public sealed record AssignmentQuestion(Guid Id, string PromptText, string? StageCode, int SortOrder,
-    string QuestionType = "essay", IReadOnlyList<string>? Options = null, IReadOnlyList<int>? StandardAnswer = null,decimal? Points=null,string? GradingGuidance=null);
+    string QuestionType = "essay", IReadOnlyList<string>? Options = null, IReadOnlyList<int>? StandardAnswer = null,decimal? Points=null,string? GradingGuidance=null,string SectionTitle="");
 public sealed record AssignmentDetail(Guid Id, Guid CourseId, string CourseTitle, string CourseRole, string CourseStatus,
     string Title, string Instructions, string Status, DateTimeOffset? OpensAt, DateTimeOffset? DueAt,
-    IReadOnlyList<AssignmentQuestion> Questions, string EditVersion, bool AllowRevisions = false, decimal MaxScore = 100, Guid? RubricId = null, bool IsPractice = false, bool IsQuiz = false,LearningGate? LearningGate=null);
+    IReadOnlyList<AssignmentQuestion> Questions, string EditVersion, bool AllowRevisions = false, decimal MaxScore = 100, Guid? RubricId = null, bool IsPractice = false, bool IsQuiz = false,LearningGate? LearningGate=null,int? TimeLimitMinutes=null,DateTimeOffset? StartedAt=null,bool NotifyStudents=true);
 public sealed record AssignmentListItem(Guid Id, string Title, string Status, DateTimeOffset? OpensAt,
     DateTimeOffset? DueAt, int QuestionCount, string? MyStatus, int SubmittedCount);
 public sealed record AnswerRevision(Guid Id, int RevisionNo, string Text, DateTimeOffset CreatedAt, bool IsSubmitted);

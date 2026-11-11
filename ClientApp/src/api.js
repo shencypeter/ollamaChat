@@ -1,4 +1,4 @@
-﻿let csrfToken = null
+let csrfToken = null
 import { experience } from './composables/experience'
 export function resetCsrf() { csrfToken = null }
 export async function api(path, options = {}) {
@@ -11,8 +11,8 @@ export async function api(path, options = {}) {
   }
   const response = await fetch(`/api${path}`, {
     ...options, method, credentials: 'same-origin',
-    headers: { ...(options.body && !(options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}), ...(mutating ? { 'X-CSRF-TOKEN': csrfToken } : {}), ...(experience.student && experience.canSwitch && !path.startsWith('/auth/') && path!=='/studio/profile' ? { 'X-Portal-View': 'student' } : {}), ...options.headers },
-    body: options.body instanceof FormData ? options.body : options.body ? JSON.stringify(options.body) : undefined,
+    headers: { ...(options.body !== undefined && !(options.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}), ...(mutating ? { 'X-CSRF-TOKEN': csrfToken } : {}), ...(experience.student && experience.canSwitch && !path.startsWith('/auth/') && path!=='/studio/profile' ? { 'X-Portal-View': 'student' } : {}), ...options.headers },
+    body: options.body instanceof FormData ? options.body : options.body !== undefined ? JSON.stringify(options.body) : undefined,
   })
   const body = response.status === 204 ? null : options.download && response.ok ? await response.blob() : await response.json().catch(() => null)
   if (!response.ok) {

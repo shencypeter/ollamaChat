@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using AiTeachingAssistant.Models;
 using AiTeachingAssistant.Options;
 using Npgsql;
@@ -41,7 +41,7 @@ public sealed class StudioWorkflow(NpgsqlDataSource source,LearnerExperience exp
             SELECT c.id,c.course_id,k.title,v.title,v.version_no,c.active_version_id IS NOT NULL
             FROM studio_cases c JOIN courses k ON k.id=c.course_id
             JOIN studio_case_versions v ON v.id=CASE WHEN $2 THEN COALESCE(c.draft_version_id,c.active_version_id) ELSE c.active_version_id END
-            WHERE EXISTS(SELECT 1 FROM course_members m WHERE m.course_id=c.course_id AND m.user_id=$1 AND m.status='active' AND (NOT $2 OR m.course_role IN ('teacher','ta')))
+            WHERE EXISTS(SELECT 1 FROM course_members m WHERE m.course_id=c.course_id AND m.user_id=$1 AND m.status='active' AND (k.status<>'draft' OR m.course_role IN ('teacher','ta')) AND (NOT $2 OR m.course_role IN ('teacher','ta')))
             ORDER BY c.created_at DESC
             """,conn);Add(cmd,actor);Add(cmd,admin);await using var r=await cmd.ExecuteReaderAsync(ct);var result=new List<object>();
         while(await r.ReadAsync(ct))result.Add(new{id=r.GetGuid(0),courseId=r.GetGuid(1),courseTitle=r.GetString(2),title=r.GetString(3),versionNo=r.GetInt32(4),published=r.GetBoolean(5)});return result;
