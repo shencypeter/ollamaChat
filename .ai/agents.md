@@ -4,7 +4,7 @@
 
 一般 Visual Studio Build／F5 與 `dotnet build` 現會先檢查 `ClientApp/package-lock.json`：npm 安裝標記缺少或較舊時執行 `npm ci`，並在每次 Build 執行 Vite，避免 Git 忽略的 `wwwroot/portal` 殘留舊 bundle。`DisableFastUpToDateCheck=true` 防止 Visual Studio 在只改 Vue 時略過整個 MSBuild。Publish 復用同一 `BuildVue` target，只收集一次產物；`SkipFrontendBuild=true` 僅供前端已另行建置驗證的隔離流程。Node/npm 缺少或 Vue 失敗會讓 .NET build 明確失敗。
 
-Visual Studio 隨附的 npm 可能不在 PATH；csproj 現由版本／edition 無關的 `$(MSBuildExtensionsPath)` 探測 `Microsoft\VisualStudio\NodeJs\npm.cmd`，存在時優先使用，否則退回 PATH 上的 npm。`NpmExecutable` 可由 CI 明確覆寫。回歸測試會移除 PATH 上的假 npm，並以含空白的 Visual Studio npm 路徑重現及防止 9009。
+Visual Studio 隨附的 Node/npm 可能不在 PATH；csproj 現由版本／edition 無關的 `$(MSBuildExtensionsPath)` 探測 `Microsoft\VisualStudio\NodeJs\npm.cmd`，存在時優先使用，並只對 frontend Exec 將同目錄置於 PATH 前端，讓 Vite shim 也能找到 bundled `node.exe`；否則退回 PATH 上的 npm。`NpmExecutable`／`NpmNodeDirectory` 可由 CI 明確覆寫。回歸測試移除 PATH 上的 Node/npm，並以含空白的 Visual Studio NodeJs 路徑重現及防止 9009 與後續 code 1。
 
 行為測試涵蓋乾淨 restore、增量跳過、lockfile 更新、skip、publish 單次 build、失敗傳播、Visual Studio npm fallback 及 Fast Up-to-Date policy。一般 build 與 publish 實測 Vite，publish 計數 1 並含 portal index；Vue 100/100、.NET 214 通過／19 條件式略過。7173 已依使用者要求停止，供 Visual Studio F5 使用；5097／5107／5173／5180 無 listener。CLI／CI 若沒有 Visual Studio bundled npm，仍須依 README 安裝 Node/npm 並加入 PATH。
 

@@ -16,6 +16,7 @@ $projectRoot = Join-Path $fixtureRoot 'project'
 $fakeBin = Join-Path $fixtureRoot 'bin'
 $commandLog = Join-Path $fixtureRoot 'npm-commands.log'
 $originalPath = $env:PATH
+$dotnetCommand = (Get-Command dotnet -ErrorAction Stop).Source
 
 try {
     if (Test-Path -LiteralPath $fixtureRoot) {
@@ -63,7 +64,7 @@ exit /b 0
         if ($VisualStudioNpmExecutable) {
             $arguments += "-p:VisualStudioNpmExecutable=$VisualStudioNpmExecutable"
         }
-        & dotnet @arguments
+        & $dotnetCommand @arguments
         $exitCode = $LASTEXITCODE
         if ($ExpectFailure) {
             if ($exitCode -eq 0) { throw "Expected target $Target to fail." }
@@ -81,7 +82,7 @@ exit /b 0
         Remove-Item -LiteralPath $commandLog -Force -ErrorAction SilentlyContinue
     }
 
-    $fastCheckOutput = @(& dotnet msbuild (Join-Path $projectRoot 'AiTeachingAssistant.csproj') '-getProperty:DisableFastUpToDateCheck' '-nologo' '-nr:false')
+    $fastCheckOutput = @(& $dotnetCommand msbuild (Join-Path $projectRoot 'AiTeachingAssistant.csproj') '-getProperty:DisableFastUpToDateCheck' '-nologo' '-nr:false')
     if ($LASTEXITCODE -ne 0) { throw 'Could not evaluate DisableFastUpToDateCheck.' }
     Assert-Equal (($fastCheckOutput -join '').Trim()) 'true' 'Visual Studio must not bypass MSBuild after Vue-only edits.'
 
@@ -116,8 +117,11 @@ exit /b 0
     $visualStudioNpm = Join-Path $fixtureRoot 'Visual Studio NodeJs\npm.cmd'
     New-Item -ItemType Directory -Path (Split-Path $visualStudioNpm) -Force | Out-Null
     Move-Item -LiteralPath (Join-Path $fakeBin 'npm.cmd') -Destination $visualStudioNpm
+    Set-Content -LiteralPath $visualStudioNpm -Value "@echo off`r`nnode %*" -Encoding ASCII
+    Set-Content -LiteralPath (Join-Path (Split-Path $visualStudioNpm) 'node.cmd') -Value "@echo off`r`necho %*>>`"%NPM_TEST_LOG%`"" -Encoding ASCII
+    $env:PATH = 'C:\Windows\System32;C:\Windows'
     Invoke-Target 'BuildVue' $false $false $visualStudioNpm
-    Assert-Sequence (Read-Commands) @('run build') 'Visual Studio bundled npm must work when npm is absent from PATH.'
+    Assert-Sequence (Read-Commands) @('run build') 'Visual Studio bundled npm must expose its adjacent node executable to package scripts.'
 
     'Build pipeline behavior tests passed.'
 }

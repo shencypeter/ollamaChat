@@ -13,7 +13,7 @@ Visual Studio Build/F5 must build the Vue application on a machine where npm is 
 ## Behavior and Constraints
 
 - `NpmExecutable` remains overridable by MSBuild callers.
-- Visual Studio's bundled npm is preferred only when the derived file exists.
+- Visual Studio's bundled npm is preferred only when the derived file exists; both frontend Exec tasks prepend its directory to their scoped PATH so npm package scripts can resolve the adjacent bundled Node executable.
 - CLI/CI builds continue to use `npm` from `PATH` when no Visual Studio bundle is available.
 - Existing incremental `npm ci`, always-run Vite build, skip flag, publish reuse, and failure propagation remain unchanged.
-- The behavior test must reproduce a PATH without npm and prove the explicit Visual Studio fallback executes.
+- The behavior test must reproduce a PATH without Node or npm and prove both the explicit Visual Studio npm and its package-script Node lookup execute.

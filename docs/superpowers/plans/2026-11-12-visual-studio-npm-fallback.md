@@ -4,7 +4,7 @@
 
 **Goal:** Make Visual Studio Build/F5 use its bundled npm when npm is absent from PATH.
 
-**Architecture:** Resolve an overridable `NpmExecutable` MSBuild property from Visual Studio's version-independent MSBuild extensions directory when that npm exists; otherwise use `npm`. Keep the current targets and invocation order unchanged.
+**Architecture:** Resolve an overridable `NpmExecutable` MSBuild property from Visual Studio's version-independent MSBuild extensions directory when that npm exists; otherwise use `npm`. For the bundled toolchain, prepend its directory to the two frontend Exec environments so package scripts resolve the adjacent Node executable. Keep the current targets and invocation order unchanged.
 
 **Tech Stack:** MSBuild, PowerShell behavior test, npm/Vite
 
@@ -18,7 +18,7 @@
 
 ## Review Focus
 
-- Visual Studio npm path contains spaces: quote the selected executable and prove it runs.
+- Visual Studio Node/npm path contains spaces: quote the selected executable, remove Node/npm from PATH, and prove an npm package script can resolve the adjacent Node executable.
 - No Visual Studio npm exists: retain the PATH-based npm fallback already covered by the behavior suite.
 - Caller overrides `NpmExecutable`: do not overwrite a non-empty value.
 - `npm ci` and `npm run build` must use the same resolved executable.

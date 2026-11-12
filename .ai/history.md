@@ -6,6 +6,8 @@ Visual Studio F5 首次使用一般 Build target 後回報 `npm run build` code 
 
 採版本與 edition 無關的修正：由 `$(MSBuildExtensionsPath)` 衍生 Visual Studio npm 路徑，存在時設定可覆寫的 `NpmExecutable`，否則退回 PATH 上的 `npm`；restore 與 build Exec 共用並引用該值。TDD 先將假 npm 移出 PATH、提供含空白的 Visual Studio npm 路徑，確認舊 target 精確回傳 9009，再完成 fallback 後通過。Visual Studio 18 Community 的真實 MSBuild property 解析到 bundled npm 並完成 Vite／.NET Build；完整 Vue 100/100、.NET 214 通過／19 個條件式略過。沒有安裝系統軟體或寫死本機 Visual Studio 路徑，7173 保持關閉供使用者 F5。
 
+使用者實際 F5 後進一步出現 npm code 1；Visual Studio Output 的第一個錯誤為 `"node" 不是內部或外部命令`。根因是 bundled `npm.cmd` 本身可用相鄰 node 啟動，但 `npm run build` 執行 Vite shim 時仍由 PATH 尋找裸 `node`；先前 Codex shell PATH 恰有 Node，掩蓋此差異。回歸測試因此升級為 PATH 同時沒有 Node/npm、bundled 路徑含空白且 npm package script 必須再次解析 node。csproj 現只對兩個 frontend Exec 將 bundled NodeJs 目錄置於 PATH 前端，並以 MSBuild Escape 保留完整既有 PATH；不修改系統或 Visual Studio 全域 PATH。真實 Visual Studio MSBuild 在 PATH 僅保留 .NET 與 Windows 目錄時已完成 2019 modules 的 Vite build。
+
 ## 2026-11-12 修正 Visual Studio 啟動舊 Vue bundle
 
 查核同事取得 stale site 的交付鏈：兩個 GitHub main 均為同一 SHA，Vue source、lockfile、Vite 與 launch settings 皆已提交；根因是 `wwwroot/portal` 正確被 Git ignore，但原 csproj 只在 Publish 執行 npm，普通 Visual Studio Build／F5 不重建，故舊 ignored bundle 可長期殘留。未改為提交 generated bundle，而是在 csproj 新增增量 `RestoreVueDependencies` 與一般 Build 前執行的 `BuildVue`，並設定 `DisableFastUpToDateCheck=true`，避免 Visual Studio 在只改 Vue 時跳過 MSBuild；Publish 只復用並收集產物。npm working directory 錨定 `$(MSBuildProjectDirectory)`，避免從不同 caller directory 執行錯誤目錄。

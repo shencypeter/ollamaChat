@@ -8,6 +8,8 @@
     <VisualStudioNpmExecutable Condition="'$(VisualStudioNpmExecutable)' == ''">$(MSBuildExtensionsPath)\Microsoft\VisualStudio\NodeJs\npm.cmd</VisualStudioNpmExecutable>
     <NpmExecutable Condition="'$(NpmExecutable)' == '' And Exists('$(VisualStudioNpmExecutable)')">$(VisualStudioNpmExecutable)</NpmExecutable>
     <NpmExecutable Condition="'$(NpmExecutable)' == ''">npm</NpmExecutable>
+    <NpmNodeDirectory Condition="'$(NpmNodeDirectory)' == '' And '$(NpmExecutable)' == '$(VisualStudioNpmExecutable)'">$([System.IO.Path]::GetDirectoryName('$(VisualStudioNpmExecutable)'))</NpmNodeDirectory>
+    <NpmEnvironmentVariables Condition="'$(NpmNodeDirectory)' != ''">PATH=$([MSBuild]::Escape('$(NpmNodeDirectory);$(PATH)'))</NpmEnvironmentVariables>
     <DefaultItemExcludes>$(DefaultItemExcludes);.codex-build/**;ClientApp/node_modules/**;artifacts/**</DefaultItemExcludes>
   </PropertyGroup>
 
@@ -33,14 +35,14 @@
           Inputs="$(MSBuildProjectDirectory)\ClientApp\package-lock.json"
           Outputs="$(MSBuildProjectDirectory)\ClientApp\node_modules\.package-lock.json"
           Condition="'$(SkipFrontendBuild)' != 'true'">
-    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" Command="&quot;$(NpmExecutable)&quot; ci --no-audit --no-fund" Condition="'$(SkipFrontendBuild)' != 'true'" />
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" Command="&quot;$(NpmExecutable)&quot; ci --no-audit --no-fund" EnvironmentVariables="$(NpmEnvironmentVariables)" Condition="'$(SkipFrontendBuild)' != 'true'" />
   </Target>
 
   <Target Name="BuildVue"
           BeforeTargets="Build"
           DependsOnTargets="RestoreVueDependencies"
           Condition="'$(SkipFrontendBuild)' != 'true'">
-    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" Command="&quot;$(NpmExecutable)&quot; run build" />
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" Command="&quot;$(NpmExecutable)&quot; run build" EnvironmentVariables="$(NpmEnvironmentVariables)" />
   </Target>
 
   <Target Name="BuildVueForPublish"
