@@ -20,6 +20,9 @@ public sealed class CourseUnitsController(NpgsqlDataSource source, LearnerExperi
     }
     public sealed class ReorderInput { [Required] public Guid[] UnitIds { get; set; } = []; }
     public sealed class MoveInput { public Guid? UnitId { get; set; } }
+    public sealed class ActivityOrderItem { [Required] public string Kind { get; set; } = ""; public Guid Id { get; set; } }
+    public sealed class ActivityOrderInput { [Required] public ActivityOrderItem[] Items { get; set; } = []; }
+    private sealed record ActivityRow(Guid Id,Guid? UnitId,string Kind,string Title,string Status,DateTimeOffset CreatedAt,DateTimeOffset? DueAt,int SortOrder);
 
     private async Task<string?> Role(NpgsqlConnection conn, Guid course, bool write, CancellationToken ct)
     {
@@ -47,28 +50,46 @@ public sealed class CourseUnitsController(NpgsqlDataSource source, LearnerExperi
             cmd.Parameters.AddWithValue(course); await using var r = await cmd.ExecuteReaderAsync(ct);
             while (await r.ReadAsync(ct)) units.Add(new { id=r.GetGuid(0),name=r.GetString(1),description=r.GetString(2),sortOrder=r.GetInt32(3),version=r.GetInt32(4),createdAt=r.GetFieldValue<DateTimeOffset>(5),updatedAt=r.GetFieldValue<DateTimeOffset>(6) });
         }
-        var activities = new List<object>();
+        var activities = await Activities(conn,course,staff,null,ct);
+        return Ok(new { units, activities, canManage = role == "teacher" });
+    }
+
+    private async Task<List<ActivityRow>> Activities(NpgsqlConnection conn,Guid course,bool staff,Guid? unit,CancellationToken ct)
+    {
+        var activities = new List<ActivityRow>();
         await using (var cmd = new NpgsqlCommand("""
-            SELECT id,unit_id,'material',COALESCE(NULLIF(display_title,''),file_name),resource_type,created_at,NULL::timestamptz
+            SELECT id,unit_id,'material',COALESCE(NULLIF(display_title,''),file_name),resource_type,created_at,NULL::timestamptz,unit_sort_order
             FROM course_resources WHERE course_id=$1
             UNION ALL
-            SELECT id,unit_id,CASE WHEN EXISTS(SELECT 1 FROM course_grade_items i WHERE i.source_assignment_id=assignments.id) THEN 'quiz' ELSE 'assignment' END,title,status,created_at,due_at FROM assignments
+            SELECT id,unit_id,CASE WHEN EXISTS(SELECT 1 FROM course_grade_items i WHERE i.source_assignment_id=assignments.id AND i.category='quiz') THEN 'quiz' ELSE 'assignment' END,title,status,created_at,due_at,unit_sort_order FROM assignments
             WHERE course_id=$1 AND ($2 OR status<>'draft')
             UNION ALL
-            SELECT id,unit_id,'report',title,status,created_at,due_at FROM report_assignments a
+            SELECT id,unit_id,'report',title,status,created_at,due_at,unit_sort_order FROM report_assignments a
             WHERE course_id=$1 AND ($2 OR status<>'draft') AND ($2 OR submission_mode='individual' OR EXISTS(
               SELECT 1 FROM report_group_audience WHERE report_id=a.id AND student_id=$3))
-            UNION ALL
-            SELECT id,unit_id,'exam',title,status,created_at,due_at FROM exams
-            WHERE course_id=$1 AND ($2 OR status<>'draft')
-            ORDER BY 6,1
+            ORDER BY 8,6,1
             """, conn))
         {
             cmd.Parameters.AddWithValue(course); cmd.Parameters.AddWithValue(staff); cmd.Parameters.AddWithValue(Actor);
             await using var r = await cmd.ExecuteReaderAsync(ct);
-            while (await r.ReadAsync(ct)) activities.Add(new { id=r.GetGuid(0),unitId=r.IsDBNull(1)?(Guid?)null:r.GetGuid(1),kind=r.GetString(2),title=r.GetString(3),status=r.GetString(4),createdAt=r.GetFieldValue<DateTimeOffset>(5),dueAt=r.IsDBNull(6)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(6) });
+            while (await r.ReadAsync(ct))
+            {
+                var unitId=r.IsDBNull(1)?(Guid?)null:r.GetGuid(1);
+                if(!unit.HasValue || unitId==unit)activities.Add(new(r.GetGuid(0),unitId,r.GetString(2),r.GetString(3),r.GetString(4),r.GetFieldValue<DateTimeOffset>(5),r.IsDBNull(6)?null:r.GetFieldValue<DateTimeOffset>(6),r.GetInt32(7)));
+            }
         }
-        return Ok(new { units, activities, canManage = role == "teacher" });
+        return activities;
+    }
+
+    [HttpGet("units/{id:guid}")]
+    public async Task<IActionResult> Detail(Guid course,Guid id,CancellationToken ct)
+    {
+        await using var conn=await source.OpenConnectionAsync(ct);var role=await Role(conn,course,false,ct);if(role is null)return NotFound();
+        await using var cmd=new NpgsqlCommand("SELECT name,description,sort_order,version,created_at,updated_at FROM course_units WHERE id=$1 AND course_id=$2",conn);cmd.Parameters.AddWithValue(id);cmd.Parameters.AddWithValue(course);
+        await using var r=await cmd.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct))return NotFound();
+        var name=r.GetString(0);var description=r.GetString(1);var sortOrder=r.GetInt32(2);var version=r.GetInt32(3);var createdAt=r.GetFieldValue<DateTimeOffset>(4);var updatedAt=r.GetFieldValue<DateTimeOffset>(5);await r.DisposeAsync();
+        var activities=await Activities(conn,course,role is "teacher" or "ta",id,ct);
+        return Ok(new{id,name,description,sortOrder,version,createdAt,updatedAt,canManage=role=="teacher",activities});
     }
 
     [HttpPost("units")]
@@ -108,7 +129,7 @@ public sealed class CourseUnitsController(NpgsqlDataSource source, LearnerExperi
     public async Task<IActionResult> Delete(Guid course,Guid id,CancellationToken ct)
     {
         await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);if(await Role(conn,course,true,ct) is null)return Forbid();
-        var used=await Scalar(conn,"SELECT EXISTS(SELECT 1 FROM course_resources WHERE course_id=$1 AND unit_id=$2) OR EXISTS(SELECT 1 FROM assignments WHERE course_id=$1 AND unit_id=$2) OR EXISTS(SELECT 1 FROM report_assignments WHERE course_id=$1 AND unit_id=$2) OR EXISTS(SELECT 1 FROM exams WHERE course_id=$1 AND unit_id=$2)",course,ct,id);
+        var used=await Scalar(conn,"SELECT EXISTS(SELECT 1 FROM course_resources WHERE course_id=$1 AND unit_id=$2) OR EXISTS(SELECT 1 FROM assignments WHERE course_id=$1 AND unit_id=$2) OR EXISTS(SELECT 1 FROM report_assignments WHERE course_id=$1 AND unit_id=$2)",course,ct,id);
         if(used is true)return Conflict(new{error="單元仍包含教材、測驗或作業；請先移動內容後再刪除。"});
         await using var cmd=new NpgsqlCommand("DELETE FROM course_units WHERE id=$1 AND course_id=$2",conn);cmd.Parameters.AddWithValue(id);cmd.Parameters.AddWithValue(course);if(await cmd.ExecuteNonQueryAsync(ct)==0)return NotFound();
         await using var normalize=new NpgsqlCommand("WITH x AS(SELECT id,row_number() OVER(ORDER BY sort_order,id) n FROM course_units WHERE course_id=$1) UPDATE course_units u SET sort_order=x.n FROM x WHERE u.id=x.id",conn);normalize.Parameters.AddWithValue(course);await normalize.ExecuteNonQueryAsync(ct);
@@ -118,11 +139,26 @@ public sealed class CourseUnitsController(NpgsqlDataSource source, LearnerExperi
     [HttpPut("units/activities/{kind}/{id:guid}")]
     public async Task<IActionResult> Move(Guid course,string kind,Guid id,MoveInput input,CancellationToken ct)
     {
-        var table=kind switch{"material"=>"course_resources","quiz" or "assignment"=>"assignments","report"=>"report_assignments","exam"=>"exams",_=>null};if(table is null)return NotFound();
+        var table=kind switch{"material"=>"course_resources","quiz" or "assignment"=>"assignments","report"=>"report_assignments",_=>null};if(table is null)return NotFound();
         await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);if(await Role(conn,course,true,ct) is null)return Forbid();
-        if(input.UnitId.HasValue && await Scalar(conn,"SELECT EXISTS(SELECT 1 FROM course_units WHERE id=$1 AND course_id=$2)",input.UnitId.Value,ct,course) is not true)return BadRequest(new{error="單元不屬於本課程。"});
-        await using var cmd=new NpgsqlCommand($"UPDATE {table} SET unit_id=$3 WHERE id=$1 AND course_id=$2",conn);cmd.Parameters.AddWithValue(id);cmd.Parameters.AddWithValue(course);cmd.Parameters.Add(new NpgsqlParameter{NpgsqlDbType=NpgsqlDbType.Uuid,Value=(object?)input.UnitId??DBNull.Value});if(await cmd.ExecuteNonQueryAsync(ct)==0)return NotFound();
+        Guid? currentUnit;await using(var current=new NpgsqlCommand($"SELECT unit_id FROM {table} WHERE id=$1 AND course_id=$2",conn)){current.Parameters.AddWithValue(id);current.Parameters.AddWithValue(course);var value=await current.ExecuteScalarAsync(ct);if(value is null)return NotFound();currentUnit=value is DBNull?null:(Guid)value;}
+        try{await CourseUnitActivityOrder.LockAsync(conn,course,new[]{currentUnit,input.UnitId}.Where(value=>value.HasValue).Select(value=>value!.Value),ct);}catch(ArgumentException){return BadRequest(new{error="單元不屬於本課程。"});}
+        var order=0;if(input.UnitId.HasValue)order=await CourseUnitActivityOrder.NextAsync(conn,course,input.UnitId.Value,ct);
+        await using var cmd=new NpgsqlCommand($"UPDATE {table} SET unit_id=$3,unit_sort_order=$4 WHERE id=$1 AND course_id=$2 AND unit_id IS NOT DISTINCT FROM $5",conn);cmd.Parameters.AddWithValue(id);cmd.Parameters.AddWithValue(course);cmd.Parameters.Add(new NpgsqlParameter{NpgsqlDbType=NpgsqlDbType.Uuid,Value=(object?)input.UnitId??DBNull.Value});cmd.Parameters.AddWithValue(order);cmd.Parameters.Add(new NpgsqlParameter{NpgsqlDbType=NpgsqlDbType.Uuid,Value=(object?)currentUnit??DBNull.Value});if(await cmd.ExecuteNonQueryAsync(ct)==0)return Conflict(new{error="活動所屬單元已被其他操作更新，請重新載入。"});
         await Audit(conn,id,"course.activity.unit_changed",ct);await tx.CommitAsync(ct);return NoContent();
+    }
+
+    [HttpPut("units/{id:guid}/activities/reorder")]
+    public async Task<IActionResult> ReorderActivities(Guid course,Guid id,ActivityOrderInput input,CancellationToken ct)
+    {
+        IReadOnlyList<ActivityKey> requested;try{requested=CourseUnitActivityOrder.Normalize(input.Items.Select(item=>new ActivityKey(item.Kind,item.Id)));}catch(ArgumentException e){return BadRequest(new{error=e.Message});}
+        await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);if(await Role(conn,course,true,ct) is null)return Forbid();
+        try{await CourseUnitActivityOrder.LockAsync(conn,course,[id],ct);}catch(ArgumentException){return NotFound();}
+        var existing=(await Activities(conn,course,true,id,ct)).Select(item=>new ActivityKey(item.Kind,item.Id)).ToArray();
+        static string Key(ActivityKey item)=>$"{(item.Kind is "quiz" or "assignment"?"assignment":item.Kind)}:{item.Id}";
+        if(existing.Length!=requested.Count || !existing.Select(Key).Order().SequenceEqual(requested.Select(Key).Order()))return BadRequest(new{error="請提交此單元完整且不重複的活動排序。"});
+        try{await CourseUnitActivityOrder.ReorderAsync(conn,course,id,requested,ct);}catch(ArgumentException e){return BadRequest(new{error=e.Message});}
+        await Audit(conn,id,"course.unit.activities_reordered",ct);await tx.CommitAsync(ct);return NoContent();
     }
 
     private async Task<object?> Scalar(NpgsqlConnection conn,string sql,object first,CancellationToken ct,object? second=null){await using var cmd=new NpgsqlCommand(sql,conn);cmd.Parameters.AddWithValue(first);if(second is not null)cmd.Parameters.AddWithValue(second);return await cmd.ExecuteScalarAsync(ct);}

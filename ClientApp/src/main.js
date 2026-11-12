@@ -5,6 +5,7 @@ import LoginView from './views/LoginView.vue'
 import AccountView from './views/AccountView.vue'
 import CoursesView from './views/CoursesView.vue'
 import CourseDetailView from './views/CourseDetailView.vue'
+import UnitWorkspaceView from './views/UnitWorkspaceView.vue'
 import AssessmentsView from './views/AssessmentsView.vue'
 import ReportAssignmentView from './views/ReportAssignmentView.vue'
 import AssignmentView from './views/AssignmentView.vue'
@@ -33,6 +34,7 @@ const router=createRouter({history:createWebHistory(),routes:[
  {path:'/courses',component:CoursesView,meta:{title:'我的課程'}},
  {path:'/learning-history',component:LearningHistoryView,meta:{title:'我的學習歷程'}},
  {path:'/courses/:courseId/materials/:resourceId',component:LearningResourceView,meta:{title:'教材學習'}},
+ {path:'/courses/:courseId/units/:unitId',component:UnitWorkspaceView,meta:{title:'單元工作區'}},
  {path:'/courses/:courseId',component:CourseDetailView,meta:{title:'課程工作區'}},
  ...['assessments','assessment-grades'].map(page=>({path:'/'+page,redirect:to=>to.query.course?{path:'/courses/'+to.query.course,query:{section:page==='assessments'?'assessments':'grades'}}:'/courses'})),
  {path:'/courses/:courseId/quizzes/:assignmentId',component:AssignmentView,meta:{quiz:true,title:'線上測驗'}},

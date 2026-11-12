@@ -18,9 +18,10 @@ function visibleRefresh(){if(auth.user&&document.visibilityState==='visible')ref
 let notificationTimer
 onMounted(()=>{notificationTimer=setInterval(visibleRefresh,30000);document.addEventListener('visibilitychange',visibleRefresh);window.addEventListener('focus',visibleRefresh)})
 onBeforeUnmount(()=>{clearInterval(notificationTimer);document.removeEventListener('visibilitychange',visibleRefresh);window.removeEventListener('focus',visibleRefresh)})
-const course=ref(null),menuButton=ref(null),drawer=ref(null)
+const course=ref(null),unit=ref(null),menuButton=ref(null),drawer=ref(null)
 provide('selectedCourse',course)
 const courseId=computed(()=>route.params.courseId || (route.path.startsWith('/learners/') && route.query.course))
+const unitId=computed(()=>route.params.unitId)
 watch(()=>[courseId.value,experience.student,auth.user?.id],async ([id],_,cleanup)=>{
   let active=true
   cleanup(()=>{active=false})
@@ -28,12 +29,13 @@ watch(()=>[courseId.value,experience.student,auth.user?.id],async ([id],_,cleanu
   if(!id || !auth.user)return
   try { const data=await api('/courses/'+id);if(active)course.value=data } catch { /* The view displays its access error. */ }
 },{immediate:true})
+watch(()=>[courseId.value,unitId.value,experience.student],async([courseScope,unitScope],_,cleanup)=>{let active=true;cleanup(()=>{active=false});unit.value=null;if(!courseScope||!unitScope)return;try{const data=await api(`/courses/${courseScope}/units/${unitScope}`);if(active)unit.value=data}catch{/* Unit view owns the visible error. */}},{immediate:true})
 const hasTeachingPortal=computed(()=>auth.user?.canTeach || auth.user?.canCreateCourses)
 const studentPortal=computed(()=>route.path==='/student/courses' || experience.student || !hasTeachingPortal.value || (course.value?.courseRole==='student' && !course.value.canPractice))
 const portalPath=computed(()=>studentPortal.value?'/student/courses':'/courses')
 const portalLabel=computed(()=>studentPortal.value?'我的修課':'我的授課')
 const sections=computed(()=>course.value?courseSections(course.value):[])
-const section=computed(()=>route.params.assignmentId||route.params.reportId?'units':route.params.resourceId?'resources':route.query.section||'home')
+const section=computed(()=>route.params.unitId?'home':route.query.section==='units'?'home':route.query.section||'home')
 const current=computed(()=>course.value?(sections.value.find(p=>p.key===section.value)?.label||route.meta.title):route.meta.title)
 async function closeDrawer(focus=true){mobileOpen.value=false;await nextTick();if(focus)menuButton.value?.focus()}
 async function openDrawer(){mobileOpen.value=true;await nextTick();drawer.value?.querySelector('a')?.focus()}
@@ -81,8 +83,8 @@ async function logout() { try { await signOut(); router.replace('/login') } catc
     <aside ref="drawer" id="workspace-navigation" class="workspace-sidebar" :class="{ 'mobile-open': mobileOpen }" :role="mobileOpen?'dialog':undefined" :aria-modal="mobileOpen||undefined" aria-label="平台導覽">
       <nav aria-label="工作區導覽">
         <template v-if="course">
-          <RouterLink :to="portalPath" class="course-exit" :aria-label="'返回'+portalLabel"><ChevronLeft :size="20"/>返回{{portalLabel}}</RouterLink>
-          <header class="sidebar-course"><strong>{{course.title}}</strong><span>{{course.code}} · {{course.termCode}} {{course.classLabel}}</span></header>
+          <RouterLink :to="unit?`/courses/${course.id}`:portalPath" class="course-exit" :aria-label="unit?'返回課程內容':'返回'+portalLabel"><ChevronLeft :size="20"/>{{unit?'返回課程內容':'返回'+portalLabel}}</RouterLink>
+          <header class="sidebar-course"><strong>{{course.title}}</strong><span>{{course.code}} · {{course.termCode}} {{course.classLabel}}</span><b v-if="unit" class="sidebar-unit">UNIT {{unit.sortOrder}} · {{unit.name}}</b></header>
           <RouterLink v-for="p in sections" :key="p.key" :to="{path:'/courses/'+course.id,query:{section:p.key}}" :class="{selected:section===p.key}" :aria-current="section===p.key?'page':undefined">
             <component :is="p.icon" :size="18"/>{{p.label}} <NotificationBadge v-if="p.badge" :count="courseNotifications(course.id)[p.badge]"/>
           </RouterLink>
@@ -98,7 +100,7 @@ async function logout() { try { await signOut(); router.replace('/login') } catc
       </nav>
       
     </aside>
-    <main id="main-content" class="workspace-main" tabindex="-1" :inert="mobileOpen"><nav class="breadcrumb" aria-label="所在位置"><RouterLink :to="portalPath">{{portalLabel}}</RouterLink><template v-if="course"><span>/</span><RouterLink :to="'/courses/'+course.id">{{course.title}}</RouterLink></template><template v-if="!['/courses','/student/courses'].includes(route.path)"><span>/</span><strong>{{current}}</strong></template></nav>
+    <main id="main-content" class="workspace-main" tabindex="-1" :inert="mobileOpen"><nav class="breadcrumb" aria-label="所在位置"><RouterLink :to="portalPath">{{portalLabel}}</RouterLink><template v-if="course"><span>/</span><RouterLink :to="'/courses/'+course.id">{{course.title}}</RouterLink></template><template v-if="unit"><span>/</span><strong>{{unit.name}}</strong></template><template v-else-if="!['/courses','/student/courses'].includes(route.path)"><span>/</span><strong>{{current}}</strong></template></nav>
       <p v-if="experience.student" class="experience-banner" role="status">學生視角預覽 · 唯讀，無法交卷、評分或累積學習紀錄。</p>
       <RouterView :key="route.path+':'+experience.student" />
     </main>
@@ -110,6 +112,7 @@ async function logout() { try { await signOut(); router.replace('/login') } catc
 .sidebar-course{margin:4px 0 10px;padding:12px;border-inline-start:4px solid var(--accent);background:var(--accent-soft);border-radius:4px;display:grid;gap:5px;overflow-wrap:anywhere}
 .sidebar-course strong{font-size:1.2rem;line-height:1.35;color:var(--text)}
 .sidebar-course span{font-size:.82rem;color:var(--muted)}
+.sidebar-course .sidebar-unit{padding-top:7px;border-top:1px solid var(--line);font-size:.92rem;color:var(--accent)}
 .workspace-sidebar .course-exit{color:var(--accent);font-weight:650}
 
 .account-control{position:relative}.account-control>button{background:transparent;color:inherit;border:0;cursor:pointer}.account-control nav{position:absolute;right:0;top:calc(100% + 8px);z-index:80;min-width:160px;padding:5px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:8px;box-shadow:0 5px 20px #0002}.account-control nav :is(a,button){display:flex;width:100%;align-items:center;gap:10px;background:transparent;color:inherit;border:0;padding:10px;cursor:pointer;font:inherit;text-align:left}.account-control nav :is(a,button):hover{background:var(--accent-soft)}

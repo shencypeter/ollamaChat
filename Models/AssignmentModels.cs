@@ -43,7 +43,7 @@ public sealed record AssignmentQuestion(Guid Id, string PromptText, string? Stag
     string QuestionType = "essay", IReadOnlyList<string>? Options = null, IReadOnlyList<int>? StandardAnswer = null,decimal? Points=null,string? GradingGuidance=null,string SectionTitle="");
 public sealed record AssignmentDetail(Guid Id, Guid CourseId, string CourseTitle, string CourseRole, string CourseStatus,
     string Title, string Instructions, string Status, DateTimeOffset? OpensAt, DateTimeOffset? DueAt,
-    IReadOnlyList<AssignmentQuestion> Questions, string EditVersion, bool AllowRevisions = false, decimal MaxScore = 100, Guid? RubricId = null, bool IsPractice = false, bool IsQuiz = false,LearningGate? LearningGate=null,int? TimeLimitMinutes=null,DateTimeOffset? StartedAt=null,bool NotifyStudents=true);
+    IReadOnlyList<AssignmentQuestion> Questions, string EditVersion, bool AllowRevisions = false, decimal MaxScore = 100, Guid? RubricId = null, bool IsPractice = false, bool IsQuiz = false,LearningGate? LearningGate=null,int? TimeLimitMinutes=null,DateTimeOffset? StartedAt=null,bool NotifyStudents=true,Guid? UnitId=null);
 public sealed record AssignmentListItem(Guid Id, string Title, string Status, DateTimeOffset? OpensAt,
     DateTimeOffset? DueAt, int QuestionCount, string? MyStatus, int SubmittedCount);
 public sealed record AnswerRevision(Guid Id, int RevisionNo, string Text, DateTimeOffset CreatedAt, bool IsSubmitted);

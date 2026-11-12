@@ -9,8 +9,8 @@ vi.mock('../composables/experience',()=>({setCourseExperience:vi.fn()}))
 let state,position,speed,wrapper
 const Player=defineComponent({name:'YouTubeReplay',emits:['ready','state','rate','seek','error'],setup(_,ctx){ctx.expose({pause:()=>{state=2},getCurrentTime:()=>position,getPlaybackRate:()=>speed,isPlaying:()=>state===1});onMounted(()=>ctx.emit('ready'));return()=>null}})
 async function open(role='teacher',practice=false){
- api.mockImplementation(async path=>path.endsWith('/learning')?{title:'合成回放',youTubeVideoId:'M7lc1UVf-VE',mediaType:'video/youtube',canTrack:practice||role==='student',isPractice:practice,accumulatedSeconds:120,contentSeconds:240}:path==='/courses/c'?{courseRole:role,status:'active'}:path.endsWith('/sessions')?{id:'session',accumulatedSeconds:120,contentSeconds:240}:{});
- wrapper=mount(LearningResourceView,{global:{stubs:{RouterLink:true,ShareResource:true,ResourceInteractions:true,MaterialSummary:true,ResourceTranscript:true,YouTubeReplay:Player}}});await flushPromises();return wrapper.findComponent(Player)
+ api.mockImplementation(async path=>path.endsWith('/learning')?{title:'合成回放',unitId:'u',youTubeVideoId:'M7lc1UVf-VE',mediaType:'video/youtube',canTrack:practice||role==='student',isPractice:practice,accumulatedSeconds:120,contentSeconds:240}:path==='/courses/c'?{courseRole:role,status:'active'}:path.endsWith('/sessions')?{id:'session',accumulatedSeconds:120,contentSeconds:240}:{});
+ wrapper=mount(LearningResourceView,{global:{stubs:{RouterLink:{name:'RouterLink',props:['to'],template:'<a><slot/></a>'},ShareResource:true,ResourceInteractions:true,MaterialSummary:true,ResourceTranscript:true,YouTubeReplay:Player}}});await flushPromises();return wrapper.findComponent(Player)
 }
 beforeEach(()=>{vi.useFakeTimers();api.mockReset();state=2;position=0;speed=1})
 afterEach(()=>{wrapper?.unmount();vi.useRealTimers()})
@@ -44,4 +44,8 @@ it('records one static material view when the page opens',async()=>{
  wrapper=mount(LearningResourceView,{global:{stubs:{RouterLink:true,ShareResource:true,ResourceInteractions:true,MaterialSummary:true,ResourceTranscript:true,FilePreview:true}}});await flushPromises()
  const writes=api.mock.calls.filter(call=>call[0]==='/courses/c/resources/r/views'&&call[1]?.method==='POST')
  expect(writes).toHaveLength(1);expect(writes[0][1].body.id).toMatch(/^[0-9a-f-]{36}$/)
+})
+
+it('returns a directly opened material to its persisted unit',async()=>{
+ await open('student');expect(wrapper.findComponent({name:'RouterLink'}).props('to')).toBe('/courses/c/units/u')
 })

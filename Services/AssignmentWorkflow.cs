@@ -40,7 +40,7 @@ public sealed partial class AssignmentWorkflow(NpgsqlDataSource source, TimeProv
         AssignmentDetail a;
         bool requiresStart;
         await using (var cmd = new NpgsqlCommand("""
-            SELECT a.id,a.course_id,c.title,m.course_role,c.status,a.title,a.instructions,a.status,a.opens_at,a.due_at,a.submission_mode,a.allow_revisions,a.max_score,a.rubric_id,EXISTS(SELECT 1 FROM course_grade_items i WHERE i.source_assignment_id=a.id),a.time_limit_minutes,a.requires_start,(SELECT started_at FROM quiz_learning_starts WHERE assignment_id=a.id AND user_id=$2 AND is_practice=$3),a.notify_students
+            SELECT a.id,a.course_id,c.title,m.course_role,c.status,a.title,a.instructions,a.status,a.opens_at,a.due_at,a.submission_mode,a.allow_revisions,a.max_score,a.rubric_id,EXISTS(SELECT 1 FROM course_grade_items i WHERE i.source_assignment_id=a.id),a.time_limit_minutes,a.requires_start,(SELECT started_at FROM quiz_learning_starts WHERE assignment_id=a.id AND user_id=$2 AND is_practice=$3),a.notify_students,a.unit_id
             FROM assignments a JOIN courses c ON c.id=a.course_id
             LEFT JOIN course_members m ON m.course_id=c.id AND m.user_id=$2 AND m.status='active'
             WHERE a.id=$1
@@ -54,7 +54,7 @@ public sealed partial class AssignmentWorkflow(NpgsqlDataSource source, TimeProv
             if (!AssignmentPolicy.IsStaff(role) && status == "draft") throw new AssignmentWorkflowException(404, "找不到已發布的作業。");
             if (r.GetString(10) != "individual") throw new AssignmentWorkflowException(409, "本階段只支援個人作業。");
             requiresStart=r.GetBoolean(16);
-            a = new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), role, r.GetString(4), r.GetString(5), r.GetString(6), status, ReadDate(r, 8), ReadDate(r, 9), [], "",r.GetBoolean(11),r.GetDecimal(12),r.IsDBNull(13)?null:r.GetGuid(13),false,r.GetBoolean(14),null,r.IsDBNull(15)?null:r.GetInt32(15),ReadDate(r,17),r.GetBoolean(18));
+            a = new(r.GetGuid(0), r.GetGuid(1), r.GetString(2), role, r.GetString(4), r.GetString(5), r.GetString(6), status, ReadDate(r, 8), ReadDate(r, 9), [], "",r.GetBoolean(11),r.GetDecimal(12),r.IsDBNull(13)?null:r.GetGuid(13),false,r.GetBoolean(14),null,r.IsDBNull(15)?null:r.GetInt32(15),ReadDate(r,17),r.GetBoolean(18),r.IsDBNull(19)?null:r.GetGuid(19));
         }
         var gate=await LearningTime.Gate(conn,id,actor,Practice,ct);
         gate=gate with{RequiresStart=requiresStart&&!Practice};

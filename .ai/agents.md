@@ -1,5 +1,11 @@
 # 代理工作規則與目前交接
 
+## 2026-11-12 分層課程工作區
+
+已依核准設計完成平台 → 課程內容 → 單元工作區 → 活動的導覽。課程首頁即單元總覽；單元 canonical URL 為 `/courses/{courseId}/units/{unitId}`，可建立教材、線上／課後測驗與 PDF 作業並跨類型排序。課程層仍保留正式考試、學員、分組、討論、成績、統計與設定；舊 `section=units` 及未歸類活動保留相容。教材、assignment／quiz、PDF 詳情以持久化 `unitId` 返回單元。
+
+Migration 035 已套用 public：三種一般活動新增 `unit_sort_order` 並依既有建立順序回填；正式 `exams` 移出單元但資料未刪。最終審查另補齊未歸類活動的學生相容入口、單元內完整教材管理、授權助教建立活動、重排共用鎖及 PDF 同單元編輯不覆寫並行排序。前端 99/99、後端 214 通過／19 條件式略過、Vite 與標準 .NET build 通過；登入 E2E 因未提供 `PORTAL_DEMO_PASSWORD` 條件式略過。035 已套用 public。最新版 PID 31080 只在 `https://localhost:7173` 運行，`/courses` 回 200 並載入 `index-B7eGRHUa.js`；5097／5107／5180 無 listener。下次仍需重新核對 listener，不要另開其他 port。設計與執行計畫位於 `docs/superpowers/`。
+
 ## 2026-11-12 Demo 學員常見姓名
 
 原 6 位仍名為「教學展示學員 1–6」的既有 Demo 帳號已原地改名為陳怡君、林志明、王美玲、張家豪、李雅婷、黃建宏。User ID、學號 DEMO115003–008、展示 Email、登入憑證、修課、交卷、分組與已發布成績均未改；PDF `report_snapshot.display_name` 已同步，避免評閱頁仍顯示舊名。另兩位本來已有姓名的展示同學未更動。

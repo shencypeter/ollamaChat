@@ -1,10 +1,8 @@
-import {Home,Library,ClipboardList,MessagesSquare,Users,ChartColumn,GraduationCap,Settings,ListTree} from '@lucide/vue'
+import {Home,ClipboardList,MessagesSquare,Users,ChartColumn,GraduationCap,Settings} from '@lucide/vue'
 export function courseSections(course) {
   const staff=['teacher','ta'].includes(course.courseRole)
   return [
-    {key:'home',label:'課程首頁',icon:Home},
-    {key:'units',label:course.courseRole==='teacher'?'單元管理':'課程單元',icon:ListTree},
-    {key:'resources',label:staff?'教材管理':'教材',icon:Library,badge:'materials'},
+    {key:'home',label:'課程內容',icon:Home,badge:'materials'},
     {key:'assessments',label:'正式考試',icon:ClipboardList,badge:'assignments'},
     ...(staff?[{key:'students',label:'學員管理',icon:Users}]:[]),
     {key:'groups',label:staff?'課程分組':'我的小組',icon:Users},

@@ -76,6 +76,28 @@ public class CourseUnitTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task UnitDetailIsCourseScopedAndReordersACompleteVisibleActivityList()
+    {
+        if(!Enabled)return;
+        var unit=Json(await Units(teacher).Create(course,new(){Name="聚焦單元"},default)).GetProperty("id").GetGuid();
+        await Units(teacher).Move(course,"material",material,new(){UnitId=unit},default);
+        await Units(teacher).Move(course,"quiz",publishedQuiz,new(){UnitId=unit},default);
+
+        var detail=Json(await Units(teacher).Detail(course,unit,default));
+        Assert.Equal("聚焦單元",detail.GetProperty("name").GetString());
+        Assert.DoesNotContain(detail.GetProperty("activities").EnumerateArray(),item=>item.GetProperty("kind").GetString()=="exam");
+        Assert.IsType<NotFoundResult>(await Units(teacher).Detail(other,unit,default));
+
+        var reordered=new CourseUnitsController.ActivityOrderInput{Items=[
+            new(){Kind="quiz",Id=publishedQuiz},
+            new(){Kind="material",Id=material}
+        ]};
+        Assert.IsType<NoContentResult>(await Units(teacher).ReorderActivities(course,unit,reordered,default));
+        var ordered=Json(await Units(teacher).Detail(course,unit,default)).GetProperty("activities").EnumerateArray().Select(item=>item.GetProperty("id").GetGuid()).ToArray();
+        Assert.Equal([publishedQuiz,material],ordered);
+    }
+
+    [Fact]
     public async Task NewResourcesRequireASameCourseUnitAndListItsUnitWithoutTags()
     {
         if(!Enabled)return;

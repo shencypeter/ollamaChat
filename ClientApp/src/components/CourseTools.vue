@@ -11,7 +11,7 @@ import ResourceVisual from './ResourceVisual.vue'
 import FilePreview from './FilePreview.vue'
 import {Pencil,Play,UsersRound} from '@lucide/vue'
 
-const props=defineProps({course:Object,staff:Boolean,section:{type:String,default:'resources'},showClassmates:{type:Boolean,default:true}})
+const props=defineProps({course:Object,staff:Boolean,section:{type:String,default:'resources'},showClassmates:{type:Boolean,default:true},lockedUnitId:{type:String,default:''},creatorOnly:Boolean})
 const emit=defineEmits(['changed'])
 const loading=ref(true),resources=ref([]),groups=ref([]),classmates=ref([]),units=ref([]),error=ref(''),notice=ref(''),busy=ref(false)
 const file=ref(null),group=ref({name:'',members:[]}),titleEdits=reactive({}),metadataEdits=reactive({}),statsResource=ref(null)
@@ -20,7 +20,7 @@ const search=ref(''),dateFrom=ref(''),dateTo=ref(''),undated=ref(false),material
 const base=`/courses/${props.course.id}`
 const editable=computed(()=>props.staff && (props.section!=='groups'||!props.course.taRestrictions?.includes('assessments')) && (props.section!=='resources'||!props.course.taRestrictions?.includes('materials')) && props.course.status!=='archived')
 const rangeError=computed(()=>dateFrom.value&&dateTo.value&&dateFrom.value>dateTo.value?'授課日期起日不能晚於迄日。':'')
-const visibleResources=computed(()=>filterMaterialMetadata(searchResources(resources.value,search.value),{from:dateFrom.value,to:dateTo.value,undated:undated.value,sort:materialSort.value}))
+const visibleResources=computed(()=>filterMaterialMetadata(searchResources(props.lockedUnitId?resources.value.filter(item=>item.unitId===props.lockedUnitId):resources.value,search.value),{from:dateFrom.value,to:dateTo.value,undated:undated.value,sort:materialSort.value}))
 const resourceSections=computed(()=>groupResourcesByUnit(visibleResources.value,units.value).filter(section=>section.items.length))
 const membership=computed(()=>new Map(groups.value.flatMap(g=>g.members.map(m=>[m.id,g]))))
 const groupCandidates=computed(()=>classmates.value)
@@ -40,7 +40,7 @@ async function load(){
  try{
   if(props.section==='resources'){
    const [items,curriculum]=await Promise.all([api(`${base}/resources`),api(`${base}/curriculum`)])
-   resources.value=items;units.value=curriculum?.units||[]
+   resources.value=items;units.value=curriculum?.units||[];if(props.lockedUnitId)uploadUnit.value=props.lockedUnitId
    if(!props.staff&&!props.course.canPractice){await nextTick();await markNotificationsRead('material',visibleResources.value.filter(item=>item.notifyStudents).map(item=>item.id))}
   }else [groups.value,classmates.value]=await Promise.all([api(`${base}/groups`),props.staff?api(`${base}/classmates`):[]])
  }catch(cause){error.value=cause.message}finally{loading.value=false}
@@ -74,10 +74,10 @@ onMounted(load)
 <p v-if="error" class="error-box" role="alert">{{error}}</p><p v-if="notice" role="status">{{notice}}</p>
 <template v-if="section==='resources'">
  <section class="surface form-surface course-resources">
-  <div class="section-title"><div><h2>課程資源</h2><p class="muted">教材依課程單元整齊排列；圖片顯示縮圖，其他格式使用清楚的文件圖示。</p></div></div>
-  <details v-if="editable&&units.length" class="add-resource"><summary>新增教材</summary><form @submit.prevent="upload">
+  <div v-if="!creatorOnly" class="section-title"><div><h2>課程資源</h2><p class="muted">教材依課程單元整齊排列；圖片顯示縮圖，其他格式使用清楚的文件圖示。</p></div></div>
+  <details v-if="editable&&units.length" class="add-resource" :open="creatorOnly"><summary>新增教材</summary><form @submit.prevent="upload">
    <label>教材來源<select aria-label="教材來源" v-model="sourceKind" :disabled="busy"><option value="file">上傳檔案</option><option value="youtube">YouTube 課程回放</option></select></label>
-   <label>所屬單元<select aria-label="新增教材所屬單元" v-model="uploadUnit" required><option disabled value="">請選擇單元</option><option v-for="unit in units" :key="unit.id" :value="unit.id">{{unit.name}}</option></select></label>
+   <label v-if="!lockedUnitId">所屬單元<select aria-label="新增教材所屬單元" v-model="uploadUnit" required><option disabled value="">請選擇單元</option><option v-for="unit in units" :key="unit.id" :value="unit.id">{{unit.name}}</option></select></label>
    <label>{{sourceKind==='youtube'?'回放名稱':'文件名稱（選填）'}}<input :aria-label="sourceKind==='youtube'?'回放名稱':'上傳文件名稱'" v-model="uploadTitle" :required="sourceKind==='youtube'" maxlength="200" placeholder="例如：案例分析講義" /></label>
    <label v-if="sourceKind==='file'">上傳檔案（最多 20 MB）<input type="file" required @change="file=$event.target.files[0]" /></label>
    <label v-else>YouTube 網址<input aria-label="YouTube 網址" type="url" v-model="youtubeUrl" required maxlength="2000" placeholder="https://www.youtube.com/watch?v=…" /></label>
@@ -89,7 +89,7 @@ onMounted(load)
   </form></details>
   <p v-else-if="editable&&!units.length" class="submission-notice">請先建立課程單元，再新增教材。 <RouterLink :to="{query:{section:'units'}}">前往單元管理 →</RouterLink></p>
 
-  <label>搜尋課程資源<input aria-label="搜尋課程資源" v-model="search" type="search" placeholder="輸入教材名稱、原始檔名或摘要" /></label>
+  <div v-if="!creatorOnly"><label>搜尋課程資源<input aria-label="搜尋課程資源" v-model="search" type="search" placeholder="輸入教材名稱、原始檔名或摘要" /></label>
   <details class="material-filters"><summary>日期與排序</summary><div class="form-grid">
    <label>授課日期起日<input aria-label="授課日期起日" type="date" v-model="dateFrom" :disabled="undated" /></label>
    <label>授課日期迄日<input aria-label="授課日期迄日" type="date" v-model="dateTo" :disabled="undated" /></label>
@@ -122,7 +122,7 @@ onMounted(load)
     </div>
    </li></ol>
   </section>
-  <p v-if="!loading&&!resources.length" class="muted">尚無可使用的課程教材。</p><p v-else-if="!loading&&!visibleResources.length" class="muted">沒有符合條件的教材，請調整搜尋或日期條件。</p>
+  <p v-if="!loading&&!resources.length" class="muted">尚無可使用的課程教材。</p><p v-else-if="!loading&&!visibleResources.length" class="muted">沒有符合條件的教材，請調整搜尋或日期條件。</p></div>
  </section>
  <ResourceLearningStats v-if="statsResource" :key="statsResource.id" :course-id="course.id" :resource-id="statsResource.id" :title="statsResource.title||statsResource.fileName" @close="statsResource=null" />
 </template>

@@ -68,9 +68,9 @@ onBeforeRouteLeave(guard); onBeforeRouteUpdate(guard); onMounted(load)
   <template v-if="!grades && data && course">
     <section class="surface form-surface formal-exam-intro"><h2>期中／期末正式考試</h2><p class="muted">獨立、一次提交的正式考試集中於此；一般單元活動仍使用原本的作答、提交與成績資料。</p></section>
     <ExamManager :course="course" :staff="staff" />
-    <section class="surface form-surface unit-assessment-note"><h2>一般單元作業與測驗</h2><p>一般作業、PDF 報告及隨堂／課後測驗已收在課程單元中，教師可在單元活動旁直接進入批改。</p><RouterLink :to="{ path: `/courses/${course.id}`, query: { section: 'units' } }" class="button secondary">前往課程單元</RouterLink></section>
+    <section class="surface form-surface unit-assessment-note"><h2>一般單元作業與測驗</h2><p>一般作業、PDF 報告及隨堂／課後測驗已收在課程單元中，教師可在單元活動旁直接進入批改。</p><RouterLink :to="`/courses/${course.id}`" class="button secondary">前往課程內容</RouterLink></section>
 
-    <details v-if="staff" class="surface form-surface legacy-assessments" :open="reviewOnly">
+    <details v-if="false && staff" class="surface form-surface legacy-assessments" :open="reviewOnly">
       <summary>{{ reviewOnly ? '相容入口：選擇要批改的舊評量' : '建立／整理一般單元評量' }}</summary>
       <p class="field-hint">新建後請回到單元管理指定所屬單元；既有深層連結與資料仍保留。</p>
       <button type="button" class="button secondary" :disabled="busy || quizEditor || reportEditor" @click="load">重新整理單元評量</button>

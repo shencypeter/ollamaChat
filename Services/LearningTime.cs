@@ -74,11 +74,11 @@ public sealed class LearningTime(NpgsqlDataSource source,TimeProvider clock)
         await using var cmd=new NpgsqlCommand("""
             SELECT file_name,COALESCE(NULLIF(display_title,''),file_name),substring(content from 1 for 16),
               COALESCE((SELECT floor(sum(credited_milliseconds)/1000.0) FROM learning_time_sessions WHERE resource_id=$1 AND user_id=$3 AND is_practice=$4),0)::bigint
-             ,resource_type,youtube_video_id,COALESCE((SELECT floor(sum(content_milliseconds)/1000.0) FROM learning_time_sessions WHERE resource_id=$1 AND user_id=$3 AND is_practice=$4),0)::bigint FROM course_resources WHERE id=$1 AND course_id=$2
+             ,resource_type,youtube_video_id,COALESCE((SELECT floor(sum(content_milliseconds)/1000.0) FROM learning_time_sessions WHERE resource_id=$1 AND user_id=$3 AND is_practice=$4),0)::bigint,unit_id FROM course_resources WHERE id=$1 AND course_id=$2
             """,conn);Add(cmd,id);Add(cmd,course);Add(cmd,actor);Add(cmd,practice);await using var r=await cmd.ExecuteReaderAsync(ct);
         if(!await r.ReadAsync(ct))throw new AssignmentWorkflowException(404,"找不到教材。");
         var media=LearningTimePolicy.MediaType(r.GetString(0),r.GetFieldValue<byte[]>(2),r.GetString(4));if(media==null)throw new AssignmentWorkflowException(415,"此教材尚不支援有效閱讀時間追蹤，請下載後開啟。");
-        return new(id,course,r.GetString(1),r.GetString(0),media,practice?0:r.GetInt64(3),status!="archived"&&role=="student"&&!practice,practice,r.IsDBNull(5)?null:r.GetString(5),practice?0:r.GetInt64(6));
+        return new(id,course,r.GetString(1),r.GetString(0),media,practice?0:r.GetInt64(3),status!="archived"&&role=="student"&&!practice,practice,r.IsDBNull(5)?null:r.GetString(5),practice?0:r.GetInt64(6),r.IsDBNull(7)?null:r.GetGuid(7));
     }
     public async Task<object> Statistics(Guid course,Guid id,Guid actor,bool practice,CancellationToken ct)
     {
