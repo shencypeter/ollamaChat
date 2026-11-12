@@ -1,5 +1,13 @@
 # 開發歷程與決策紀錄
 
+## 2026-11-12 修正 Visual Studio 啟動舊 Vue bundle
+
+查核同事取得 stale site 的交付鏈：兩個 GitHub main 均為同一 SHA，Vue source、lockfile、Vite 與 launch settings 皆已提交；根因是 `wwwroot/portal` 正確被 Git ignore，但原 csproj 只在 Publish 執行 npm，普通 Visual Studio Build／F5 不重建，故舊 ignored bundle 可長期殘留。未改為提交 generated bundle，而是在 csproj 新增增量 `RestoreVueDependencies` 與一般 Build 前執行的 `BuildVue`，並設定 `DisableFastUpToDateCheck=true`，避免 Visual Studio 在只改 Vue 時跳過 MSBuild；Publish 只復用並收集產物。npm working directory 錨定 `$(MSBuildProjectDirectory)`，避免從不同 caller directory 執行錯誤目錄。
+
+先建立隔離 MSBuild 行為測試並確認舊專案因不存在 `BuildVue` 而失敗；完成後涵蓋初次 `npm ci → npm run build`、未變更 lockfile 只 build、lockfile 更新再 ci、skip 不呼叫 npm、publish build 一次及 npm 失敗使 MSBuild 失敗。實際一般 build 自動執行 Vite且 0 警告／錯誤；publish 只出現 1 次 Vite 並包含 `wwwroot/portal/index.html`。本機 Codex runtime 只有 Node 無 npm，實測使用 ignored adapter 將 `npm run build` 轉到既有 Vite，且拒絕意外 `npm ci`；正式開發先決條件仍是 README 的 Node/npm PATH。
+
+獨立審查發現 Visual Studio Fast Up-to-Date Check 仍可能完全跳過 MSBuild；先新增 property evaluation 回歸並確認空值失敗，再設定 `DisableFastUpToDateCheck=true` 後通過。完整回歸為 Vue 33 檔案 100/100、.NET 214 通過／19 個外部條件測試略過；最終一般 build 再次自動執行 Vite且 0 警告／錯誤。最新版 PID 32760 只綁定 7173，`/courses` 回 200 且載入 `index-BnAXc7hJ.js`；5097、5107、5173、5180 無 listener。
+
 ## 2026-11-12 測驗題目排序改為圖示控制
 
 使用者確認不新增 Font Awesome，沿用專案既有 `@lucide/vue`。`AssignmentEditor` 的拖曳、上移、下移由文字按鈕改為 `GripVertical`、`ArrowUp`、`ArrowDown`，使用全站 `icon-button` 樣式並保留中文 `aria-label`／title、disabled 邊界、既有 drag/drop 與 `move()` 資料流程。沒有修改單元活動或單元卡片排序。

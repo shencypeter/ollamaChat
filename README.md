@@ -36,15 +36,14 @@ Requirements: .NET 8 SDK, Node 22.22+ LTS (or a supported newer LTS), PostgreSQL
 As explicitly requested on 2026-11-09, `appsettings.Local.json` is tracked and includes the shared development database connection string and setup secret. Cloning either repository provides these local settings. Environment variables still override configuration (`ConnectionStrings__Portal`, `Portal__BootstrapToken`). Keep actual values out of Markdown, browser code, and command output. The redacted template remains in `docs/portal-config.example.json`. Publish still excludes this local file; configure the deployed application separately.
 
 ```powershell
-# Build Vue assets first, then run the API and SPA on the same origin.
-cd ClientApp
-npm ci
-npm run build
-cd ..
+# Visual Studio Build/F5 and normal dotnet build automatically restore
+# changed Vue dependencies and rebuild the SPA before ASP.NET starts.
 dotnet run --launch-profile http
 ```
 
 Open http://localhost:5084 . On an empty account database, the login page offers one-time setup for the first professor. Use the initialization code from `Portal:BootstrapToken` in your local configuration, choose your email and a password of at least 12 characters. The token is never sent to the browser automatically. Setup is locked transactionally after the first account exists. No demo passwords or automatic role-switching are enabled.
+
+The first build requires `node` and `npm` on `PATH`. `npm ci` runs only when `ClientApp/node_modules/.package-lock.json` is missing or older than `package-lock.json`; Vite runs on every normal build so ignored `wwwroot/portal` assets cannot remain stale. A missing npm executable or failed Vue compilation fails the .NET build instead of launching old assets. `-p:SkipFrontendBuild=true` is reserved for workflows that have already built and verified the frontend explicitly.
 
 Professors can create Professor / TeachingAssistant / Student accounts, create courses, and manage membership for courses they own. Course teachers and TAs can create/edit draft individual assignments, publish or close them, and review submitted answers. Students can save drafts, reload them, and submit once before the deadline. Both have access to their enrolled courses and the standalone AI portal. Course teacher/TA/student membership is distinct from platform account permissions. Students cannot create courses, enumerate platform accounts or view the staff roster API. Accounts are password-hashed; cookies are HttpOnly; API writes require an antiforgery header. Password changes sign out the current session.
 

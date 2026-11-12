@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
     <DefaultItemExcludes>$(DefaultItemExcludes);.codex-build/**;ClientApp/node_modules/**;artifacts/**</DefaultItemExcludes>
   </PropertyGroup>
 
@@ -25,9 +26,23 @@
     <None Remove="tests\**\*" />
   </ItemGroup>
 
-  <Target Name="BuildVueForPublish" BeforeTargets="_HandleFileConflictsForPublish">
-    <Exec WorkingDirectory="ClientApp" Command="npm ci --no-audit --no-fund" Condition="'$(SkipFrontendBuild)' != 'true'" />
-    <Exec WorkingDirectory="ClientApp" Command="npm run build" Condition="'$(SkipFrontendBuild)' != 'true'" />
+  <Target Name="RestoreVueDependencies"
+          Inputs="$(MSBuildProjectDirectory)\ClientApp\package-lock.json"
+          Outputs="$(MSBuildProjectDirectory)\ClientApp\node_modules\.package-lock.json"
+          Condition="'$(SkipFrontendBuild)' != 'true'">
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" Command="npm ci --no-audit --no-fund" Condition="'$(SkipFrontendBuild)' != 'true'" />
+  </Target>
+
+  <Target Name="BuildVue"
+          BeforeTargets="Build"
+          DependsOnTargets="RestoreVueDependencies"
+          Condition="'$(SkipFrontendBuild)' != 'true'">
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" Command="npm run build" />
+  </Target>
+
+  <Target Name="BuildVueForPublish"
+          BeforeTargets="_HandleFileConflictsForPublish"
+          DependsOnTargets="BuildVue">
     <ItemGroup>
       <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('wwwroot/portal/')) Or $([System.String]::Copy('%(ResolvedFileToPublish.RelativePath)').StartsWith('wwwroot\portal\'))" />
       <VuePublishFiles Include="wwwroot/portal/**/*" />

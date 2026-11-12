@@ -1,5 +1,11 @@
 # 代理工作規則與目前交接
 
+## 2026-11-12 Visual Studio 自動建置 Vue
+
+一般 Visual Studio Build／F5 與 `dotnet build` 現會先檢查 `ClientApp/package-lock.json`：npm 安裝標記缺少或較舊時執行 `npm ci`，並在每次 Build 執行 Vite，避免 Git 忽略的 `wwwroot/portal` 殘留舊 bundle。`DisableFastUpToDateCheck=true` 防止 Visual Studio 在只改 Vue 時略過整個 MSBuild。Publish 復用同一 `BuildVue` target，只收集一次產物；`SkipFrontendBuild=true` 僅供前端已另行建置驗證的隔離流程。Node/npm 缺少或 Vue 失敗會讓 .NET build 明確失敗。
+
+行為測試涵蓋乾淨 restore、增量跳過、lockfile 更新、skip、publish 單次 build、失敗傳播及 Visual Studio Fast Up-to-Date policy。一般 build 與 publish 實測 Vite，publish 計數 1 並含 portal index；Vue 100/100、.NET 214 通過／19 條件式略過。最新版 PID 32760 只在 `https://localhost:7173` 運行，`/courses` 回 200 並載入 `index-BnAXc7hJ.js`；5097／5107／5173／5180 無 listener。本機 Codex Node 不附 npm，實際 MSBuild 驗證以 ignored adapter 只轉呼叫現有 Vite；同事與 Visual Studio 開發機仍須依 README 安裝 Node/npm 並加入 PATH。
+
 ## 2026-11-12 測驗題目排序圖示
 
 課程測驗／作業共用編輯器的「拖曳、上移、下移」文字控制已改為既有 Lucide `GripVertical`、`ArrowUp`、`ArrowDown` 圖示按鈕；沒有新增 Font Awesome。中文 `aria-label`／tooltip、首題上移與末題下移的停用狀態、拖放與儲存順位均保留。TDD 專項先失敗後通過，完整 Vue 33 檔案 100/100，Vite 與標準 .NET build 通過。最新版 PID 30864 只在 `https://localhost:7173` 運行，`/courses` 回 200 並載入 `index-BnAXc7hJ.js`；5097／5107／5180 無 listener。

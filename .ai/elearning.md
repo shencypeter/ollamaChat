@@ -1,5 +1,9 @@
 # 中山大學線上學習平台 POC 規格
 
+## 2026-11-12 開發建置一致性
+
+Visual Studio Build／F5 與一般 `dotnet build` 必須自動重建 Vue production assets，再由同一 ASP.NET 執行個體提供；不得因 `wwwroot/portal` 為 Git ignore 或 Visual Studio Fast Up-to-Date Check 而沿用開發者磁碟上的舊 bundle。npm 依 lockfile 增量還原，Vue build 失敗時整體 build 失敗。Publish 復用相同 target 並只建置一次；不啟動 Vite dev server 或額外 port。`SkipFrontendBuild=true` 只適用於前端已在同一流程明確建置驗證的測試／發布。
+
 ## 2026-11-12 測驗題目排序控制
 
 教師／助教編輯測驗或作業題目時，拖曳、上移、下移使用與全站一致的 Lucide 圖示按鈕，不顯示冗長文字。每個控制仍提供中文可存取名稱與滑鼠提示；首題不可上移、末題不可下移，拖放與按鈕排序結果使用原有題目順位及儲存流程。
