@@ -44,9 +44,26 @@ exit /b 0
     $env:PATH = "$fakeBin;$originalPath"
     $env:NPM_TEST_LOG = $commandLog
 
-    function Invoke-Target([string]$Target, [bool]$SkipFrontend = $false, [bool]$ExpectFailure = $false) {
+    function Invoke-Target(
+        [string]$Target,
+        [bool]$SkipFrontend = $false,
+        [bool]$ExpectFailure = $false,
+        [string]$VisualStudioNpmExecutable = ''
+    ) {
         $skipValue = if ($SkipFrontend) { 'true' } else { 'false' }
-        & dotnet msbuild (Join-Path $projectRoot 'AiTeachingAssistant.csproj') "-t:$Target" "-p:SkipFrontendBuild=$skipValue" '-v:q' '-nologo' '-nr:false'
+        $arguments = @(
+            'msbuild'
+            (Join-Path $projectRoot 'AiTeachingAssistant.csproj')
+            "-t:$Target"
+            "-p:SkipFrontendBuild=$skipValue"
+            '-v:q'
+            '-nologo'
+            '-nr:false'
+        )
+        if ($VisualStudioNpmExecutable) {
+            $arguments += "-p:VisualStudioNpmExecutable=$VisualStudioNpmExecutable"
+        }
+        & dotnet @arguments
         $exitCode = $LASTEXITCODE
         if ($ExpectFailure) {
             if ($exitCode -eq 0) { throw "Expected target $Target to fail." }
@@ -93,6 +110,14 @@ exit /b 0
     New-Item -ItemType File -Path (Join-Path $projectRoot 'ClientApp\fail-build') -Force | Out-Null
     Invoke-Target 'BuildVue' $false $true
     Assert-Sequence (Read-Commands) @('run build') 'A failed npm build must be attempted exactly once and fail MSBuild.'
+
+    Remove-Item -LiteralPath (Join-Path $projectRoot 'ClientApp\fail-build') -Force
+    Clear-Commands
+    $visualStudioNpm = Join-Path $fixtureRoot 'Visual Studio NodeJs\npm.cmd'
+    New-Item -ItemType Directory -Path (Split-Path $visualStudioNpm) -Force | Out-Null
+    Move-Item -LiteralPath (Join-Path $fakeBin 'npm.cmd') -Destination $visualStudioNpm
+    Invoke-Target 'BuildVue' $false $false $visualStudioNpm
+    Assert-Sequence (Read-Commands) @('run build') 'Visual Studio bundled npm must work when npm is absent from PATH.'
 
     'Build pipeline behavior tests passed.'
 }

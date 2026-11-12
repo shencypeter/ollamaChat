@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
+    <VisualStudioNpmExecutable Condition="'$(VisualStudioNpmExecutable)' == ''">$(MSBuildExtensionsPath)\Microsoft\VisualStudio\NodeJs\npm.cmd</VisualStudioNpmExecutable>
+    <NpmExecutable Condition="'$(NpmExecutable)' == '' And Exists('$(VisualStudioNpmExecutable)')">$(VisualStudioNpmExecutable)</NpmExecutable>
+    <NpmExecutable Condition="'$(NpmExecutable)' == ''">npm</NpmExecutable>
     <DefaultItemExcludes>$(DefaultItemExcludes);.codex-build/**;ClientApp/node_modules/**;artifacts/**</DefaultItemExcludes>
   </PropertyGroup>
 
@@ -30,14 +33,14 @@
           Inputs="$(MSBuildProjectDirectory)\ClientApp\package-lock.json"
           Outputs="$(MSBuildProjectDirectory)\ClientApp\node_modules\.package-lock.json"
           Condition="'$(SkipFrontendBuild)' != 'true'">
-    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" Command="npm ci --no-audit --no-fund" Condition="'$(SkipFrontendBuild)' != 'true'" />
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" Command="&quot;$(NpmExecutable)&quot; ci --no-audit --no-fund" Condition="'$(SkipFrontendBuild)' != 'true'" />
   </Target>
 
   <Target Name="BuildVue"
           BeforeTargets="Build"
           DependsOnTargets="RestoreVueDependencies"
           Condition="'$(SkipFrontendBuild)' != 'true'">
-    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" Command="npm run build" />
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)\ClientApp" Command="&quot;$(NpmExecutable)&quot; run build" />
   </Target>
 
   <Target Name="BuildVueForPublish"

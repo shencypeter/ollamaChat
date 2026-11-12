@@ -2,7 +2,7 @@
 
 ## 2026-11-12 開發建置一致性
 
-Visual Studio Build／F5 與一般 `dotnet build` 必須自動重建 Vue production assets，再由同一 ASP.NET 執行個體提供；不得因 `wwwroot/portal` 為 Git ignore 或 Visual Studio Fast Up-to-Date Check 而沿用開發者磁碟上的舊 bundle。npm 依 lockfile 增量還原，Vue build 失敗時整體 build 失敗。Publish 復用相同 target 並只建置一次；不啟動 Vite dev server 或額外 port。`SkipFrontendBuild=true` 只適用於前端已在同一流程明確建置驗證的測試／發布。
+Visual Studio Build／F5 與一般 `dotnet build` 必須自動重建 Vue production assets，再由同一 ASP.NET 執行個體提供；不得因 `wwwroot/portal` 為 Git ignore 或 Visual Studio Fast Up-to-Date Check 而沿用開發者磁碟上的舊 bundle。Visual Studio 隨附 npm 即使未加入 PATH 也應可由 MSBuildExtensionsPath 探測使用；其他 CLI／CI 環境使用 PATH npm，並可用 `NpmExecutable` 明確覆寫。npm 依 lockfile增量還原，Vue build 失敗時整體 build 失敗。Publish 復用相同 target 並只建置一次；不啟動 Vite dev server 或額外 port。`SkipFrontendBuild=true` 只適用於前端已在同一流程明確建置驗證的測試／發布。
 
 ## 2026-11-12 測驗題目排序控制
 
