@@ -23,8 +23,20 @@ if(args.Contains("--submitted-assignment-demo")){
 if(args.Contains("--submitted-assignment-demo-audit")){
     await SubmittedAssignmentDemo.Audit();return;
 }
+if(args.Contains("--publish-demo-grades")){
+    await DemoGradePublisher.Publish();return;
+}
+if(args.Contains("--publish-demo-grades-audit")){
+    await DemoGradePublisher.Audit();return;
+}
 if(args.Contains("--activate-demo-classmates")){
     await DemoClassmateAccounts.Activate(root);return;
+}
+if(args.Contains("--rename-demo-classmates")){
+    await DemoClassmateNames.Rename();return;
+}
+if(args.Contains("--rename-demo-classmates-audit")){
+    await DemoClassmateNames.Audit();return;
 }
 if(args.Contains("--course-demo"))
 {

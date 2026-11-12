@@ -1,5 +1,17 @@
 # 開發歷程與決策紀錄
 
+## 2026-11-12 Demo 學員改為常見姓名
+
+依使用者要求將編號式「教學展示學員」改為菜市場名。安全查核發現實際只有 6 位仍使用編號舊名，首次以預估 8 位執行時因數量不符而整筆回滾；沒有部分改名。修正範圍後，DEMO115003–008 依序改為陳怡君、林志明、王美玲、張家豪、李雅婷、黃建宏，另外已有姓名的展示同學保留。
+
+新增 Development-only、可重跑的 `--rename-demo-classmates` 及 audit。工具只鎖定 `.invalid` Demo Email、Member 且不可建課的編號帳號，保留 ID、登入與所有關聯，同步 PDF `report_snapshot` 顯示姓名並寫入 rename audit。第二次執行 0 修改；audit 6/6 帳號及快照一致。PortalSmoke 與主專案建置 0 警告。
+
+## 2026-11-12 全部 Demo 成績交易式發布
+
+使用者明確要求發布全部成績。先唯讀確認 14 份線上評量的 151 組學生作業及 12 份 PDF 作業的 72 份繳交均已有非 null 草稿分數，再新增 Development-only `--publish-demo-grades` 與 audit。工具在單一 PostgreSQL 交易內逐份重算 active 應評名單；線上作業鎖定最新提交快照與最新 grade，PDF 個人作業要求全班皆有有效繳交／分數，小組作業要求每個指定小組皆有繳交且保留成員快照。任一不完整即全部回滾。
+
+發布成功：線上 14 份／151 位學生，PDF 12 份／72 份繳交，小組成員 55 人。`grades.released_at`、PDF `published_score`／`published_feedback`、小組個人 `published_score` 及 `course_grade_scores.published_score` 同步更新；作業／報告 audit 與 PDF batch release event 已寫入。發布後 audit 為線上 151/151、成績簿 151/151、PDF 72/72、未發布小組成員 0；原 AssessedDemo audit 逐份確認 72/72 PDF 均已發布。未新增假 submission，未發布課程總成績，亦未觸及非 Demo 課程。
+
 ## 2026-11-12 單元評量、雙欄批改與全課程示範交卷
 
 依使用者要求把一般線上作業、隨堂／課後測驗與 PDF 作業的作答／批改入口收進課程單元。`CourseUnits` 對教師顯示「批改作答／批改 PDF」，Assignment／Report 深層頁返回單元；側欄移除獨立「批改與評分」，原「測驗與作業」改名「正式考試」。`AssessmentsView` 接回既有但先前未掛載的 `ExamManager`，讓期中／期末等獨立考試成為外層主功能；一般評量建立及舊清單保留在 staff 相容收合區，沒有搬移資料或另建成績系統。
