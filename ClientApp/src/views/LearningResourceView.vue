@@ -4,6 +4,7 @@ import {useRoute} from 'vue-router'
 import {api} from '../api'
 import {Eye} from '@lucide/vue'
 import {setCourseExperience} from '../composables/experience'
+import {newRequestId} from '../utils/requestId'
 import ShareResource from '../components/ShareResource.vue'
 import ResourceInteractions from '../components/ResourceInteractions.vue'
 import FilePreview from '../components/FilePreview.vue'
@@ -12,6 +13,7 @@ import ResourceTranscript from '../components/ResourceTranscript.vue'
 import YouTubeReplay from '../components/YouTubeReplay.vue'
 const route=useRoute(),meta=ref(null),canEditTranscript=ref(false),url=ref(''),video=ref(null),youtube=ref(null),error=ref(''),active=ref(false),busy=ref(false),loaded=ref(false),seconds=ref(0),currentRate=ref(1),contentSeconds=ref(0)
 const untimed=ref(false),teachingPreview=ref(false),demoActualMs=ref(0),demoContentMs=ref(0),demoRunning=ref(false)
+const viewRequestId=newRequestId()
 const displaySeconds=computed(()=>teachingPreview.value?Math.floor(demoActualMs.value/1000):seconds.value)
 const displayContentSeconds=computed(()=>teachingPreview.value?Math.floor(demoContentMs.value/1000):contentSeconds.value)
 let demoSample=null,demoTimer=null
@@ -55,7 +57,7 @@ async function youtubeState(state){if(teachingPreview.value){demoTick(state!==1)
 async function youtubeRestart(){if(teachingPreview.value){demoSample=null;demoTick();return}currentRate.value=rate();await beat(true);if(meta.value?.canTrack&&playing())start()}
 function hidden(){if(document.visibilityState!=='visible'){youtube.value?.pause?.();video.value?.pause();demoTick(true);beat(true)}}
 function mediaError(message){demoSample=null;demoRunning.value=false;loaded.value=false;error.value=typeof message==='string'?message:'無法開啟教材，請返回課程檢查原檔。';beat(true)}
-onMounted(async()=>{try{try{meta.value=await api(base)}catch(e){if(e.status!==415)throw e;const resources=await api(`/courses/${route.params.courseId}/resources`);const item=resources.find(r=>r.id===route.params.resourceId);if(!item)throw new Error('找不到教材。');untimed.value=true;meta.value={...item,title:item.title||item.fileName,mediaType:'',canTrack:false,isPractice:false}}if(disposed)return;if(meta.value.isPractice)meta.value.canTrack=false;setCourseExperience(meta.value.canTrack?null:false);seconds.value=meta.value.accumulatedSeconds;contentSeconds.value=meta.value.contentSeconds||0;if(meta.value.youTubeVideoId){const course=await api(`/courses/${route.params.courseId}`);teachingPreview.value=['teacher','ta'].includes(course.courseRole)&&!meta.value.isPractice;canEditTranscript.value=['teacher','ta'].includes(course.courseRole)&&course.status!=='archived'&&!course.taRestrictions?.includes('materials')&&!meta.value.isPractice}if(!untimed.value&&!meta.value.youTubeVideoId){const blob=await api(`${base}/content`,{download:true});if(!disposed)url.value=URL.createObjectURL(blob)}}catch(e){error.value=e.message}
+onMounted(async()=>{try{try{meta.value=await api(base)}catch(e){if(e.status!==415)throw e;const resources=await api(`/courses/${route.params.courseId}/resources`);const item=resources.find(r=>r.id===route.params.resourceId);if(!item)throw new Error('找不到教材。');untimed.value=true;meta.value={...item,title:item.title||item.fileName,mediaType:'',canTrack:false,isPractice:false}}if(disposed)return;if(!meta.value.mediaType?.startsWith('video/'))void api(`/courses/${route.params.courseId}/resources/${route.params.resourceId}/views`,{method:'POST',body:{id:viewRequestId}}).catch(()=>{});if(meta.value.isPractice)meta.value.canTrack=false;setCourseExperience(meta.value.canTrack?null:false);seconds.value=meta.value.accumulatedSeconds;contentSeconds.value=meta.value.contentSeconds||0;if(meta.value.youTubeVideoId){const course=await api(`/courses/${route.params.courseId}`);teachingPreview.value=['teacher','ta'].includes(course.courseRole)&&!meta.value.isPractice;canEditTranscript.value=['teacher','ta'].includes(course.courseRole)&&course.status!=='archived'&&!course.taRestrictions?.includes('materials')&&!meta.value.isPractice}if(!untimed.value&&!meta.value.youTubeVideoId){const blob=await api(`${base}/content`,{download:true});if(!disposed)url.value=URL.createObjectURL(blob)}}catch(e){error.value=e.message}
  demoTimer=setInterval(()=>demoTick(),1000);timer=setInterval(()=>beat(),10000);document.addEventListener('visibilitychange',hidden);for(const name of ['pointerdown','keydown','wheel'])window.addEventListener(name,activity,{passive:true})})
 onBeforeUnmount(()=>{disposed=true;clearInterval(demoTimer);demoSample=null;clearInterval(timer);document.removeEventListener('visibilitychange',hidden);for(const name of ['pointerdown','keydown','wheel'])window.removeEventListener(name,activity);beat(true);if(url.value)URL.revokeObjectURL(url.value)})
 </script>

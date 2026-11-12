@@ -38,3 +38,10 @@ it('pauses the embedded player on visibility loss and waits for the user to resu
  const visibility=vi.spyOn(document,'visibilityState','get').mockReturnValue('hidden')
  try{document.dispatchEvent(new Event('visibilitychange'));expect(state).toBe(2);visibility.mockReturnValue('visible');document.dispatchEvent(new Event('visibilitychange'));expect(state).toBe(2)}finally{visibility.mockRestore()}
 })
+
+it('records one static material view when the page opens',async()=>{
+ api.mockImplementation(async (path,options)=>path.endsWith('/learning')?{title:'合成講義',fileName:'handout.pdf',mediaType:'application/pdf',canTrack:true,isPractice:false,accumulatedSeconds:0,contentSeconds:0}:path.endsWith('/content')?new Blob(['pdf']):path.endsWith('/views')&&options?.method==='POST'?null:{})
+ wrapper=mount(LearningResourceView,{global:{stubs:{RouterLink:true,ShareResource:true,ResourceInteractions:true,MaterialSummary:true,ResourceTranscript:true,FilePreview:true}}});await flushPromises()
+ const writes=api.mock.calls.filter(call=>call[0]==='/courses/c/resources/r/views'&&call[1]?.method==='POST')
+ expect(writes).toHaveLength(1);expect(writes[0][1].body.id).toMatch(/^[0-9a-f-]{36}$/)
+})

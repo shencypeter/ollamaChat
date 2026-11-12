@@ -17,6 +17,12 @@ if(args.Contains("--assessed-demo")){
 if(args.Contains("--assessed-demo-audit")){
     await AssessedDemo.Audit();return;
 }
+if(args.Contains("--submitted-assignment-demo")){
+    await SubmittedAssignmentDemo.Seed();return;
+}
+if(args.Contains("--submitted-assignment-demo-audit")){
+    await SubmittedAssignmentDemo.Audit();return;
+}
 if(args.Contains("--activate-demo-classmates")){
     await DemoClassmateAccounts.Activate(root);return;
 }

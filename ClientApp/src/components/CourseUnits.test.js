@@ -15,3 +15,6 @@ it('renders curriculum in unit order and lets teachers reorder and reassign acti
 it('keeps the student curriculum read only',async()=>{
  curriculum.canManage=false;const view=render(false);await flushPromises();expect(view.text()).toContain('閱讀材料');expect(view.text()).toContain('概念測驗');expect(view.text()).not.toContain('新增單元');expect(view.find('select').exists()).toBe(false);view.unmount();curriculum.canManage=true
 })
+it('keeps ordinary assessment grading actions inside their unit for staff',async()=>{
+ const view=render(true);await flushPromises();expect(view.text()).toContain('批改作答');view.unmount()
+})

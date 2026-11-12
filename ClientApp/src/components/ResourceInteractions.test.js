@@ -9,6 +9,7 @@ it('shows counts and plain text comments while archived/practice interactions ar
  api.mockResolvedValue({likes:2,liked:true,total:25,page:1,writable:false,items:[{id:'x',author:'合成',text:'<b>留言</b>',createdAt:'2026-11-09'}]})
  const w=mount(ResourceInteractions,{props:{courseId:'c',resourceId:'r'}});await flushPromises()
  expect(w.text()).toContain('已按讚 2');expect(w.text()).toContain('留言 25');expect(w.text()).toContain('<b>留言</b>');expect(w.find('b').exists()).toBe(false);expect(w.find('textarea').exists()).toBe(false)
+ expect(w.findAll('.interaction-count')).toHaveLength(2);expect(w.findAll('.interaction-count').every(item=>item.classes().includes('button')&&item.classes().includes('secondary'))).toBe(true)
  expect(w.get('[aria-pressed]').attributes('disabled')).toBeDefined();w.unmount()
 })
 it('keeps the same request id after an uncertain comment write fails',async()=>{

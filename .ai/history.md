@@ -1,5 +1,23 @@
 # 開發歷程與決策紀錄
 
+## 2026-11-12 單元評量、雙欄批改與全課程示範交卷
+
+依使用者要求把一般線上作業、隨堂／課後測驗與 PDF 作業的作答／批改入口收進課程單元。`CourseUnits` 對教師顯示「批改作答／批改 PDF」，Assignment／Report 深層頁返回單元；側欄移除獨立「批改與評分」，原「測驗與作業」改名「正式考試」。`AssessmentsView` 接回既有但先前未掛載的 `ExamManager`，讓期中／期末等獨立考試成為外層主功能；一般評量建立及舊清單保留在 staff 相容收合區，沒有搬移資料或另建成績系統。
+
+新增 `AssignmentReviewWorkspace`，沿用 class-roster 與 `TeachingPanel`。左欄先列已交、再列未交，組內依學號／姓名排序並可前後切換；已交顯示真正版本、答案、自動得分、人工評分與草稿歷程，未交只渲染唯讀空白卷且不呼叫 submission／grade API。TDD 先確認元件不存在與單元無批改入口的預期失敗，再完成 5 項專項測試。
+
+新增 Development-only `--submitted-assignment-demo`／`--submitted-assignment-demo-audit`。它只處理 active 且具 Demo 標記的課程、已發布／關閉個人線上評量，使用實際 active 學生建立缺少的 submission、answer revisions、submission snapshot 與 quiz grading，並為沒有 grade 的最新快照建立未發布 Codex 草稿。第一次執行涵蓋 14 份評量，新增 149 份交卷與 125 份草稿；第二次新增 0；最終 audit 為 151/151 學生作業皆已交卷且有未發布草稿。既有作答未覆寫，0 筆因本工具發布。
+
+驗證：Vue 29 檔案 89/89；後端 210 通過、19 個外部條件測試略過（sandbox 內 testhost 連線兩次逾時，改於 sandbox 外執行後全綠）；Vite production build、PortalSmoke build 0 警告。Migration runner 重跑確認 public 001–034 全數已套用並 COMMIT。精確停止舊 7173 PID 31860，最新版 PID 9788 只綁 7173。實際 Chrome 驗證「正式考試」側欄、單元批改連結、10 人交卷 sidebar、答案／Codex 草稿評分及正式考試頁；未操作發布按鈕。
+
+## 2026-11-12 靜態教材點閱名冊與影片觀看時間分流
+
+依使用者要求，教師教材統計改依媒體類型呈現。影片／YouTube 沿用正式學生實際時間、內容時間、倍速分段與最近觀看；非影片教材不再於教師面板顯示時間，改列曾點閱學生、每人點閱次數、最近點閱、總瀏覽與現有讚數。課程資源列中影片顯示「觀看紀錄」，靜態素材顯示「點閱紀錄」，不支援計時的格式也可開啟點閱統計。教材互動的留言數量改成與按讚按鈕相同高度、邊框與排列。
+
+Migration 034 新增 `resource_views`；教材頁以 UUID request id POST 點閱，同一次失敗重送不重複。後端只為 active、非練習、非封存的正式學生寫入；教師／助教與預覽安全 no-op，跨課仍由課程授權拒絕。既有 learning sessions 與測驗門檻資料未移除或重算，靜態時間只是不再顯示於本教師面板。
+
+TDD 先取得四項預期失敗，再實作。第一次 PostgreSQL 整合測試發現名冊 reader 未關閉前查讚數的命令衝突；將讚數查詢移至 reader 前後，獨立 `group_test_*` schema 的 001–034 升級及真實點閱冪等／名冊／讚統計測試通過，schema 已刪除。完整回歸為 Vue 28 檔案 86/86、.NET 210 通過／19 條件式略過；Vite production build 及 .NET build 成功。034 已套用 public。最終 7173 app PID 31860，session／Swagger 200，5097／5107／5180 無 listener；Chrome 實際檢視靜態「點閱紀錄」、影片「觀看紀錄」、靜態名冊總覽與讚／留言同列對齊均正確。
+
 ## 2026-11-11 課程資源條列與教材 tag 退役
 
 依使用者確認，教材改以單元作為唯一主要分類。`CourseTools` 由長卡片／日期與 tag 分組改為單元順序的緊湊條列；新增 `ResourceVisual`，圖片透過既有授權 preview API 延遲載入且失敗回退圖示，其他文件與 YouTube 顯示格式圖示。每列整理名稱、原檔名、大小、授課日、上傳日、下載數、兩行摘要與角色允許的操作；教師可就地移動單元。搜尋只涵蓋名稱、原始檔名與摘要。

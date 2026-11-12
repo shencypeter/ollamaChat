@@ -33,7 +33,7 @@ const studentPortal=computed(()=>route.path==='/student/courses' || experience.s
 const portalPath=computed(()=>studentPortal.value?'/student/courses':'/courses')
 const portalLabel=computed(()=>studentPortal.value?'我的修課':'我的授課')
 const sections=computed(()=>course.value?courseSections(course.value):[])
-const section=computed(()=>route.params.assignmentId||route.params.reportId?'assessments':route.params.resourceId?'resources':route.query.section||'home')
+const section=computed(()=>route.params.assignmentId||route.params.reportId?'units':route.params.resourceId?'resources':route.query.section||'home')
 const current=computed(()=>course.value?(sections.value.find(p=>p.key===section.value)?.label||route.meta.title):route.meta.title)
 async function closeDrawer(focus=true){mobileOpen.value=false;await nextTick();if(focus)menuButton.value?.focus()}
 async function openDrawer(){mobileOpen.value=true;await nextTick();drawer.value?.querySelector('a')?.focus()}

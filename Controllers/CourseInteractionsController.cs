@@ -15,6 +15,8 @@ public sealed class CourseInteractionsController(NpgsqlDataSource source, Learne
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed class LikeInput { [JsonRequired] public bool Liked { get; set; } }
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+    public sealed class ViewInput { [JsonRequired] public Guid Id { get; set; } }
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed class TextInput
     {
         [JsonRequired] public Guid Id { get; set; }
@@ -72,6 +74,20 @@ public sealed class CourseInteractionsController(NpgsqlDataSource source, Learne
         var items = new List<object>();
         await using (var r = await cmd.ExecuteReaderAsync(ct)) while(await r.ReadAsync(ct)) items.Add(new { id=r.GetGuid(0),author=r.GetString(1),text=r.GetString(2),createdAt=r.GetFieldValue<DateTimeOffset>(3) });
         return Ok(new { likes, liked, total, page, pageSize=20, writable, items });
+    }, ct);
+    [HttpPost("resources/{id:guid}/views")]
+    public Task<IActionResult> RecordView(Guid course, Guid id, ViewInput input, CancellationToken ct) => Run(course, false, async (db, role, writable) =>
+    {
+        if (!await Resource(db, course, id, ct)) return NotFound();
+        if (input.Id == Guid.Empty) return BadRequest(new { error="請提供有效的點閱識別。" });
+        if (!writable || role != "student") return NoContent();
+        await using var cmd = Command(db, "INSERT INTO resource_views(id,resource_id,user_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING", input.Id,id,Actor);
+        if (await cmd.ExecuteNonQueryAsync(ct) == 0)
+        {
+            await using var same = Command(db, "SELECT EXISTS(SELECT 1 FROM resource_views WHERE id=$1 AND resource_id=$2 AND user_id=$3)", input.Id,id,Actor);
+            if (await same.ExecuteScalarAsync(ct) is not true) return Conflict(new { error="點閱識別已使用，請重新整理。" });
+        }
+        return NoContent();
     }, ct);
     [HttpPut("resources/{id:guid}/like")]
     public Task<IActionResult> Like(Guid course, Guid id, LikeInput input, CancellationToken ct) => Run(course, true, async (db, role, writable) =>

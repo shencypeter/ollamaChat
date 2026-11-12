@@ -29,6 +29,13 @@ it('renders compact resources by unit with metadata and a legacy section without
  expect(view.text()).not.toContain('標籤');expect(view.text()).not.toContain('未標記');expect(view.find('.resource-move').exists()).toBe(false);view.unmount()
 })
 
+it('offers static view records even when the material has no timed learning type',async()=>{
+ const view=render();await flushPromises()
+ expect(view.findAll('.resource-row')[0].text()).toContain('點閱紀錄')
+ expect(view.findAll('.resource-row')[1].text()).toContain('點閱紀錄')
+ view.unmount()
+})
+
 it('requires a unit for new resources and guides teachers when no unit exists',async()=>{
  const view=render();await flushPromises();await view.get('details.add-resource summary').trigger('click')
  expect(view.get('select[aria-label="新增教材所屬單元"]').attributes('required')).toBeDefined()

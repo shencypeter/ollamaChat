@@ -62,6 +62,7 @@ async function upload(){
 async function moveResource(item,unitId){if(unitId===item.unitId)return;await run(async()=>{await api(`${base}/units/activities/material/${item.id}`,{method:'PUT',body:{unitId}});emit('changed');notice.value='教材已移至指定單元。'})}
 async function download(item){await run(async()=>{const blob=await api(`${base}/resources/${item.id}/download`,{method:'POST',download:true});const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=item.fileName;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)})}
 function sizeLabel(item){return item.resourceType==='youtube'?'YouTube':`${Math.max(1,Math.ceil(item.size/1024))} KB`}
+function videoResource(item){return item.resourceType==='youtube'||item.learningType?.startsWith('video/')}
 function assignedElsewhere(id){const owner=membership.value.get(id);return owner&&owner.id!==group.value.id}
 async function dissolve(item){if(confirm('解散「'+item.name+'」？已繳交的作業會保留成員紀錄。'))await run(async()=>{await api(base+'/groups/'+item.id,{method:'DELETE'});group.value={name:'',members:[]}})}
 async function saveGroup(){await run(async()=>{await api(`${base}/groups${group.value.id?'/'+group.value.id:''}`,{method:group.value.id?'PUT':'POST',body:group.value});group.value={name:'',members:[]};notice.value='小組已儲存。'})}
@@ -116,7 +117,7 @@ onMounted(load)
     <div class="resource-actions">
      <RouterLink :to="`/courses/${course.id}/materials/${item.id}`" class="button primary"><Play v-if="item.resourceType==='youtube'" :size="16" />{{item.resourceType==='youtube'?'觀看回放':'開啟教材'}}</RouterLink>
      <button v-if="item.resourceType!=='youtube'&&!(course.canPractice&&!staff)" class="button secondary" :disabled="busy" @click="download(item)">下載</button>
-     <button v-if="staff&&item.learningType&&!course.taRestrictions?.includes('statistics')" class="button secondary" :disabled="busy" @click="statsResource=item"><UsersRound :size="16" />參與紀錄</button>
+     <button v-if="staff&&!course.taRestrictions?.includes('statistics')" class="button secondary" :disabled="busy" @click="statsResource=item"><UsersRound :size="16" />{{videoResource(item)?'觀看紀錄':'點閱紀錄'}}</button>
      <label v-if="editable" class="resource-move">所屬單元<select :aria-label="`${item.title||item.fileName} 所屬單元`" :value="item.unitId||''" :disabled="busy" @change="moveResource(item,$event.target.value)"><option v-if="!item.unitId" disabled value="">未歸類</option><option v-for="unit in units" :key="unit.id" :value="unit.id">{{unit.name}}</option></select></label>
     </div>
    </li></ol>

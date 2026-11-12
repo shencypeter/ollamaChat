@@ -44,6 +44,19 @@ public class CourseInteractionTests:IAsyncLifetime
         await As(student).Like(course,resource,new(){Liked=false},default);
         Assert.Equal(0,Value(await As(student).Interactions(course,resource,default)).GetProperty("likes").GetInt64());
     }
+    [Fact] public async Task StaticViewsAreIdempotentAndStatisticsShowRosterViewsAndLikes()
+    {
+        if(!Enabled)return;
+        var request=new CourseInteractionsController.ViewInput{Id=Guid.NewGuid()};
+        Assert.IsType<NoContentResult>(await As(student).RecordView(course,resource,request,default));
+        Assert.IsType<NoContentResult>(await As(student).RecordView(course,resource,request,default));
+        Assert.IsType<NoContentResult>(await As(peer).RecordView(course,resource,new(){Id=Guid.NewGuid()},default));
+        Assert.IsType<NoContentResult>(await As(teacher).RecordView(course,resource,new(){Id=Guid.NewGuid()},default));
+        await As(student).Like(course,resource,new(){Liked=true},default);
+        var stats=JsonSerializer.SerializeToElement(await new LearningTime(db,TimeProvider.System).Statistics(course,resource,teacher,false,default));
+        Assert.False(stats.GetProperty("isVideo").GetBoolean());Assert.Equal(2,stats.GetProperty("viewCount").GetInt64());Assert.Equal(2,stats.GetProperty("viewedCount").GetInt32());Assert.Equal(1,stats.GetProperty("likes").GetInt64());
+        Assert.Equal(1,stats.GetProperty("students").EnumerateArray().Single(x=>x.GetProperty("id").GetGuid()==student).GetProperty("views").GetInt64());
+    }
     [Fact] public async Task CommentsArePlainTextDeduplicatedAndPaged()
     {
         if(!Enabled)return;

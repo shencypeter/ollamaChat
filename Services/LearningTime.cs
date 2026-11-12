@@ -83,24 +83,33 @@ public sealed class LearningTime(NpgsqlDataSource source,TimeProvider clock)
     public async Task<object> Statistics(Guid course,Guid id,Guid actor,bool practice,CancellationToken ct)
     {
         await using var conn=await source.OpenConnectionAsync(ct);var (role,status)=await Access(conn,course,actor,false,ct);
-        if(practice || role is not ("teacher" or "ta"))throw new AssignmentWorkflowException(403,"只有本課程教師／助教可查看正式學習時間。");
-        await using(var check=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM course_resources WHERE course_id=$1 AND id=$2)",conn)){Add(check,course);Add(check,id);if(await check.ExecuteScalarAsync(ct) is not true)throw new AssignmentWorkflowException(404,"找不到本課教材。");}
+        if(practice || role is not ("teacher" or "ta"))throw new AssignmentWorkflowException(403,"只有本課程教師／助教可查看正式教材參與紀錄。");
+        string? media;
+        await using(var check=new NpgsqlCommand("SELECT file_name,substring(content from 1 for 16),resource_type FROM course_resources WHERE course_id=$1 AND id=$2",conn)){
+            Add(check,course);Add(check,id);await using var found=await check.ExecuteReaderAsync(ct);if(!await found.ReadAsync(ct))throw new AssignmentWorkflowException(404,"找不到本課教材。");media=LearningTimePolicy.MediaType(found.GetString(0),found.GetFieldValue<byte[]>(1),found.GetString(2));}
+        var isVideo=media?.StartsWith("video/")==true;
         var breakdown=new Dictionary<Guid,List<object>>();
         // Load speed evidence before opening the student summary reader.
-        await using(var rates=new NpgsqlCommand("SELECT s.user_id,s.playback_rate,floor(sum(s.credited_milliseconds)/1000.0)::bigint,floor(sum(s.content_milliseconds)/1000.0)::bigint FROM learning_time_sessions s JOIN course_members m ON m.user_id=s.user_id AND m.course_id=$2 JOIN app_users u ON u.id=m.user_id WHERE s.resource_id=$1 AND NOT s.is_practice AND s.credited_milliseconds>0 AND m.status='active' AND m.course_role='student' AND u.status='active' GROUP BY s.user_id,s.playback_rate ORDER BY s.playback_rate",conn)){
+        if(isVideo)await using(var rates=new NpgsqlCommand("SELECT s.user_id,s.playback_rate,floor(sum(s.credited_milliseconds)/1000.0)::bigint,floor(sum(s.content_milliseconds)/1000.0)::bigint FROM learning_time_sessions s JOIN course_members m ON m.user_id=s.user_id AND m.course_id=$2 JOIN app_users u ON u.id=m.user_id WHERE s.resource_id=$1 AND NOT s.is_practice AND s.credited_milliseconds>0 AND m.status='active' AND m.course_role='student' AND u.status='active' GROUP BY s.user_id,s.playback_rate ORDER BY s.playback_rate",conn)){
             Add(rates,id);Add(rates,course);await using var rr=await rates.ExecuteReaderAsync(ct);
             while(await rr.ReadAsync(ct)){var user=rr.GetGuid(0);if(!breakdown.ContainsKey(user))breakdown[user]=[];breakdown[user].Add(new{playbackRate=rr.GetDouble(1),watchSeconds=rr.GetInt64(2),contentSeconds=rr.GetInt64(3)});}
         }
+        await using var likeCount=new NpgsqlCommand("SELECT count(*) FROM resource_likes WHERE resource_id=$1",conn);Add(likeCount,id);var likes=(long)(await likeCount.ExecuteScalarAsync(ct))!;
         await using var cmd=new NpgsqlCommand("""
-            SELECT u.id,u.display_name,u.student_number,COALESCE(floor(sum(s.credited_milliseconds)/1000.0),0)::bigint,count(s.id),max(s.last_seen_at),COALESCE(floor(sum(s.content_milliseconds)/1000.0),0)::bigint
+            SELECT u.id,u.display_name,u.student_number,
+              COALESCE((SELECT floor(sum(s.credited_milliseconds)/1000.0) FROM learning_time_sessions s WHERE s.user_id=u.id AND s.resource_id=$1 AND NOT s.is_practice AND s.credited_milliseconds>0),0)::bigint,
+              (SELECT count(*) FROM learning_time_sessions s WHERE s.user_id=u.id AND s.resource_id=$1 AND NOT s.is_practice AND s.credited_milliseconds>0),
+              (SELECT max(s.last_seen_at) FROM learning_time_sessions s WHERE s.user_id=u.id AND s.resource_id=$1 AND NOT s.is_practice AND s.credited_milliseconds>0),
+              COALESCE((SELECT floor(sum(s.content_milliseconds)/1000.0) FROM learning_time_sessions s WHERE s.user_id=u.id AND s.resource_id=$1 AND NOT s.is_practice AND s.credited_milliseconds>0),0)::bigint,
+              (SELECT count(*) FROM resource_views v WHERE v.user_id=u.id AND v.resource_id=$1),
+              (SELECT max(v.viewed_at) FROM resource_views v WHERE v.user_id=u.id AND v.resource_id=$1)
             FROM course_members m JOIN app_users u ON u.id=m.user_id
-            LEFT JOIN learning_time_sessions s ON s.user_id=u.id AND s.resource_id=$1 AND NOT s.is_practice AND s.credited_milliseconds>0
             WHERE m.course_id=$2 AND m.status='active' AND m.course_role='student' AND u.status='active'
-            GROUP BY u.id ORDER BY u.student_number NULLS LAST,u.display_name,u.id
+            ORDER BY u.student_number NULLS LAST,u.display_name,u.id
             """,conn);Add(cmd,id);Add(cmd,course);await using var r=await cmd.ExecuteReaderAsync(ct);
-        var rows=new List<object>();long total=0,totalContent=0;int watched=0;
-        while(await r.ReadAsync(ct)){var seconds=r.GetInt64(3);total+=seconds;totalContent+=r.GetInt64(6);if(seconds>0)watched++;rows.Add(new{id=r.GetGuid(0),displayName=r.GetString(1),studentNumber=r.IsDBNull(2)?null:r.GetString(2),accumulatedSeconds=seconds,contentSeconds=r.GetInt64(6),playbackSpeeds=breakdown.GetValueOrDefault(r.GetGuid(0))??[],sessions=r.GetInt64(4),lastWatchedAt=r.IsDBNull(5)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(5)});}
-        return new{resourceId=id,studentCount=rows.Count,watchedCount=watched,totalSeconds=total,totalContentSeconds=totalContent,students=rows};
+        var rows=new List<object>();long total=0,totalContent=0,views=0;int watched=0,viewed=0;
+        while(await r.ReadAsync(ct)){var seconds=r.GetInt64(3);var studentViews=r.GetInt64(7);total+=seconds;totalContent+=r.GetInt64(6);views+=studentViews;if(seconds>0)watched++;if(studentViews>0)viewed++;rows.Add(new{id=r.GetGuid(0),displayName=r.GetString(1),studentNumber=r.IsDBNull(2)?null:r.GetString(2),accumulatedSeconds=seconds,contentSeconds=r.GetInt64(6),playbackSpeeds=breakdown.GetValueOrDefault(r.GetGuid(0))??[],sessions=r.GetInt64(4),lastWatchedAt=r.IsDBNull(5)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(5),views=studentViews,lastViewedAt=r.IsDBNull(8)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(8)});}
+        return new{resourceId=id,isVideo,studentCount=rows.Count,watchedCount=watched,totalSeconds=total,totalContentSeconds=totalContent,viewedCount=viewed,viewCount=views,likes,students=rows};
     }
     private static async Task LockUser(NpgsqlConnection conn,Guid actor,CancellationToken ct)
     {await using var cmd=new NpgsqlCommand("SELECT pg_advisory_xact_lock(hashtextextended($1::text,17001))",conn);Add(cmd,actor.ToString());await cmd.ExecuteNonQueryAsync(ct);}
