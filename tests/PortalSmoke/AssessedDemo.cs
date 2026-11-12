@@ -153,4 +153,41 @@ internal static class AssessedDemo
         await tx.CommitAsync();
         Console.WriteLine($"Stored {rows.Length} simulated submissions with Codex draft assessments.");
     }
+
+    internal static async Task Audit()
+    {
+        if(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")!="Development")
+            throw new InvalidOperationException("The assessed demo audit requires Development.");
+        var connection=Environment.GetEnvironmentVariable("ConnectionStrings__Portal");
+        if(string.IsNullOrWhiteSpace(connection))throw new InvalidOperationException("ConnectionStrings__Portal is required.");
+        await using var database=NpgsqlDataSource.Create(connection);
+        await using var db=await database.OpenConnectionAsync();
+        const string sql="""
+            SELECT c.title,a.title,a.submission_mode,
+                   count(s.id),
+                   count(s.id) FILTER (WHERE s.score IS NOT NULL AND s.graded_by IS NOT NULL AND s.graded_at IS NOT NULL AND length(trim(s.feedback))>0),
+                   count(s.id) FILTER (WHERE EXISTS(SELECT 1 FROM report_grade_events e WHERE e.submission_id=s.id AND e.details->>'codexDemo'='true' AND e.details->>'draft'='true')),
+                   count(s.id) FILTER (WHERE s.published_score IS NOT NULL)
+            FROM courses c
+            JOIN report_assignments a ON a.course_id=c.id AND a.status='published'
+            LEFT JOIN report_submissions s ON s.report_id=a.id AND NOT s.is_practice
+            WHERE EXISTS(SELECT 1 FROM audit_events e WHERE e.entity_id=c.id AND e.action='demo.course_workshop.20261111')
+            GROUP BY c.created_at,c.id,c.title,a.created_at,a.id,a.title,a.submission_mode
+            ORDER BY c.created_at,c.id,a.created_at,a.id
+            """;
+        await using var command=new NpgsqlCommand(sql,db);
+        await using var reader=await command.ExecuteReaderAsync();
+        var assignments=0;long submissions=0;long published=0;
+        while(await reader.ReadAsync())
+        {
+            var course=reader.GetString(0);var assignment=reader.GetString(1);var mode=reader.GetString(2);
+            var submitted=reader.GetInt64(3);var assessed=reader.GetInt64(4);var codex=reader.GetInt64(5);var released=reader.GetInt64(6);
+            if(submitted==0 || assessed!=submitted || codex!=submitted)
+                throw new InvalidOperationException($"Assessed demo audit failed for {course} / {assignment}: submitted={submitted}, assessed={assessed}, codexDrafts={codex}.");
+            Console.WriteLine($"OK {course} / {assignment} ({mode}): {submitted} submitted, {assessed} Codex-assessed, {released} published.");
+            assignments++;submissions+=submitted;published+=released;
+        }
+        if(assignments==0)throw new InvalidOperationException("No demo assignments were found.");
+        Console.WriteLine($"Assessed demo audit passed: {assignments} assignments, {submissions} assessed submissions, {published} published scores.");
+    }
 }

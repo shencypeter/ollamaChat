@@ -28,37 +28,34 @@ public sealed partial class CourseToolsController(NpgsqlDataSource source,Learne
         return Ok(result);
     }
     [HttpGet("resources")]
-    public async Task<IActionResult> Resources(Guid course,CancellationToken ct,[FromQuery,StringLength(200)] string? q=null,[FromQuery,StringLength(30)] string? tag=null,[FromQuery] string? teachingFrom=null,[FromQuery] string? teachingTo=null,[FromQuery] bool undated=false,[FromQuery] string? sort=null)
+    public async Task<IActionResult> Resources(Guid course,CancellationToken ct,[FromQuery,StringLength(200)] string? q=null,[FromQuery] string? teachingFrom=null,[FromQuery] string? teachingTo=null,[FromQuery] bool undated=false,[FromQuery] string? sort=null)
     {
         var role=await Access(course,false,ct);if(role==null)return Forbid();
         DateOnly? from,to;string order;
         try{from=ResourceMetadataPolicy.Date(teachingFrom);to=ResourceMetadataPolicy.Date(teachingTo);order=ResourceMetadataPolicy.Order(sort);if(from>to || undated&&(from!=null||to!=null))return BadRequest(new{error="請提供有效日期區間，未指定日期不可與區間並用。"});}
         catch(ArgumentException e){return BadRequest(new{error=e.Message});}
-        await using var cmd=source.CreateCommand("SELECT id,file_name,octet_length(content),download_count,created_at,substring(content from 1 for 16),display_title,title_version,tags,tags_version,resource_type,youtube_video_id,teaching_date,summary,metadata_version,notify_students FROM course_resources WHERE course_id=$1 AND ($2::text IS NULL OR strpos(lower(display_title||' '||file_name||' '||summary||' '||array_to_string(tags,' ')),lower($2))>0) AND ($3::text IS NULL OR EXISTS(SELECT 1 FROM unnest(tags) t WHERE lower(t)=lower($3))) AND ($4::date IS NULL OR teaching_date >= $4) AND ($5::date IS NULL OR teaching_date <= $5) AND (NOT $6 OR teaching_date IS NULL) ORDER BY "+order);cmd.Parameters.AddWithValue(course);
-        string? normalizedTag;try{normalizedTag=ResourceTagPolicy.Normalize(tag==null?[]:[tag]).FirstOrDefault();}catch(ArgumentException e){return BadRequest(new{error=e.Message});}
+        await using var cmd=source.CreateCommand("SELECT id,file_name,octet_length(content),download_count,created_at,substring(content from 1 for 16),display_title,title_version,resource_type,youtube_video_id,teaching_date,summary,metadata_version,notify_students,unit_id FROM course_resources WHERE course_id=$1 AND ($2::text IS NULL OR strpos(lower(display_title||' '||file_name||' '||summary),lower($2))>0) AND ($3::date IS NULL OR teaching_date >= $3) AND ($4::date IS NULL OR teaching_date <= $4) AND (NOT $5 OR teaching_date IS NULL) ORDER BY "+order);cmd.Parameters.AddWithValue(course);
         cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Text,Value=string.IsNullOrWhiteSpace(q)?DBNull.Value:q.Trim()});
-        cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Text,Value=(object?)normalizedTag??DBNull.Value});
         cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Date,Value=(object?)from??DBNull.Value});cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Date,Value=(object?)to??DBNull.Value});cmd.Parameters.AddWithValue(undated);
         await using var r=await cmd.ExecuteReaderAsync(ct);var result=new List<object>();
-        while(await r.ReadAsync(ct))result.Add(new{id=r.GetGuid(0),fileName=r.GetString(1),size=r.GetInt32(2),downloadCount=r.GetInt64(3),createdAt=r.GetFieldValue<DateTimeOffset>(4),previewType=FilePreviewPolicy.ContentType(r.GetString(1),r.GetFieldValue<byte[]>(5)),learningType=LearningTimePolicy.MediaType(r.GetString(1),r.GetFieldValue<byte[]>(5),r.GetString(10)),title=r.GetString(6),titleVersion=r.GetInt32(7),tags=r.GetFieldValue<string[]>(8),tagsVersion=r.GetInt32(9),resourceType=r.GetString(10),youtubeVideoId=r.IsDBNull(11)?null:r.GetString(11),teachingDate=r.IsDBNull(12)?(DateOnly?)null:r.GetFieldValue<DateOnly>(12),summary=r.GetString(13),metadataVersion=r.GetInt32(14),notifyStudents=r.GetBoolean(15)});
+        while(await r.ReadAsync(ct))result.Add(new{id=r.GetGuid(0),fileName=r.GetString(1),size=r.GetInt32(2),downloadCount=r.GetInt64(3),createdAt=r.GetFieldValue<DateTimeOffset>(4),previewType=FilePreviewPolicy.ContentType(r.GetString(1),r.GetFieldValue<byte[]>(5)),learningType=LearningTimePolicy.MediaType(r.GetString(1),r.GetFieldValue<byte[]>(5),r.GetString(8)),title=r.GetString(6),titleVersion=r.GetInt32(7),resourceType=r.GetString(8),youtubeVideoId=r.IsDBNull(9)?null:r.GetString(9),teachingDate=r.IsDBNull(10)?(DateOnly?)null:r.GetFieldValue<DateOnly>(10),summary=r.GetString(11),metadataVersion=r.GetInt32(12),notifyStudents=r.GetBoolean(13),unitId=r.IsDBNull(14)?(Guid?)null:r.GetGuid(14)});
         return Ok(result);
     }
     [AiTeachingAssistant.Services.CourseCapability("materials")]
     [HttpPost("resources"),RequestSizeLimit(22*1024*1024)]
-    public async Task<IActionResult> Upload(Guid course,IFormFile file,[FromForm,StringLength(200)] string? title,[FromForm] List<string?>? tags,CancellationToken ct,[FromForm] string? teachingDate=null,[FromForm,StringLength(10000)] string? summary=null,[FromForm] bool notifyStudents=false,[FromForm] Guid? unitId=null)
+    public async Task<IActionResult> Upload(Guid course,IFormFile file,[FromForm,StringLength(200)] string? title,CancellationToken ct,[FromForm] string? teachingDate=null,[FromForm,StringLength(10000)] string? summary=null,[FromForm] bool notifyStudents=false,[FromForm] Guid unitId=default)
     {
         if(await Access(course,true,ct)==null)return Forbid();
-        string[] normalizedTags;try{normalizedTags=ResourceTagPolicy.Normalize(tags);}catch(ArgumentException e){return BadRequest(new{error=e.Message});}
         DateOnly? date;try{date=ResourceMetadataPolicy.Date(teachingDate);summary=ResourceMetadataPolicy.Summary(summary);}catch(ArgumentException e){return BadRequest(new{error=e.Message});}
         if(file.Length is <=0 or >20*1024*1024)return BadRequest(new{error="請上傳 1 byte 至 20 MB 的檔案。"});
         var name=Path.GetFileName(file.FileName.Replace('\\','/'));if(string.IsNullOrWhiteSpace(name)||name.Length>200)return BadRequest(new{error="檔名無效或超過 200 字元。"});
 
         using var buffer=new MemoryStream();await file.CopyToAsync(buffer,ct);
         await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);
-        await using(var gate=new NpgsqlCommand("SELECT status FROM courses WHERE id=$1 AND ($2::uuid IS NULL OR EXISTS(SELECT 1 FROM course_units WHERE id=$2 AND course_id=$1)) FOR SHARE",conn)){gate.Parameters.AddWithValue(course);gate.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Uuid,Value=(object?)unitId??DBNull.Value});if(await gate.ExecuteScalarAsync(ct) is not string status||status=="archived")return unitId.HasValue?BadRequest(new{error="單元不屬於本課程。"}):Forbid();}
-        await using var cmd=new NpgsqlCommand("INSERT INTO course_resources(course_id,file_name,content,uploaded_by,display_title,tags,teaching_date,summary,notify_students,unit_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",conn);
+        await using(var gate=new NpgsqlCommand("SELECT status FROM courses WHERE id=$1 AND EXISTS(SELECT 1 FROM course_units WHERE id=$2 AND course_id=$1) FOR SHARE",conn)){gate.Parameters.AddWithValue(course);gate.Parameters.AddWithValue(unitId);if(await gate.ExecuteScalarAsync(ct) is not string status)return BadRequest(new{error="請選擇本課程的單元。"});if(status=="archived")return Forbid();}
+        await using var cmd=new NpgsqlCommand("INSERT INTO course_resources(course_id,file_name,content,uploaded_by,display_title,teaching_date,summary,notify_students,unit_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id",conn);
         cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(name);cmd.Parameters.AddWithValue(buffer.ToArray());cmd.Parameters.AddWithValue(Actor);
-        cmd.Parameters.AddWithValue(title?.Trim()??"");cmd.Parameters.AddWithValue(normalizedTags);cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Date,Value=(object?)date??DBNull.Value});cmd.Parameters.AddWithValue(summary);cmd.Parameters.AddWithValue(notifyStudents);cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Uuid,Value=(object?)unitId??DBNull.Value});
+        cmd.Parameters.AddWithValue(title?.Trim()??"");cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Date,Value=(object?)date??DBNull.Value});cmd.Parameters.AddWithValue(summary);cmd.Parameters.AddWithValue(notifyStudents);cmd.Parameters.AddWithValue(unitId);
         var id=(Guid)(await cmd.ExecuteScalarAsync(ct))!;
         await using(var audit=new NpgsqlCommand("INSERT INTO audit_events(actor_user_id,entity_type,entity_id,action) VALUES($1,'course_resources',$2,'resource.file_uploaded')",conn)){audit.Parameters.AddWithValue(Actor);audit.Parameters.AddWithValue(id);await audit.ExecuteNonQueryAsync(ct);}
         await tx.CommitAsync(ct);return Ok(new{id});

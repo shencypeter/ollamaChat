@@ -24,6 +24,8 @@ internal static class GroupUpgrade
             await DatabaseMigrator.RunAsync(db,temp.FullName,true);
         }finally{temp.Delete(true);}
         await CourseDemo.Seed(false);
+        await using var resources=db.CreateCommand("SELECT md5(coalesce(string_agg(id::text||course_id::text||file_name||md5(content)||display_title,',' ORDER BY id),'')) FROM course_resources");
+        var resourcesBefore=(string?)await resources.ExecuteScalarAsync()??throw new Exception("Missing legacy resource checksum.");
         await using var grade=db.CreateCommand("""
             UPDATE report_submissions s SET score=84,published_score=80,feedback='draft',published_feedback='released',
              graded_by=a.created_by,graded_at=now()
@@ -34,6 +36,11 @@ internal static class GroupUpgrade
         var before=(string?)await legacy.ExecuteScalarAsync()??throw new Exception("Missing 028 submission fixtures.");
         await DatabaseMigrator.RunAsync(db,directory,true);
         if(!Equals(before,await legacy.ExecuteScalarAsync()))throw new Exception("Legacy submissions changed.");
+        if(!Equals(resourcesBefore,await resources.ExecuteScalarAsync()))throw new Exception("Legacy resources changed.");
+        await using(var resourceUnits=db.CreateCommand("SELECT NOT EXISTS(SELECT 1 FROM course_resources WHERE unit_id IS NULL)"))
+            if(await resourceUnits.ExecuteScalarAsync() is not true)throw new Exception("Migrated resources are missing units.");
+        await using(var removedTags=db.CreateCommand("SELECT NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='course_resources' AND column_name IN ('tags','tags_version'))"))
+            if(await removedTags.ExecuteScalarAsync() is not true)throw new Exception("Legacy resource tag columns remain.");
         await using var check=db.CreateCommand("SELECT bool_and(a.submission_mode='individual' AND s.revision=1 AND s.group_id IS NULL) FROM report_submissions s JOIN report_assignments a ON a.id=s.report_id");
         if(await check.ExecuteScalarAsync() is not true)throw new Exception("Invalid migrated defaults.");
         await using var audit=db.CreateCommand("SELECT count(*)=(SELECT count(*) FROM report_submissions) FROM report_grade_events WHERE details->>'migration'='29'");

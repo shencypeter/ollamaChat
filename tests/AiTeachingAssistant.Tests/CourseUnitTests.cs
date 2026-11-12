@@ -33,6 +33,13 @@ public class CourseUnitTests : IAsyncLifetime
     }
     private CourseUnitsController Units(Guid id,bool practice=false){var x=Context(id,practice);return new(db,x.Experience){ControllerContext=new(){HttpContext=x.Context}};}
     private CoursesController Courses(Guid id){var x=Context(id);return new(db,x.Experience){ControllerContext=new(){HttpContext=x.Context}};}
+    private CourseToolsController Tools(Guid id){var x=Context(id);return new(db,x.Experience){ControllerContext=new(){HttpContext=x.Context}};}
+    private static async Task<IActionResult> Upload(CourseToolsController controller,Guid course,IFormFile file,string title,Guid unit)
+    {
+        var method=typeof(CourseToolsController).GetMethods().Single(x=>x.Name=="Upload");
+        var values=method.GetParameters().Select(p=>p.Name switch{"course"=>course,"file"=>file,"title"=>title,"unitId"=>unit,"ct"=>default(CancellationToken),_=>p.HasDefaultValue?p.DefaultValue:null}).ToArray();
+        return await (Task<IActionResult>)method.Invoke(controller,values)!;
+    }
     private static JsonElement Json(IActionResult result)=>JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(result).Value);
 
     [Fact]
@@ -66,6 +73,24 @@ public class CourseUnitTests : IAsyncLifetime
         Assert.Contains(publishedQuiz,ids);Assert.DoesNotContain(draftQuiz,ids);
         var preview=Json(await Units(teacher,true).Curriculum(course,default));
         Assert.False(preview.GetProperty("canManage").GetBoolean());Assert.DoesNotContain(draftQuiz,preview.GetProperty("activities").EnumerateArray().Select(x=>x.GetProperty("id").GetGuid()));
+    }
+
+    [Fact]
+    public async Task NewResourcesRequireASameCourseUnitAndListItsUnitWithoutTags()
+    {
+        if(!Enabled)return;
+        var own=Json(await Units(teacher).Create(course,new(){Name="教材單元"},default)).GetProperty("id").GetGuid();
+        var foreign=Json(await Units(teacher).Create(other,new(){Name="其他課單元"},default)).GetProperty("id").GetGuid();
+        IFormFile File()=>new FormFile(new MemoryStream("material"u8.ToArray()),0,8,"file","material.txt");
+        Assert.IsType<BadRequestObjectResult>(await Upload(Tools(teacher),course,File(),"缺單元",Guid.Empty));
+        Assert.IsType<BadRequestObjectResult>(await Upload(Tools(teacher),course,File(),"跨課",foreign));
+        Assert.IsType<OkObjectResult>(await Upload(Tools(teacher),course,File(),"同課",own));
+        Assert.IsType<BadRequestObjectResult>(await Tools(teacher).AddYouTube(course,new(){Title="缺單元回放",Url="https://youtu.be/M7lc1UVf-VE",UnitId=Guid.Empty},default));
+        Assert.IsType<OkObjectResult>(await Tools(teacher).AddYouTube(course,new(){Title="同課回放",Url="https://youtu.be/M7lc1UVf-VE",UnitId=own},default));
+        var listed=Json(await Tools(teacher).Resources(course,default));
+        var created=listed.EnumerateArray().Where(x=>x.GetProperty("unitId").ValueKind!=JsonValueKind.Null && x.GetProperty("unitId").GetGuid()==own).ToArray();
+        Assert.Equal(2,created.Length);
+        Assert.All(created,x=>Assert.False(x.TryGetProperty("tags",out _)));
     }
 
     [Fact]

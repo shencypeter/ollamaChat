@@ -10,9 +10,3 @@ export function filterMaterialMetadata(resources,{from='',to='',undated=false,so
   return (b.createdAt||'').localeCompare(a.createdAt||'')||b.id.localeCompare(a.id)
  })
 }
-export function groupMaterials(resources,grouped){
- if(!grouped)return [{key:'all',label:'',items:resources}]
- const result=new Map()
- for(const item of resources){const key=item.teachingDate||'undated';if(!result.has(key))result.set(key,{key,label:item.teachingDate||'未指定授課日期',items:[]});result.get(key).items.push(item)}
- return [...result.values()]
-}

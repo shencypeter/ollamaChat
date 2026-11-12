@@ -14,12 +14,25 @@ if(args.Contains("--drop-test-schema")){
 if(args.Contains("--assessed-demo")){
     await AssessedDemo.Seed(root);return;
 }
+if(args.Contains("--assessed-demo-audit")){
+    await AssessedDemo.Audit();return;
+}
 if(args.Contains("--activate-demo-classmates")){
     await DemoClassmateAccounts.Activate(root);return;
 }
 if(args.Contains("--course-demo"))
 {
     await CourseDemo.Seed();
+    return;
+}
+if(args.Contains("--discussion-demo"))
+{
+    await DiscussionDemo.Seed();
+    return;
+}
+if(args.Contains("--discussion-demo-audit"))
+{
+    await DiscussionDemo.Audit();
     return;
 }
 using var config=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root,"appsettings.Local.json")));

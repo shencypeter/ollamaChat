@@ -15,18 +15,11 @@ public class ResourceMaterialPolicyTests
         Assert.Equal(expected,LearningTimePolicy.Credit(now,now.AddSeconds(10),true,true,0,position,rate));
     }
 
-    [Fact]public void NormalizesWeekAliasesAndDeduplicatesWithoutLosingCustomTopics()
+    [Fact]public void ResourceCreationContractsRequireAUnit()
     {
-        Assert.Equal(new[]{"第1週","PDF","案例 分析"},ResourceTagPolicy.Normalize([" 第１周 ","week 01","PDF","pdf","案例   分析"," "]));
-        Assert.Empty(ResourceTagPolicy.Normalize(null));
-    }
-    [Fact]public void RejectsOversizedOrAmbiguousTags()
-    {
-        Assert.Throws<ArgumentException>(()=>ResourceTagPolicy.Normalize([new string('a',31)]));
-        Assert.Throws<ArgumentException>(()=>ResourceTagPolicy.Normalize(Enumerable.Range(0,11).Select(i=>"tag"+i)));
-        Assert.Throws<ArgumentException>(()=>ResourceTagPolicy.Normalize([null]));
-        Assert.Throws<ArgumentException>(()=>ResourceTagPolicy.Normalize(["one,two"]));
-        Assert.Throws<ArgumentException>(()=>ResourceTagPolicy.Normalize(["bad\0tag"]));
+        Assert.Equal(typeof(Guid),typeof(AiTeachingAssistant.Controllers.CourseToolsController.YouTubeResourceInput).GetProperty("UnitId")!.PropertyType);
+        var upload=typeof(AiTeachingAssistant.Controllers.CourseToolsController).GetMethods().Single(x=>x.Name=="Upload");
+        Assert.Equal(typeof(Guid),upload.GetParameters().Single(x=>x.Name=="unitId").ParameterType);
     }
     [Theory]
     [InlineData("https://www.youtube.com/watch?v=M7lc1UVf-VE")]
