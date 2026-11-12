@@ -1,5 +1,11 @@
 # 開發歷程與決策紀錄
 
+## 2026-11-12 測驗題目排序改為圖示控制
+
+使用者確認不新增 Font Awesome，沿用專案既有 `@lucide/vue`。`AssignmentEditor` 的拖曳、上移、下移由文字按鈕改為 `GripVertical`、`ArrowUp`、`ArrowDown`，使用全站 `icon-button` 樣式並保留中文 `aria-label`／title、disabled 邊界、既有 drag/drop 與 `move()` 資料流程。沒有修改單元活動或單元卡片排序。
+
+新增真實元件測試，先因舊控制沒有題號化 label／SVG 而失敗，再驗證圖示無可見文字、首末邊界及第二題上移後送出的題目順序。專項 1/1、完整 Vue 33 檔案 100/100 通過；Vite production build 及標準 .NET build 成功。精確停止舊 PID 31080 後，最新版 PID 30864 只綁定 7173；`/courses` 回 200 且載入 `index-BnAXc7hJ.js`，5097、5107、5180 無 listener。
+
 ## 2026-11-12 課程分層工作區與 Migration 035
 
 使用者選定並核准「分層工作區」。參考 `teacher-course-creation-flow.html` 的逐層脈絡，但未搬入固定週次、歷史教材標籤、假資料、先教材後測驗限制或連鎖刪除。前端新增單元 canonical route 與聚焦工作區；課程首頁合併單元總覽，側欄移除重複的單元／教材入口，單元內仍可切換課程討論、分組、成績等課程層功能。教材、線上評量及 PDF 作業可在所屬單元建立並回到同一單元；正式考試頁只保留既有 `ExamManager`。

@@ -1,5 +1,9 @@
 # 代理工作規則與目前交接
 
+## 2026-11-12 測驗題目排序圖示
+
+課程測驗／作業共用編輯器的「拖曳、上移、下移」文字控制已改為既有 Lucide `GripVertical`、`ArrowUp`、`ArrowDown` 圖示按鈕；沒有新增 Font Awesome。中文 `aria-label`／tooltip、首題上移與末題下移的停用狀態、拖放與儲存順位均保留。TDD 專項先失敗後通過，完整 Vue 33 檔案 100/100，Vite 與標準 .NET build 通過。最新版 PID 30864 只在 `https://localhost:7173` 運行，`/courses` 回 200 並載入 `index-BnAXc7hJ.js`；5097／5107／5180 無 listener。
+
 ## 2026-11-12 分層課程工作區
 
 已依核准設計完成平台 → 課程內容 → 單元工作區 → 活動的導覽。課程首頁即單元總覽；單元 canonical URL 為 `/courses/{courseId}/units/{unitId}`，可建立教材、線上／課後測驗與 PDF 作業並跨類型排序。課程層仍保留正式考試、學員、分組、討論、成績、統計與設定；舊 `section=units` 及未歸類活動保留相容。教材、assignment／quiz、PDF 詳情以持久化 `unitId` 返回單元。
