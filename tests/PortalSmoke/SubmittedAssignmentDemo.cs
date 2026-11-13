@@ -73,7 +73,7 @@ internal static class SubmittedAssignmentDemo
                 if(snapshot.HasValue && !await Scalar<bool>(conn,tx,"SELECT EXISTS(SELECT 1 FROM grades WHERE submission_revision_id=$1)",snapshot.Value))
                 {
                     var (score,essayScores)=await DraftScore(conn,tx,target,snapshot.Value,questions,Variation(student.Id,target.AssignmentId));
-                    await Execute(conn,tx,"INSERT INTO grades(submission_revision_id,grader_user_id,score,feedback,essay_scores) VALUES($1,$2,$3,$4,$5::jsonb)",snapshot.Value,target.GraderId,score,$"Codex 示範批改：已回應「{target.AssignmentTitle}」的核心概念並提出具體依據；可再補充限制與後續驗證。",JsonSerializer.Serialize(essayScores));
+                    await Execute(conn,tx,"INSERT INTO grades(submission_revision_id,grader_user_id,score,feedback,essay_scores) VALUES($1,$2,$3,$4,$5::jsonb)",snapshot.Value,target.GraderId,score,$"已回應「{target.AssignmentTitle}」的核心概念並提出具體依據；可再補充限制與後續驗證。",JsonSerializer.Serialize(essayScores));
                     assessed++;
                 }
             }
@@ -86,7 +86,7 @@ internal static class SubmittedAssignmentDemo
     private static string Answer(Target target,(Guid Id,string Name) student,Question question)
     {
         if(question.Type is "single" or "multiple" or "true_false")return question.StandardAnswer;
-        return $"我在「{target.CourseTitle}」的「{target.AssignmentTitle}」中，先依題目整理可觀察的證據，再說明推論。針對「{question.Prompt}」，我的結論是資料支持目前的解釋，但仍需注意樣本、情境與替代原因；後續可用新的觀察或比較資料驗證。（{student.Name} 示範交卷）";
+        return $"我在「{target.CourseTitle}」的「{target.AssignmentTitle}」中，先依題目整理可觀察的證據，再說明推論。針對「{question.Prompt}」，我的結論是資料支持目前的解釋，但仍需注意樣本、情境與替代原因；後續可用新的觀察或比較資料驗證。";
     }
 
     private static async Task<(decimal Score,Dictionary<Guid,decimal> Essays)> DraftScore(NpgsqlConnection conn,NpgsqlTransaction tx,Target target,Guid snapshot,List<Question> questions,int variation)

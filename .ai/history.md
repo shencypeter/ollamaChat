@@ -1,5 +1,29 @@
 # 開發歷程與決策紀錄
 
+## 2026-11-13 清理固定展示評語與檔名
+
+使用者指定目前教師評語中的「Codex 示範批改」及相關不自然展示標記。先盤點只有資料種子產生這些字樣，前端／正式API沒有固定Codex文案。新增 DemoPresentationText 精確規則及 Development-only DemoPresentationCleanup 工具（preview／apply／audit），只依線上 assignment seed 事件及 PDF codexDemo 事件確認來源，避免修改一般教師文字或正常提及 Codex 的檔名。移除固定前綴與 PDF 評語的展示草稿尾註，確定性檔名改作業報告.pdf，互評／意願去展示前綴；未來種子同步修正。
+
+public 單交易完成 grades 125、report_submissions 72（含草稿／公開評語與檔名）、report_peer_reviews 216、report_votes 6，共419列；複查0待整理、再套用0修改。操作逐筆新增文字修訂稽核（欄位與前後雜湊，不存敏感內容），原種子／評分事件不改寫。前後保護欄位雜湊一致，分數、發布值／時間、評分者、PDF內容bytes及作答歷史均未變。不可變交卷快照仍保留原展示尾註，不停用trigger或重建交卷。
+
+新增純規則測試先編譯失敗後通過；後端最終234通過／28條件式略過、PortalSmoke建置0警告錯誤。獨立group_test_* schema實跑預覽／套用／稽核／重跑，驗證無標記但含相同前綴者不變、NULL保持、分數與發布、PDF bytes、不可變快照及原始audit保留；新增5筆維護audit，重跑0，schema已刪除。合成fixture初次漏attempt_no與submitted_at，補齊後通過。無Migration，沒有修改正式畫面計分或重啟7173，資料重新整理即生效。agents／elearning及維護文件更新，未提交Git。
+
+## 2026-11-13 成績總覽改評量列、學員欄
+
+使用者希望把總覽的作業放 rows、學員放 columns。GradebookPanel 教師總覽改為所有篩選評量的逐項對照表，包含 PDF／線上作業、測驗及紙本考試；首欄顯示活動連結、單元、類型與滿分並固定，上方學號／姓名亦固定。各格顯示原始分數及發布狀態，0 不視空白，草稿不混成公開值。原作業／測驗／平時／正式考試分類平均改為表尾列，另顯示全課程暫算及公開快照；篩選範圍與全課程範圍明確分開。可鍵盤聚焦的表格區獨立捲動，說明文字放外側避免水平捲動時被裁掉。得分查詢按 item/student ID 建 Map，避免寬表每格重複掃描完整分數清單。
+
+先修改舊總覽斷言取得預期失敗，再驗證多位學員分數欄位對應、0 分、缺分、另有草稿、公開零總分及單元篩選。Vue 48 檔 165/165、Vite build 通過；Chrome 8 位學員矩陣驗證固定欄（水平捲動 420px 仍保持位置）、學員欄數、得分與單元篩選，加上既有師生流程共 3 項全過，390px 無整頁溢出。初次多學員 fixture 漏掉既有 itemAverages 欄位，補齊後重跑通過。已檢視桌面與手機畫面。
+
+無資料庫、後端或發布算法變更，不需 Migration；既有 7173 PID 17604 未重啟，新 JS index-C6K-xmxA.js。agents／elearning 更新記錄此顯示方向取代五欄摘要；未提交 Git。
+
+## 2026-11-13 Portal 每頁預設五筆
+
+依使用者要求，在共用 PortalPanel 加入每頁 5／10／20／50 選單、局部清單分頁與 remote 分頁事件；用具名稱的 select，收合時可見，阻止點選／鍵盤事件冒泡造成誤切換。OverviewView 所有資訊面板與 PortalActivity 訊息／行程均接入，換筆數回第一頁。學生待辦與訊息會實際以 page/pageSize 查詢，換訊息頁不重置行程分頁；教師討論與最近繳交移除 slice(0,6)。維持原近期 12 筆活動的成績摘要及行程 100 項來源範圍，不宣稱新增全量成績 API。每頁筆數在新進首頁時回預設 5，收合偏好照原規格保存。
+
+新增失敗後通過的分頁測試涵蓋 12 筆資料按 5／10 顯示、最後一頁不漏、remote 換筆數回第 1 頁、學生待辦實際換 API 頁及訊息／行程相互獨立。最終 Vue 48 檔 164/164、Vite build 通過；Chrome 師生 2 個 fixture journey 驗證所有選單預設 5、收合時改成 10 仍保持收合且送出 API pageSize=10，鍵盤、reload 及手機無溢出仍過。已檢視新桌面／手機截圖。
+
+瀏覽器初跑發現 7173 connection refused；確認無 listener 後重啟既有 bin/Debug，PID 17604，僅使用 https://localhost:7173。未修改後端、資料庫或開第二環境。最終 JS index-PJij9hnb.js；agents／elearning 同步更新，未提交 Git。
+
 ## 2026-11-13 Portal 原生收合面板
 
 使用者希望資訊豐富的 Portal 每個區塊可收合。新增共用 PortalPanel，沿用既有設計與 Lucide chevron，以原生 details／summary 提供整列點擊、鍵盤、持續可見的標題與數量；接入 OverviewView 全部資訊面板及 PortalActivity 訊息／行程。預設展開，localStorage 依帳號 ID、教師／學生視角及固定面板 key 存開關值，無帳號不寫、儲存被禁不阻擋操作；不存課程內容。內容保留 DOM，避免關閉後重掛 API 或遺失表單／篩選。摘要捷徑可再次打開已收合的待辦／批改／討論，原錨點導航保留。兩欄面板頂端對齊，關閉時不被鄰欄拉長。

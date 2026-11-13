@@ -62,3 +62,15 @@ it('shows teacher work queues and skips restricted grading/statistics requests',
   expect(view.text()).toContain('助教批改權限')
   view.unmount()
 })
+it('requests five student tasks by default and supports larger server pages without dropping remaining tasks',async()=>{
+ api.mockImplementation(async path=>{
+  if(path==='/courses')return [course]
+  if(path==='/learning-history/courses')return []
+  if(path.includes('todo=true')){const query=new URLSearchParams(path.split('?')[1]),size=Number(query.get('pageSize')),page=Number(query.get('page'));return {total:12,items:Array.from({length:Math.min(size,12-(page-1)*size)},(_,i)=>({id:`t${(page-1)*size+i}`,title:`待辦 ${(page-1)*size+i+1}`,state:'todo',url:'/task'}))}}
+  return {items:[],total:0}
+ })
+ const v=mount(OverviewView,{global});await flushPromises()
+ expect(api).toHaveBeenCalledWith('/learning-history?todo=true&page=1&pageSize=5');expect(v.findAll('#learning-tasks li')).toHaveLength(5)
+ await v.get('select[aria-label="學習待辦 每頁筆數"]').setValue('10');await flushPromises();expect(v.findAll('#learning-tasks li')).toHaveLength(10)
+ await v.get('button[aria-label="學習待辦 下一頁"]').trigger('click');await flushPromises();expect(v.findAll('#learning-tasks li')).toHaveLength(2);expect(v.text()).toContain('待辦 12');v.unmount()
+})

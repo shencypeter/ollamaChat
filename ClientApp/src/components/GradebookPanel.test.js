@@ -52,9 +52,13 @@ it('links ordinary online assignments to an assignment route rather than the qui
  const view=mount(GradebookPanel,{props:{course:{id:'c',status:'active'}},global:{stubs:{RouterLink:{props:['to'],template:'<a :href="to"><slot /></a>'}}}});await flushPromises()
  expect(view.get('a[href="/courses/c/assignments/online-source"]').text()).toBe('一般線上作業');expect(view.find('a[href="/courses/c/quizzes/online-source"]').exists()).toBe(false);view.unmount()
 })
-it('defaults staff to five fixed summary columns, with all original management progressively disclosed',async()=>{
+it('defaults staff to assessment rows and student columns, with all original management progressively disclosed',async()=>{
  const view=render();await flushPromises()
- expect(view.get('[data-testid="grade-overview"] thead').findAll('th').map(x=>x.text())).toEqual(['學號／姓名','作業平均','測驗平均','平時平均','正式考試摘要'])
+ const table=view.get('[data-testid="grade-overview"]')
+ expect(table.get('thead th').text()).toBe('評量項目／滿分')
+ expect(table.findAll('thead th')).toHaveLength(2)
+ expect(table.findAll('thead th')[1].text()).toContain('同學甲')
+ expect(table.findAll('tbody tr').map(row=>row.get('th').text()).join(' ')).toContain('PDF 報告')
  expect(view.get('[data-testid="grade-overview"]').text()).toContain('0.00')
  expect(view.find('[data-testid="grade-details"]').exists()).toBe(false)
  expect(view.find('details.grade-management').exists()).toBe(true)
@@ -67,6 +71,18 @@ it('defaults staff to five fixed summary columns, with all original management p
  expect(view.get('[data-testid="grade-details"]').text()).toContain('PDF 報告')
  expect(view.get('[data-testid="grade-details"]').text()).not.toContain('觀念測驗')
  view.unmount()
+})
+it('maps each assessment score to the correct student column with zero, missing grades and publication status',async()=>{
+ const payload={...data(),students:[...data().students,{id:'s2',displayName:'同學乙',studentNumber:'002'}],scores:[...data().scores,{studentId:'s2',itemId:'a',score:25,publishedScore:20},{studentId:'s2',itemId:'q',score:80,publishedScore:null}],finals:[{studentId:'s',publishedTotal:0}]}
+ api.mockImplementation(async path=>path.endsWith('/curriculum')?curriculum:payload)
+ const v=mount(GradebookPanel,{props:{course:{id:'c',status:'active'}},global:{stubs:{RouterLink:true}}});await flushPromises()
+ const table=v.get('[data-testid="grade-overview"]');expect(table.findAll('thead th')).toHaveLength(3)
+ const assignment=table.get('tr[data-item-id="a"]'),quiz=table.get('tr[data-item-id="q"]')
+ expect(assignment.get('th').text()).toContain('滿分 50');expect(assignment.get('td[data-student-id="s"]').text()).toContain('0.00 分')
+ expect(assignment.get('td[data-student-id="s2"]').text()).toContain('25.00 分');expect(assignment.get('td[data-student-id="s2"]').text()).toContain('另有草稿')
+ expect(quiz.get('td[data-student-id="s"]').text()).toContain('未登錄');expect(quiz.get('td[data-student-id="s2"]').text()).toContain('草稿（未發布）')
+ expect(table.get('tfoot').text()).toContain('已發布課程總成績');expect(table.get('tr[data-summary="published"] td[data-student-id="s"]').text()).toBe('0.00 分')
+ await v.get('select[aria-label="成績單元"]').setValue('u1');expect(table.findAll('tbody tr')).toHaveLength(1);expect(table.findAll('thead th')).toHaveLength(3);v.unmount()
 })
 it('paginates vertical detail rows and resets the page when filters change',async()=>{
  const payload={...data(),students:Array.from({length:30},(_,i)=>({id:`s${i}`,studentNumber:String(i+1),displayName:`測試同學 ${i+1}`}))}

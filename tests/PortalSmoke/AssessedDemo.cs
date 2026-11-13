@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Npgsql;
+using AiTeachingAssistant.Services;
 
 internal static class AssessedDemo
 {
@@ -18,6 +19,7 @@ internal static class AssessedDemo
         var manifestPath=Path.Combine(root,".codex-build","demo-grading-manifest.json");
         var rows=JsonSerializer.Deserialize<DemoRow[]>(await File.ReadAllTextAsync(manifestPath),new JsonSerializerOptions(JsonSerializerDefaults.Web))
             ?? throw new InvalidOperationException("The demo grading manifest is empty.");
+        rows=rows.Select(row=>row with{Feedback=DemoPresentationText.Clean("feedback",row.Feedback)}).ToArray();
 
         await using var database=NpgsqlDataSource.Create(connection);
         await using var db=await database.OpenConnectionAsync();
@@ -66,14 +68,14 @@ internal static class AssessedDemo
                     UPDATE report_submissions SET file_name=$3,content=$4,score=$5,feedback=$6,graded_by=a.created_by,graded_at=now(),version=report_submissions.version+1
                     FROM report_assignments a WHERE report_submissions.id=$1 AND report_submissions.report_id=$2 AND a.id=report_submissions.report_id
                     RETURNING report_submissions.id
-                    """,submission,row.Report,"codex-demo-submission.pdf",bytes,row.Score,row.Feedback) is not Guid)
+                    """,submission,row.Report,"作業報告.pdf",bytes,row.Score,row.Feedback) is not Guid)
                     throw new InvalidOperationException("Existing demo submission is missing.");
             }
             else if(row.Mode=="individual")
             {
                 submission=(Guid)(await Sql("""
                     INSERT INTO report_submissions(report_id,student_id,file_name,content,score,feedback,graded_by,graded_at)
-                    SELECT $1,$2,'codex-demo-submission.pdf',$3,$4,$5,a.created_by,now() FROM report_assignments a
+                    SELECT $1,$2,'作業報告.pdf',$3,$4,$5,a.created_by,now() FROM report_assignments a
                     JOIN course_members m ON m.course_id=a.course_id AND m.user_id=$2 AND m.status='active' AND m.course_role='student'
                     WHERE a.id=$1 RETURNING id
                     """,row.Report,row.Owner,bytes,row.Score,row.Feedback))!;
@@ -82,7 +84,7 @@ internal static class AssessedDemo
             {
                 submission=(Guid)(await Sql("""
                     INSERT INTO report_submissions(report_id,student_id,file_name,content,group_id,group_name,score,feedback,graded_by,graded_at)
-                    SELECT $1,l.user_id,'codex-demo-submission.pdf',$3,g.id,g.name,$4,$5,a.created_by,now()
+                    SELECT $1,l.user_id,'作業報告.pdf',$3,g.id,g.name,$4,$5,a.created_by,now()
                     FROM report_groups rg JOIN report_assignments a ON a.id=rg.report_id
                     JOIN course_groups g ON g.id=rg.group_id
                     JOIN course_group_members l ON l.group_id=g.id AND l.left_at IS NULL AND l.is_leader
@@ -106,7 +108,7 @@ internal static class AssessedDemo
                 await Sql("""
                     INSERT INTO report_peer_reviews(submission_id,reviewer,subject,ratings,comment)
                     SELECT $1,a.student_id,b.student_id,ARRAY[4+(abs(hashtext(a.student_id::text||b.student_id::text))%2),4,4,4],
-                      '示範互評：能完成分工並回應組內修訂。'
+                      '能完成分工並回應組內修訂。'
                     FROM report_snapshot a JOIN report_snapshot b ON b.submission_id=a.submission_id AND b.student_id<>a.student_id
                     WHERE a.submission_id=$1 ON CONFLICT(submission_id,reviewer,subject) DO NOTHING
                     """,submission);
@@ -114,7 +116,7 @@ internal static class AssessedDemo
                     INSERT INTO report_votes(submission_id,voter,choice,explanation)
                     SELECT $1,s.student_id,
                       CASE WHEN $2%3=1 THEN 'agree' WHEN $2%3=2 AND row_number() OVER(ORDER BY s.student_id)=1 THEN 'review' WHEN $2%3=0 AND row_number() OVER(ORDER BY s.student_id)=1 THEN 'pending' ELSE 'agree' END,
-                      CASE WHEN $2%3=2 AND row_number() OVER(ORDER BY s.student_id)=1 THEN '示範：希望教師參考實際分工。' ELSE '' END
+                      CASE WHEN $2%3=2 AND row_number() OVER(ORDER BY s.student_id)=1 THEN '希望教師參考實際分工。' ELSE '' END
                     FROM report_snapshot s WHERE s.submission_id=$1
                     ON CONFLICT(submission_id,voter) DO UPDATE SET choice=EXCLUDED.choice,explanation=EXCLUDED.explanation
                     """,submission,row.N);
@@ -136,7 +138,7 @@ internal static class AssessedDemo
                   WHERE a.id=$1 AND a.course_id=$2 AND a.submission_mode='individual'
                 ), inserted AS (
                   INSERT INTO report_submissions(report_id,student_id,file_name,content,score,feedback,graded_by,graded_at)
-                  SELECT t.id,m.user_id,'codex-demo-submission.pdf',$3,$4,$5,t.created_by,now()
+                  SELECT t.id,m.user_id,'作業報告.pdf',$3,$4,$5,t.created_by,now()
                   FROM target t JOIN course_members m ON m.course_id=$2 AND m.course_role='student' AND m.status='active'
                   JOIN app_users u ON u.id=m.user_id AND u.status='active'
                   WHERE NOT EXISTS(SELECT 1 FROM report_submissions s WHERE s.report_id=t.id AND s.student_id=m.user_id AND NOT s.is_practice)

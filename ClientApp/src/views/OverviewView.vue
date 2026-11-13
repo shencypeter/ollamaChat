@@ -16,6 +16,19 @@ const greeting = computed(() => `${givenName(auth.user?.displayName || '')}，�
 const data = ref(null), loading = ref(true)
 const workPanel = ref(null), discussionPanel = ref(null)
 const panelScope = computed(() => teaching.value ? 'teaching' : 'student')
+const taskPage=ref(1),taskSize=ref(5),taskBusy=ref(false),taskError=ref('')
+let taskGeneration=0
+async function changeTasks({page,pageSize}) {
+  const request=++taskGeneration,current=generation
+  taskPage.value=page;taskSize.value=pageSize;taskBusy.value=true;taskError.value=''
+  try {
+    const result=await api(`/learning-history?todo=true&page=${page}&pageSize=${pageSize}`)
+    if(request!==taskGeneration||current!==generation||!data.value)return
+    data.value.tasks=result.items;data.value.taskTotal=result.total;delete data.value.unavailable.tasks
+    data.value.errors=data.value.errors.filter(message=>!message.startsWith('學習待辦：'))
+  } catch(error) {if(request===taskGeneration&&current===generation&&data.value){data.value.tasks=[];data.value.unavailable.tasks=true;taskError.value=error.message}}
+  finally {if(request===taskGeneration)taskBusy.value=false}
+}
 const labels = { todo: '尚未提交', overdue: '逾期未交', upcoming: '尚未開放' }
 const statuses = { draft: '草稿', active: '進行中', archived: '已封存' }
 const pendingCount = computed(() => data.value?.pending.reduce((sum, item) => sum + item.count, 0) || 0)
@@ -30,10 +43,10 @@ async function load() {
   const current = ++generation
   loading.value = true
   data.value = null
-  const result = await loadDashboard(api, teaching.value)
+  const result = await loadDashboard(api, teaching.value,{taskPage:taskPage.value,taskPageSize:taskSize.value})
   if (current === generation) { data.value = result; loading.value = false }
 }
-watch(teaching, load, { immediate: true })
+watch(teaching,()=>{taskGeneration++;taskPage.value=1;taskSize.value=5;taskBusy.value=false;taskError.value='';load()}, { immediate: true })
 onBeforeUnmount(() => { generation++ })
 </script>
 
@@ -54,36 +67,49 @@ onBeforeUnmount(() => { generation++ })
       </div>
       <PortalActivity :teaching="teaching" :courses="courseRows" />
       <div class="dashboard-columns">
-        <PortalPanel v-if="teaching" id="grading-queue" ref="workPanel" panel-key="grading" :scope="panelScope" title="待批改" :icon="ClipboardCheck" :count="`${pendingCount} 份${data.unavailable.grading||data.unavailable.courses?'（部分）':''}`" description="進行中課程的未評分繳交；已有評分草稿不重複列入。">
+        <PortalPanel v-if="teaching" id="grading-queue" ref="workPanel" panel-key="grading" :scope="panelScope" title="待批改" :icon="ClipboardCheck" :count="`${pendingCount} 份${data.unavailable.grading||data.unavailable.courses?'（部分）':''}`" :items="data.pending" description="進行中課程的未評分繳交；已有評分草稿不重複列入。">
+          <template #default="{ items }">
           <p v-if="data.restricted.length" class="field-hint">{{ data.restricted.join('、') }}：助教批改權限受限，未讀取或計入繳交資料。</p>
-          <ul v-if="data.pending.length" class="dashboard-list"><li v-for="item in data.pending" :key="item.id"><RouterLink :to="item.url"><span><strong>{{ item.title }}</strong><small>{{ item.courseTitle }}</small></span><span class="queue-count">{{ item.count }} 份待批改 <ArrowRight :size="15" /></span></RouterLink></li></ul>
+          <ul v-if="data.pending.length" class="dashboard-list"><li v-for="item in items" :key="item.id"><RouterLink :to="item.url"><span><strong>{{ item.title }}</strong><small>{{ item.courseTitle }}</small></span><span class="queue-count">{{ item.count }} 份待批改 <ArrowRight :size="15" /></span></RouterLink></li></ul>
           <p v-else class="dashboard-empty">{{ data.unavailable.grading || data.unavailable.courses ? '未能確認完整待批改清單，請重新整理。' : '目前可檢視的評量沒有待批改繳交。' }}</p>
           <p class="field-hint">涵蓋一般線上評量與 PDF 作業；正式考試與案例請進入各課程查看。</p>
+          </template>
         </PortalPanel>
-        <PortalPanel v-else id="learning-tasks" ref="workPanel" panel-key="tasks" :scope="panelScope" title="學習待辦" :icon="ClipboardCheck" :count="data.unavailable.tasks?'待確認':`${data.taskTotal} 項`" description="依最近截止排序，顯示最多 6 項。">
+        <PortalPanel v-else id="learning-tasks" ref="workPanel" panel-key="tasks" :scope="panelScope" title="學習待辦" :icon="ClipboardCheck" :count="data.unavailable.tasks?'待確認':`${data.taskTotal} 項`" :items="data.tasks" remote :remote-page="taskPage" :remote-size="taskSize" :has-more="taskPage*taskSize<data.taskTotal" :busy="taskBusy" @page-change="changeTasks" description="依最近截止排序，可選擇每頁筆數。">
           <template #actions><RouterLink to="/learning-history">全部待辦 <ArrowRight :size="14" /></RouterLink></template>
-          <ul v-if="data.tasks.length" class="dashboard-list"><li v-for="item in data.tasks" :key="item.id"><RouterLink :to="item.url"><span><strong>{{ item.title }}</strong><small>{{ progress.get(item.courseId)?.title }} · 截止 {{ formatDate(item.dueAt) }}</small></span><span class="status-badge" :class="{ 'overdue-label': item.state === 'overdue' }">{{ labels[item.state] }}</span></RouterLink></li></ul>
+          <template #default="{ items }">
+          <p v-if="taskBusy" role="status">正在載入待辦…</p><p v-if="taskError" class="error-box" role="alert">{{taskError}}</p>
+          <ul v-if="data.tasks.length" class="dashboard-list"><li v-for="item in items" :key="item.id"><RouterLink :to="item.url"><span><strong>{{ item.title }}</strong><small>{{ progress.get(item.courseId)?.title }} · 截止 {{ formatDate(item.dueAt) }}</small></span><span class="status-badge" :class="{ 'overdue-label': item.state === 'overdue' }">{{ labels[item.state] }}</span></RouterLink></li></ul>
           <p v-else class="dashboard-empty">{{ data.unavailable.tasks ? '待辦暫時無法載入，請重新整理。' : '目前沒有待交評量。' }}</p>
           <p class="field-hint">包含線上測驗與 PDF 作業，不含封存課程；尚未開放與逾期項目會標示狀態。</p>
+          </template>
         </PortalPanel>
-        <PortalPanel v-if="teaching" id="discussion-queue" ref="discussionPanel" panel-key="discussions" :scope="panelScope" title="尚無回覆的討論" :icon="MessageCircle" :count="`${data.discussions.length} 串${data.unavailable.discussions||data.unavailable.courses?'（部分）':''}`" description="列出最近 6 串仍開放、尚無任何回覆的討論。">
-          <ul v-if="data.discussions.length" class="dashboard-list"><li v-for="item in data.discussions.slice(0,6)" :key="item.id"><RouterLink :to="item.url"><span><strong>{{ item.title }}</strong><small>{{ item.courseTitle }} · {{ item.author }}</small></span><ArrowRight :size="16" /></RouterLink></li></ul>
+        <PortalPanel v-if="teaching" id="discussion-queue" ref="discussionPanel" panel-key="discussions" :scope="panelScope" title="尚無回覆的討論" :icon="MessageCircle" :count="`${data.discussions.length} 串${data.unavailable.discussions||data.unavailable.courses?'（部分）':''}`" :items="data.discussions" description="仍開放且尚無任何回覆的討論，依最近建立排序。">
+          <template #default="{ items }">
+          <ul v-if="data.discussions.length" class="dashboard-list"><li v-for="item in items" :key="item.id"><RouterLink :to="item.url"><span><strong>{{ item.title }}</strong><small>{{ item.courseTitle }} · {{ item.author }}</small></span><ArrowRight :size="16" /></RouterLink></li></ul>
           <p v-else class="dashboard-empty">{{ data.unavailable.discussions || data.unavailable.courses ? '未能確認完整討論清單，請重新整理。' : '目前沒有尚無回覆的開放討論。' }}</p>
+          </template>
         </PortalPanel>
-        <PortalPanel v-else panel-key="grades" :scope="panelScope" title="近期已公布成績" :icon="CheckCheck" :count="data.unavailable.grades?'待確認':`${data.grades.length} 筆`" description="從最近 12 筆學習活動中彙整已公布成績。">
+        <PortalPanel v-else panel-key="grades" :scope="panelScope" title="近期已公布成績" :icon="CheckCheck" :count="data.unavailable.grades?'待確認':`${data.grades.length} 筆`" :items="data.grades" description="從最近 12 筆學習活動中彙整已公布成績。">
           <template #actions><RouterLink to="/learning-history">完整歷程 <ArrowRight :size="14" /></RouterLink></template>
-          <ul v-if="data.grades.length" class="dashboard-list"><li v-for="item in data.grades" :key="`${item.kind}:${item.id}`"><RouterLink :to="item.url"><span><strong>{{ item.title }}</strong><small>{{ progress.get(item.courseId)?.title }} · {{ formatDate(item.occurredAt) }}</small></span><span class="grade-result">{{ item.score }}<small> / {{ item.maxScore }}</small></span></RouterLink></li></ul>
+          <template #default="{ items }">
+          <ul v-if="data.grades.length" class="dashboard-list"><li v-for="item in items" :key="`${item.kind}:${item.id}`"><RouterLink :to="item.url"><span><strong>{{ item.title }}</strong><small>{{ progress.get(item.courseId)?.title }} · {{ formatDate(item.occurredAt) }}</small></span><span class="grade-result">{{ item.score }}<small> / {{ item.maxScore }}</small></span></RouterLink></li></ul>
           <p v-else class="dashboard-empty">{{ data.unavailable.grades ? '近期成績暫時無法載入。' : '最近活動中尚無已公布成績；可從完整歷程查看較早紀錄。' }}</p>
+          </template>
         </PortalPanel>
       </div>
-      <PortalPanel panel-key="courses" :scope="panelScope" :title="teaching?'我的授課':'我的修課'" :icon="BookOpen" :count="data.unavailable.courses?'待確認':`${courseRows.length} 門`" :description="teaching?'選擇課程，進入單元與教學工作區。':'提交進度依已開放評量計算，不代表完課或學分。'">
+      <PortalPanel panel-key="courses" :scope="panelScope" :title="teaching?'我的授課':'我的修課'" :icon="BookOpen" :count="data.unavailable.courses?'待確認':`${courseRows.length} 門`" :items="courseRows" :description="teaching?'選擇課程，進入單元與教學工作區。':'提交進度依已開放評量計算，不代表完課或學分。'">
         <template #actions><RouterLink :to="teaching ? '/courses' : '/student/courses'">所有課程 <ArrowRight :size="14" /></RouterLink></template>
-        <div v-if="courseRows.length" class="dashboard-course-grid"><RouterLink v-for="course in courseRows" :key="course.id" :to="`/courses/${course.id}`" class="dashboard-course"><span class="eyebrow">{{ course.code }} · {{ course.termCode }}</span><h3>{{ course.title }}</h3><span class="muted">{{ statuses[course.status] }}{{ course.courseRole === 'ta' ? ' · 課程助教' : '' }}</span><span v-if="courseNotifications(course.id).total" class="status-badge">{{courseNotifications(course.id).total}} 則未讀課程通知</span><template v-if="!teaching && progress.has(course.id)"><p>已提交 {{ progress.get(course.id).submitted }} / {{ progress.get(course.id).required }} 份</p><progress v-if="progress.get(course.id).required" :value="progress.get(course.id).submitted" :max="progress.get(course.id).required" :aria-label="`${course.title} 評量提交進度`" /><p class="field-hint">{{ progress.get(course.id).pending }} 份待公布成績</p></template><span v-else-if="!teaching" class="field-hint">修課進度暫時無法取得。</span><span class="course-enter">進入課程 <ArrowRight :size="15" /></span></RouterLink></div>
+          <template #default="{ items }">
+        <div v-if="courseRows.length" class="dashboard-course-grid"><RouterLink v-for="course in items" :key="course.id" :to="`/courses/${course.id}`" class="dashboard-course"><span class="eyebrow">{{ course.code }} · {{ course.termCode }}</span><h3>{{ course.title }}</h3><span class="muted">{{ statuses[course.status] }}{{ course.courseRole === 'ta' ? ' · 課程助教' : '' }}</span><span v-if="courseNotifications(course.id).total" class="status-badge">{{courseNotifications(course.id).total}} 則未讀課程通知</span><template v-if="!teaching && progress.has(course.id)"><p>已提交 {{ progress.get(course.id).submitted }} / {{ progress.get(course.id).required }} 份</p><progress v-if="progress.get(course.id).required" :value="progress.get(course.id).submitted" :max="progress.get(course.id).required" :aria-label="`${course.title} 評量提交進度`" /><p class="field-hint">{{ progress.get(course.id).pending }} 份待公布成績</p></template><span v-else-if="!teaching" class="field-hint">修課進度暫時無法取得。</span><span class="course-enter">進入課程 <ArrowRight :size="15" /></span></RouterLink></div>
         <p v-else class="dashboard-empty">{{ data.unavailable.courses ? '課程清單暫時無法載入。' : teaching ? '目前沒有授課課程，可從所有課程建立課程或請擁有者加入教學團隊。' : '目前沒有正式修課；加入課程且開放後即可在此查看。' }}</p>
+          </template>
       </PortalPanel>
-      <PortalPanel v-if="teaching" panel-key="recent" :scope="panelScope" title="最近繳交" :icon="Clock3" :count="`${Math.min(data.recent.length,6)} 份${data.unavailable.grading||data.unavailable.courses?'（部分）':''}`" description="顯示可檢視評量最近 6 份繳交，點選進入批改工作區。">
-        <ul v-if="data.recent.length" class="dashboard-list"><li v-for="item in data.recent.slice(0,6)" :key="item.id"><RouterLink :to="item.url"><span><strong>{{ item.studentName }} · {{ item.title }}</strong><small>{{ item.courseTitle }} · {{ formatDate(item.submittedAt) }}</small></span><ArrowRight :size="16" /></RouterLink></li></ul>
+      <PortalPanel v-if="teaching" panel-key="recent" :scope="panelScope" title="最近繳交" :icon="Clock3" :count="`${data.recent.length} 份${data.unavailable.grading||data.unavailable.courses?'（部分）':''}`" :items="data.recent" description="依最近繳交排序，點選進入批改工作區。">
+          <template #default="{ items }">
+        <ul v-if="data.recent.length" class="dashboard-list"><li v-for="item in items" :key="item.id"><RouterLink :to="item.url"><span><strong>{{ item.studentName }} · {{ item.title }}</strong><small>{{ item.courseTitle }} · {{ formatDate(item.submittedAt) }}</small></span><ArrowRight :size="16" /></RouterLink></li></ul>
         <p v-else class="dashboard-empty">{{ data.unavailable.grading || data.unavailable.courses ? '最近繳交資料未完整載入。' : '目前可檢視的評量沒有繳交紀錄。' }}</p>
+          </template>
       </PortalPanel>
       <p v-if="experience.student" class="field-hint dashboard-scope">學生體驗只呈現本人正式修課紀錄，練習不計入；授課課程的學生預覽不會產生個人訊息。</p>
     </template>
