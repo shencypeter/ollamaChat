@@ -1,6 +1,6 @@
 <script setup>
 import {computed,onMounted,reactive,ref} from 'vue'
-import {ArrowRight,BookOpen,Pencil,Plus,Send,Trash2,Users,X} from '@lucide/vue'
+import {ArrowRight,BookOpen,Pencil,Plus,Send,Trash2,Users,X,Video} from '@lucide/vue'
 import {auth,loadSession} from '../composables/auth'
 import {experience} from '../composables/experience'
 import {api} from '../api'
@@ -59,11 +59,12 @@ onMounted(load)
       <h2 :aria-label="course.title">{{course.title}} <NotificationBadge v-if="!taughtPreview(course)" :count="courseNotifications(course.id).total" label="本課未讀通知"/></h2>
       <div v-if="!taughtPreview(course)" class="course-notification-links">
         <RouterLink v-if="courseNotifications(course.id).materials" :to="'/courses/'+course.id+'?section=resources'">新教材 <NotificationBadge :count="courseNotifications(course.id).materials"/></RouterLink>
-        <RouterLink v-if="courseNotifications(course.id).assignments" :to="`/courses/${course.id}?section=assessments`">新測驗／作業 <NotificationBadge :count="courseNotifications(course.id).assignments" label="新測驗與作業"/></RouterLink>
+        <RouterLink v-if="courseNotifications(course.id).assignments" :to="`/courses/${course.id}`">單元新測驗／作業 <NotificationBadge :count="courseNotifications(course.id).assignments" label="新測驗與作業"/></RouterLink>
         <RouterLink v-if="courseNotifications(course.id).questions" :to="`/courses/${course.id}?section=questions`">學生新提問 <NotificationBadge :count="courseNotifications(course.id).questions" label="學生新提問"/></RouterLink>
       </div>
       <p class="muted">{{taughtPreview(course)?'學生視角（授課課程）':roles[course.courseRole]}}<span v-if="course.isOwner"> · 課程擁有者</span></p>
       <div class="course-meta"><span><Users :size="15"/>{{course.studentCount}} 位學員</span><span>{{course.resourceCount}} 份教材</span></div>
+      <p v-if="teachingPortal&&course.youTubeCount>0" class="course-video-badge"><Video :size="16" aria-hidden="true"/>YouTube 影音教材・{{course.youTubeCount}} 部</p>
       <p class="field-hint">{{course.quizCount}} 份測驗 · {{course.reportCount}} 份 PDF 作業</p>
 
       <div v-if="teachingPortal&&course.isOwner&&!experience.student" class="course-quick-actions" aria-label="課程快速管理">
@@ -86,5 +87,6 @@ onMounted(load)
 </template>
 
 <style scoped>
+.course-video-badge{display:flex;align-items:center;gap:7px;align-self:flex-start;max-width:100%;padding:7px 10px;margin:10px 0;color:var(--accent);background:var(--accent-soft);border:1px solid var(--line);border-radius:7px;font-size:12px;font-weight:600;overflow-wrap:anywhere}.course-video-badge svg{flex-shrink:0}
 .course-quick-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0 0 12px}.course-quick-actions .button{padding:8px 7px;white-space:normal}.button.danger{background:var(--danger);color:white}.quick-editor,.delete-confirm{display:grid;gap:11px;padding:14px;margin:0 0 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft)}.quick-editor>div,.delete-confirm>div{display:flex;gap:8px}.quick-editor .button,.delete-confirm .button{width:auto}.delete-confirm{border-color:color-mix(in srgb,var(--danger) 32%,var(--line))}.delete-confirm p{color:var(--muted);font-size:11px}.course-open-link{margin-top:auto}@media(max-width:480px){.course-quick-actions{grid-template-columns:1fr}.quick-editor>div,.delete-confirm>div{flex-wrap:wrap}}
 </style>

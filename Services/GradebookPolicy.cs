@@ -4,8 +4,8 @@ public static class GradebookPolicy
 {
     public static void Validate(GradeItemInput input)
     {
-        if(string.IsNullOrWhiteSpace(input.Title)||input.Title.Length>200 || input.Category is not ("offline_assignment" or "assignment" or "quiz" or "midterm" or "final" or "other") || input.MaxScore is <0.01m or >999999m || Math.Round(input.MaxScore,2)!=input.MaxScore || input.Weight is <0.001m or >999999m || Math.Round(input.Weight,3)!=input.Weight)
-            throw new AssignmentWorkflowException(400,"請填寫有效名稱、類型、滿分（兩位小數）與正數權重（三位小數）。");
+        if(string.IsNullOrWhiteSpace(input.Title)||input.Title.Length>200 || input.Category is not ("offline_assignment" or "assignment" or "quiz" or "midterm" or "final" or "other") || input.MaxScore is <0.01m or >999999m || Math.Round(input.MaxScore,2)!=input.MaxScore)
+            throw new AssignmentWorkflowException(400,"請填寫有效名稱、類型與滿分（最多兩位小數）。");
     }
     public static void ValidateScore(decimal? score,decimal max)
     {
@@ -18,7 +18,7 @@ public static class GradebookPolicy
         var itemMap=items.ToDictionary(x=>x.Id);
         var means=students.Select(student=>{
             var recorded=scores.Where(s=>s.Score.HasValue && s.StudentId==student.Id && itemMap.ContainsKey(s.ItemId)).ToArray();
-            decimal? mean=recorded.Length==0?null:recorded.Sum(s=>s.Score!.Value/itemMap[s.ItemId].MaxScore*100*itemMap[s.ItemId].Weight)/recorded.Sum(s=>itemMap[s.ItemId].Weight);
+            decimal? mean=recorded.Length==0?null:recorded.Average(s=>s.Score!.Value/itemMap[s.ItemId].MaxScore*100);
             return (student.Id,Mean:mean,Count:recorded.Length);
         }).ToArray();
         var valid=means.Where(x=>x.Mean.HasValue).ToArray();

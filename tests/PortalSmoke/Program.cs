@@ -5,6 +5,10 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using AiTeachingAssistant.Services;
 var root=Path.GetFullPath(args[0]);var file=Path.Combine(root,".codex-build","portal-smoke.json");
+if(args.Contains("--english-discussion-demo-preview") || args.Contains("--english-discussion-demo") || args.Contains("--english-discussion-demo-audit")){
+    var courseArgument=args.FirstOrDefault(x=>x.StartsWith("--course="));
+    await DiscussionDemo.RefreshEnglish(courseArgument is null?null:Guid.Parse(courseArgument[9..]),args.Contains("--english-discussion-demo-preview"),args.Contains("--english-discussion-demo-audit"));return;
+}
 if(args.Contains("--group-upgrade")){
     await GroupUpgrade.Run(root);return;
 }

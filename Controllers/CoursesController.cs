@@ -21,12 +21,13 @@ public sealed class CoursesController(NpgsqlDataSource source,LearnerExperience 
               (SELECT count(*)::int FROM course_members x JOIN app_users u ON u.id=x.user_id WHERE x.course_id=c.id AND x.course_role='student' AND x.status='active' AND u.status='active'),
               (SELECT count(*)::int FROM assignments a JOIN course_grade_items i ON i.source_assignment_id=a.id WHERE a.course_id=c.id AND ((NOT $2 AND m.course_role IN ('teacher','ta')) OR a.status IN ('published','closed'))),
               (SELECT count(*)::int FROM report_assignments a WHERE a.course_id=c.id AND ((NOT $2 AND m.course_role IN ('teacher','ta')) OR a.status IN ('published','closed') AND (a.submission_mode='individual' OR EXISTS(SELECT 1 FROM report_group_audience WHERE report_id=a.id AND student_id=m.user_id)))),
-              c.owner_user_id=$1 AND NOT $2,m.course_role IN ('teacher','ta'),c.class_label,CASE WHEN m.course_role='ta' THEN m.ta_restrictions ELSE '{}'::text[] END,c.version,c.updated_at
+              c.owner_user_id=$1 AND NOT $2,m.course_role IN ('teacher','ta'),c.class_label,CASE WHEN m.course_role='ta' THEN m.ta_restrictions ELSE '{}'::text[] END,c.version,c.updated_at,
+              (SELECT count(*)::int FROM course_resources r WHERE r.course_id=c.id AND r.resource_type='youtube')
             FROM courses c JOIN course_members m ON m.course_id=c.id
             WHERE m.user_id=$1 AND m.status='active' AND (NOT $3 OR m.course_role IN ('student','teacher')) AND (c.status<>'draft' OR ($3 AND m.course_role='teacher') OR (NOT $2 AND m.course_role IN ('teacher','ta'))) ORDER BY c.created_at DESC
             """);
         cmd.Parameters.AddWithValue(UserId);cmd.Parameters.AddWithValue(experience.IsPractice || studentPortal);cmd.Parameters.AddWithValue(studentPortal);await using var r=await cmd.ExecuteReaderAsync(ct);var courses=new List<CourseSummary>();
-        while(await r.ReadAsync(ct)) courses.Add(new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5),r.GetInt32(6),r.GetInt32(7),r.GetInt32(8),r.GetInt32(9),r.GetInt32(10),r.GetInt32(11),r.GetBoolean(12),r.GetBoolean(13),r.GetString(14),r.GetFieldValue<string[]>(15),r.GetInt32(16),r.GetFieldValue<DateTimeOffset>(17)));
+        while(await r.ReadAsync(ct)) courses.Add(new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5),r.GetInt32(6),r.GetInt32(7),r.GetInt32(8),r.GetInt32(9),r.GetInt32(10),r.GetInt32(11),r.GetBoolean(12),r.GetBoolean(13),r.GetString(14),r.GetFieldValue<string[]>(15),r.GetInt32(16),r.GetFieldValue<DateTimeOffset>(17),r.GetInt32(18)));
         return Ok(courses);
     }
     [HttpGet("{id:guid}")]
@@ -40,12 +41,13 @@ public sealed class CoursesController(NpgsqlDataSource source,LearnerExperience 
               (SELECT count(*)::int FROM course_members x JOIN app_users u ON u.id=x.user_id WHERE x.course_id=c.id AND x.course_role='student' AND x.status='active' AND u.status='active'),
               (SELECT count(*)::int FROM assignments a JOIN course_grade_items i ON i.source_assignment_id=a.id WHERE a.course_id=c.id AND ((NOT $3 AND m.course_role IN ('teacher','ta')) OR a.status IN ('published','closed'))),
               (SELECT count(*)::int FROM report_assignments a WHERE a.course_id=c.id AND ((NOT $3 AND m.course_role IN ('teacher','ta')) OR a.status IN ('published','closed') AND (a.submission_mode='individual' OR EXISTS(SELECT 1 FROM report_group_audience WHERE report_id=a.id AND student_id=m.user_id)))),
-              c.owner_user_id=$2 AND NOT $3,m.course_role IN ('teacher','ta'),c.class_label,CASE WHEN m.course_role='ta' THEN m.ta_restrictions ELSE '{}'::text[] END,c.version,c.updated_at
+              c.owner_user_id=$2 AND NOT $3,m.course_role IN ('teacher','ta'),c.class_label,CASE WHEN m.course_role='ta' THEN m.ta_restrictions ELSE '{}'::text[] END,c.version,c.updated_at,
+              (SELECT count(*)::int FROM course_resources r WHERE r.course_id=c.id AND r.resource_type='youtube')
             FROM courses c JOIN course_members m ON m.course_id=c.id AND m.user_id=$2 AND m.status='active' WHERE c.id=$1
             """);
         cmd.Parameters.AddWithValue(id);cmd.Parameters.AddWithValue(UserId);cmd.Parameters.AddWithValue(experience.IsPractice);await using var r=await cmd.ExecuteReaderAsync(ct);
         if(!await r.ReadAsync(ct))return NotFound(new{error="找不到你參與的課程。"});
-        return Ok(new CourseSummary(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5),r.GetInt32(6),r.GetInt32(7),r.GetInt32(8),r.GetInt32(9),r.GetInt32(10),r.GetInt32(11),r.GetBoolean(12),r.GetBoolean(13),r.GetString(14),r.GetFieldValue<string[]>(15),r.GetInt32(16),r.GetFieldValue<DateTimeOffset>(17)));
+        return Ok(new CourseSummary(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5),r.GetInt32(6),r.GetInt32(7),r.GetInt32(8),r.GetInt32(9),r.GetInt32(10),r.GetInt32(11),r.GetBoolean(12),r.GetBoolean(13),r.GetString(14),r.GetFieldValue<string[]>(15),r.GetInt32(16),r.GetFieldValue<DateTimeOffset>(17),r.GetInt32(18)));
     }
     [HttpPost]
     public async Task<IActionResult> Create(CreateCourseRequest request,CancellationToken ct)
@@ -149,6 +151,7 @@ public sealed class CoursesController(NpgsqlDataSource source,LearnerExperience 
               +(SELECT count(*) FROM studio_cases WHERE course_id=$1)
               +(SELECT count(*) FROM course_showcases WHERE course_id=$1)
               +(SELECT count(*) FROM course_questions WHERE course_id=$1)
+              +(SELECT count(*) FROM course_announcements WHERE course_id=$1)
             """,conn,tx);dependencies.Parameters.AddWithValue(id);dependencies.Parameters.AddWithValue(UserId);var count=(long)(await dependencies.ExecuteScalarAsync(ct))!;
         if(status!="draft"||count>0)return Conflict(new{error="課程已有成員、單元或教學紀錄，不能直接刪除；請改用封存以保留作答與成績。",relatedRecords=count});
         await using(var audit=new NpgsqlCommand("INSERT INTO audit_events(actor_user_id,entity_type,entity_id,action) VALUES($1,'courses',$2,'course.deleted')",conn,tx)){audit.Parameters.AddWithValue(UserId);audit.Parameters.AddWithValue(id);await audit.ExecuteNonQueryAsync(ct);}

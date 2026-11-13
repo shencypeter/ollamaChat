@@ -16,13 +16,14 @@ import StudentProfileView from './views/StudentProfileView.vue'
 import StudentCaseView from './views/StudentCaseView.vue'
 import TeachingStudioView from './views/TeachingStudioView.vue'
 import StudioAdminView from './views/StudioAdminView.vue'
+import OverviewView from './views/OverviewView.vue'
 import {auth,loadSession} from './composables/auth'
 import {experience,bindExperience,setStudentExperience,setCourseExperience} from './composables/experience'
 import {api,resetCsrf} from './api'
 import './style.css'
 const router=createRouter({history:createWebHistory(),routes:[
  {path:'/login',component:LoginView,meta:{public:true,title:'S1 · 登入'}},
- {path:'/',component:StudentCaseView},
+ {path:'/',component:OverviewView,meta:{title:'我的首頁'}},
  {path:'/student/profile',component:StudentProfileView,meta:{profile:true,title:'學員檔案'}},
  {path:'/student/cases/:caseId?',component:StudentCaseView,meta:{learner:true,title:'S3 · 案例作答'}},
  {path:'/teaching',component:TeachingStudioView,meta:{staff:true,studioMode:'students',title:'T1 · 學生清單'}},
@@ -58,7 +59,6 @@ router.beforeEach(async to=>{
   if(auth.profileComplete==null){try{auth.profileComplete=(await api('/studio/profile')).completed}catch{return '/login'}}
   if(!auth.profileComplete)return '/student/profile'
  }
- if(to.path==='/')return '/courses'
  if(to.meta.staff && (!auth.user.canTeach||experience.student))return '/courses'
  if(to.meta.professor && (auth.user.role!=='Administrator'||experience.student))return '/courses'
 

@@ -44,4 +44,4 @@ public sealed class UpdateCourseRequest
     [Required, StringLength(40)] public string TermCode { get; set; } = "";
     [Range(1,int.MaxValue)] public int ExpectedVersion { get; set; }
 }
-public sealed record CourseSummary(Guid Id, string Code, string Title, string TermCode, string Status, string CourseRole, int MemberCount, int AssignmentCount, int ResourceCount=0, int StudentCount=0, int QuizCount=0, int ReportCount=0, bool IsOwner=false,bool CanPractice=false,string ClassLabel="",string[]? TaRestrictions=null,int Version=1,DateTimeOffset? UpdatedAt=null);
+public sealed record CourseSummary(Guid Id, string Code, string Title, string TermCode, string Status, string CourseRole, int MemberCount, int AssignmentCount, int ResourceCount=0, int StudentCount=0, int QuizCount=0, int ReportCount=0, bool IsOwner=false,bool CanPractice=false,string ClassLabel="",string[]? TaRestrictions=null,int Version=1,DateTimeOffset? UpdatedAt=null,int YouTubeCount=0);

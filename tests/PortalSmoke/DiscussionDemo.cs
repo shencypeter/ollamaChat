@@ -9,8 +9,72 @@ internal static class DiscussionDemo
     private static Guid Id(Guid course,int thread,string kind,int index=0)
         => new(SHA256.HashData(Encoding.UTF8.GetBytes($"nsysu-discussion-demo-v1/{course:N}/{thread}/{kind}/{index}"))[..16]);
 
+    private static readonly Topic[] EnglishTopics =
+    [
+        new("日常對話：Do you…? 和 Does she…? 怎麼用？",
+            "練習影片中的自我介紹對話時，我寫了：A: Do you work near here? B: Yes, I do. 接著想問朋友的工作地點，應該說 Does she work near here? 還是 Does she works near here? 為什麼換成 she 之後動詞不加 s？",
+            "應說 Does she work near here? 一般現在式問句以 does 表示第三人稱單數，後面的主要動詞使用原形 work。比較：She works near here. → Does she work near here? 簡答是 Yes, she does. / No, she doesn't. 也可追問 Where does she work?，讓對話繼續。",
+            "我把句子配成三組練習：Do you study English? — Yes, I do. / Does he study English? — Yes, he does. / Where does he study? — He studies at home. 問句用 study，肯定句才用 studies，這樣比較不會混淆。",
+            "聽影片時可以留意 do / does 與主詞的搭配，再用自己的資訊替換。錯句 Does she works…? 同時在 does 和 works 標記第三人稱；改成 Does she work…? 即可。練習時請先說完整問句，再練簡短回答。"),
+        new("聊週末活動：Did you go…? 為什麼不能說 Did you went…?",
+            "我們想練習分享上週末的對話：A: What did you do last weekend? B: I went to the library and watched a movie. 若接著問對方是否和朋友一起去，應說 Did you go with your friends? 嗎？did 後面還需要用過去式 went 嗎？",
+            "是，問句用 Did you go with your friends?，did 後的主要動詞用原形 go。肯定回答可說 Yes, I did. I went with two friends. 否定句則是 No, I didn't. I went alone. 一般過去式的過去時間由 did / didn't 表示時，主要動詞不再變成 went。",
+            "我們組的練習是：A: Did you watch a movie last weekend? B: Yes, I did. A: What did you watch? B: I watched a comedy. 接著問 Did you like it?，就能把文法練習延伸成自然對話。",
+            "請保留明確時間線索，例如 yesterday、last weekend。注意肯定句 I watched… 和問句 Did you watch… 的差別；不規則動詞也是同樣規則：I went…，但 Did you go…?。可輪流訪問同學，再用第三人稱轉述答案。"),
+        new("咖啡店情境對話：Can I have…? 與 Could I have…?",
+            "看完日常英語影片後，我們想練習點餐：A: Hi, could I have a small latte, please? B: Sure. Would you like it hot or iced? A: Iced, please. Can I have…? 和 Could I have…? 都可以嗎？還可以怎麼回應店員，讓對話更自然？",
+            "兩者都可用來提出請求；Could I have…? 通常語氣更委婉，不是在敘述過去。也可說 I'd like a small latte, please. 若店員問 Anything else?，可答 That's all, thank you.；若問 For here or to go?，可答 To go, please.。禮貌也取決於語氣與情境。",
+            "我們把對話接成：A: Could I have a small latte, please? B: Of course. Hot or iced? A: Hot, please. B: Anything else? A: That's all, thank you. 練習時輪流當顧客與店員，再替換飲料和尺寸。",
+            "可先用影片中的固定句型，再加入一個變化，例如 Could I have it without sugar?。注意 Would you like…? 是提供選擇，I'd like… 是表達自己的需求。最後互相檢查請求、確認與道謝三個步驟是否完整。")
+    ];
+
+    internal static async Task RefreshEnglish(Guid? target,bool preview,bool verifyOnly=false)
+    {
+        if(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")!="Development")throw new InvalidOperationException("English discussion demo requires Development.");
+        var connection=Environment.GetEnvironmentVariable("ConnectionStrings__Portal");
+        if(string.IsNullOrWhiteSpace(connection))throw new InvalidOperationException("Specify ConnectionStrings__Portal.");
+        await using var db=NpgsqlDataSource.Create(connection);
+        await using var conn=await db.OpenConnectionAsync();
+        var courses=new List<(Guid Id,string Title)>();
+        await using(var cmd=new NpgsqlCommand("SELECT id,title FROM courses WHERE status='active' AND (title LIKE '%英文%' OR title ILIKE '%english%') ORDER BY id",conn))
+        await using(var reader=await cmd.ExecuteReaderAsync())while(await reader.ReadAsync())courses.Add((reader.GetGuid(0),reader.GetString(1)));
+        if(preview){foreach(var course in courses){Console.WriteLine($"English course: {course.Id} {course.Title}");for(var i=0;i<3;i++){await using var cmd=new NpgsqlCommand("SELECT title FROM course_questions WHERE course_id=$1 AND id=$2",conn);cmd.Parameters.AddWithValue(course.Id);cmd.Parameters.AddWithValue(Id(course.Id,i,"thread"));Console.WriteLine($"  Demo thread {i+1}: {await cmd.ExecuteScalarAsync()??"MISSING"}");}}return;}
+        if(target is null || !courses.Any(c=>c.Id==target))throw new InvalidOperationException("Select one existing active English course with --course=<id>.");
+        if(verifyOnly)
+        {
+            var verifiedReplies=0;
+            for(var i=0;i<3;i++)
+            {
+                await using var check=new NpgsqlCommand("SELECT title=$3 AND question=$4 FROM course_questions WHERE course_id=$1 AND id=$2",conn);
+                check.Parameters.AddWithValue(target.Value);check.Parameters.AddWithValue(Id(target.Value,i,"thread"));check.Parameters.AddWithValue(EnglishTopics[i].Title);check.Parameters.AddWithValue(EnglishTopics[i].Body);
+                if(await check.ExecuteScalarAsync() is not true)throw new InvalidOperationException("English demo thread content does not match.");
+                var texts=new[]{EnglishTopics[i].TeacherReply,EnglishTopics[i].StudentReply,EnglishTopics[i].AssistantReply};
+                for(var r=0;r<texts.Length;r++)
+                {await using var replyCheck=new NpgsqlCommand("SELECT body=$3 FROM course_question_replies WHERE question_id=$1 AND id=$2",conn);replyCheck.Parameters.AddWithValue(Id(target.Value,i,"thread"));replyCheck.Parameters.AddWithValue(Id(target.Value,i,"reply",r));replyCheck.Parameters.AddWithValue(texts[r]);var matches=await replyCheck.ExecuteScalarAsync();if(matches is false || r<2 && matches is not true)throw new InvalidOperationException("English demo reply content does not match.");if(matches is true)verifiedReplies++;}
+                Console.WriteLine($"OK English demo thread {i+1}: {EnglishTopics[i].Title}");
+            }
+            Console.WriteLine($"English demo audit passed: 3 threads, {verifiedReplies} matching replies.");return;
+        }
+        await using var tx=await conn.BeginTransactionAsync();
+        await using(var gate=new NpgsqlCommand("SELECT pg_advisory_xact_lock(741026111)",conn,tx))await gate.ExecuteNonQueryAsync();
+        var repliesChanged=0;
+        for(var i=0;i<3;i++)
+        {
+            var thread=Id(target.Value,i,"thread");var topic=EnglishTopics[i];
+            await using(var update=new NpgsqlCommand("UPDATE course_questions SET title=$3,question=$4,version=version+1 WHERE id=$1 AND course_id=$2",conn,tx))
+            {update.Parameters.AddWithValue(thread);update.Parameters.AddWithValue(target.Value);update.Parameters.AddWithValue(topic.Title);update.Parameters.AddWithValue(topic.Body);if(await update.ExecuteNonQueryAsync()!=1)throw new InvalidOperationException("Expected demo thread is missing; no changes committed.");}
+            var texts=new[]{topic.TeacherReply,topic.StudentReply,topic.AssistantReply};
+            for(var r=0;r<texts.Length;r++)
+            {await using var update=new NpgsqlCommand("UPDATE course_question_replies SET body=$3 WHERE id=$1 AND question_id=$2",conn,tx);update.Parameters.AddWithValue(Id(target.Value,i,"reply",r));update.Parameters.AddWithValue(thread);update.Parameters.AddWithValue(texts[r]);var changed=await update.ExecuteNonQueryAsync();if(r<2&&changed!=1)throw new InvalidOperationException("Expected teacher/student demo reply is missing; no changes committed.");repliesChanged+=changed;}
+        }
+        await using(var audit=new NpgsqlCommand("INSERT INTO audit_events(actor_user_id,entity_type,entity_id,action,metadata) SELECT owner_user_id,'courses',id,'demo.english_discussions.20261113',jsonb_build_object('threads',3,'replies',$2) FROM courses WHERE id=$1",conn,tx))
+        {audit.Parameters.AddWithValue(target.Value);audit.Parameters.AddWithValue(repliesChanged);await audit.ExecuteNonQueryAsync();}
+        await tx.CommitAsync();Console.WriteLine($"Updated English demo: {target.Value}, 3 threads, {repliesChanged} replies. IDs, authors, likes, and closed state preserved; other threads untouched.");
+    }
+
     private static Topic[] TopicsFor(string courseTitle)=>courseTitle switch
     {
+        _ when courseTitle.Contains("英文",StringComparison.Ordinal) || courseTitle.Contains("english",StringComparison.OrdinalIgnoreCase) => EnglishTopics,
         "個案分析課程－一三五"=>
         [
             new("個案事實與推論怎麼分開？","我整理個案紀錄時，會先把可直接觀察的行為、當事人原話與時間點列在「事實」欄，再把可能原因放在「推論」欄。若一句話同時包含兩者，大家會怎麼拆開？","可以先圈出能回到原始紀錄核對的部分；其餘即使合理，也要標成待驗證的假設。","我會在每項推論後面加上支持證據編號，沒有編號的先不寫進結論。","也請保留彼此衝突的紀錄，不要為了讓敘事順暢而刪掉例外。"),
@@ -149,7 +213,9 @@ internal static class DiscussionDemo
                 continue;
             }
             var ids=Enumerable.Range(0,3).Select(i=>Id(course.Id,i,"thread")).ToArray();
-            if(!expectedTitles.TryGetValue(course.Title,out var titles))
+            var english=course.Title.Contains("英文",StringComparison.Ordinal)||course.Title.Contains("english",StringComparison.OrdinalIgnoreCase);
+            var titles=english?EnglishTopics.Select(topic=>topic.Title).ToArray():expectedTitles.GetValueOrDefault(course.Title);
+            if(titles is null)
                 throw new InvalidOperationException($"Discussion demo audit has no course-specific content for {course.Title}.");
             for(var i=0;i<ids.Length;i++)
             {

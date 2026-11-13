@@ -4,6 +4,7 @@ import ResourceInteractions from './ResourceInteractions.vue'
 import CourseQuestions from './CourseQuestions.vue'
 import {api} from '../api'
 vi.mock('../api',()=>({api:vi.fn()}))
+vi.mock('vue-router',()=>({useRoute:()=>({query:{}})}))
 beforeEach(()=>api.mockReset())
 it('shows counts and plain text comments while archived/practice interactions are read only',async()=>{
  api.mockResolvedValue({likes:2,liked:true,total:25,page:1,writable:false,items:[{id:'x',author:'合成',text:'<b>留言</b>',createdAt:'2026-11-09'}]})

@@ -6,7 +6,7 @@ const props=defineProps({course:Object}),emit=defineEmits(['changed']),members=r
 const roles={teacher:'授課教師',ta:'課程助教',student:'學生'}
 async function load(){try{members.value=await api(`/courses/${props.course.id}/members`);if(props.course.isOwner)accounts.value=await api(`/courses/${props.course.id}/eligible-accounts`)}catch(e){error.value=e.message}}
 async function enroll(){busy.value=true;error.value='';notice.value='';try{await api(`/courses/${props.course.id}/members`,{method:'POST',body:form.value});form.value.userId='';await load();emit('changed');notice.value='本課程學員與角色已更新。'}catch(e){error.value=e.message}finally{busy.value=false}}
-const capabilities={materials:'教材編輯',assessments:'評量設定',grading:'登分及發布項目成績',statistics:'教材學習統計'}
+const capabilities={materials:'教材與公告編輯',assessments:'評量設定',grading:'登分及發布項目成績',statistics:'教材學習統計'}
 async function restrictions(member){busy.value=true;try{await api('/courses/'+props.course.id+'/members/'+member.id+'/ta-restrictions',{method:'PUT',body:member.taRestrictions});notice.value='已儲存本課助教權限。'}catch(e){error.value=e.message;await load()}finally{busy.value=false}}
 onMounted(load)
 </script>

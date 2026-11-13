@@ -17,3 +17,10 @@ it('renders ordered unit summary cards with canonical workspace links',async()=>
 it('keeps the student curriculum read only',async()=>{
  curriculum.canManage=false;const view=render(false);await flushPromises();expect(view.text()).toContain('概念');expect(view.text()).toContain('應用');expect(view.text()).toContain('舊報告');expect(view.findAllComponents({name:'RouterLink'}).map(x=>x.props('to'))).toContain('/courses/course/reports/old');expect(view.text()).not.toContain('新增單元');expect(view.find('select').exists()).toBe(false);view.unmount();curriculum.canManage=true
 })
+it('keeps the unit form and entered text when saving fails',async()=>{
+ const view=render();await flushPromises();await view.get('.section-title button').trigger('click')
+ await view.get('form input').setValue('保留我的單元名稱');await view.get('form textarea').setValue('未儲存的說明')
+ api.mockImplementation(async(path,options)=>{if(options?.method==='POST')throw new Error('儲存失敗，請重試');return structuredClone(curriculum)})
+ await view.get('form').trigger('submit');await flushPromises()
+ expect(view.get('form input').element.value).toBe('保留我的單元名稱');expect(view.get('form textarea').element.value).toBe('未儲存的說明');expect(view.get('[role="alert"]').text()).toContain('儲存失敗');view.unmount()
+})

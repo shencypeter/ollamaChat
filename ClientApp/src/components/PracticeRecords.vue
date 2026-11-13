@@ -23,11 +23,11 @@ onMounted(async()=>{try{await load()}catch(e){error.value=e.message}})
  <h2>{{data?.canGrade?'我的練習提交與人工評分':'我的練習成績'}}</h2>
  <p class="submission-notice">僅限本人學生體驗資料，不是正式成績，不納入正式學生名單、班級平均或統計。</p>
  <p v-if="error" role="alert" class="error-box">{{error}}</p><p v-if="notice" role="status">{{notice}}</p>
- <template v-if="data"><p>我的練習加權平均：{{data.average==null?'待評分':data.average.toFixed(2)+' 分'}}</p>
+ <template v-if="data"><p>我的練習等比平均：{{data.average==null?'待評分':data.average.toFixed(2)+' 分'}}</p>
  <p v-if="!data.records.length">尚無練習提交。請切換學生視角，完成已發布的測驗或 PDF 作業。</p>
  <article v-for="row in data.records" :key="row.id" class="question-editor">
   <h3>{{row.title}} · {{row.kind==='quiz'?'測驗練習':'PDF 作業練習'}}</h3>
-  <p>{{new Date(row.submittedAt).toLocaleString()}} · 權重 {{row.weight}} · 得分 {{row.score??'待評分'}} / {{row.maxScore}}</p>
+  <p>{{new Date(row.submittedAt).toLocaleString()}} · 得分 {{row.score??'待評分'}} / {{row.maxScore}}</p>
   <details v-if="row.answers"><summary>檢視本次練習作答</summary><div v-for="(a,i) in row.answers" :key="i"><strong>{{a.prompt}}</strong><p v-if="data.canGrade && a.gradingGuidance" class="studio-prose submission-notice">教師評分參考：{{a.gradingGuidance}}</p><QuizAnswerReview :question="a" :text="a.text" :show-key="data.canGrade" /></div></details>
   <FilePreview v-if="row.kind==='report'" :endpoint="`${base}/reports/${row.id}/preview`" :file-name="row.fileName" content-type="application/pdf" />
   <p v-if="row.quiz">客觀題自動得分：{{row.quiz.objectiveScore}}；{{row.quiz.pendingEssays?'申論題待評分':'已完成評分'}}。</p><form v-if="data.canGrade && course.status!=='archived' && (!row.quiz || row.quiz.marks.some(m=>m.questionType==='essay'))" @submit.prevent="save(row)">

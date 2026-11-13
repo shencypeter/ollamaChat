@@ -94,3 +94,18 @@
  .global-bar .global-actions{gap:6px;margin-left:auto}.global-bar .global-user{padding:0}.global-bar .user-copy{display:none}
  .global-bar .experience-toggle{padding-inline:8px}.workspace-sidebar .sidebar-bottom{padding-top:14px}
 }
+
+/* Shared reading, form and status rhythm across course workspaces. */
+.page-heading>div,.section-title>div{min-width:0}.page-heading h1,.section-title h2,.breadcrumb a,.breadcrumb strong{overflow-wrap:anywhere}
+.breadcrumb{height:auto;min-height:61px;flex-wrap:wrap;padding-block:14px;line-height:1.7}
+.form-surface>h2,.form-surface>h3{margin-bottom:14px}.form-surface>p+form{margin-top:16px}
+.form-surface details{margin-block:16px}.form-surface details>summary{cursor:pointer;font-weight:600;padding:10px 0;color:var(--accent)}
+.status-badge{white-space:normal;line-height:1.5}.table-scroll{max-width:100%;overscroll-behavior-inline:contain}.data-table :is(th,td){overflow-wrap:anywhere}
+.report-group-options,.report-grading,.report-evaluation{display:grid;gap:16px}.report-dimensions{display:grid;gap:12px}
+.report-member-grade{padding:16px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft)}
+.report-dimension-control{display:flex;align-items:center;gap:8px}.report-dimension-control .icon-button{margin-top:8px;color:var(--danger)}
+.report-roster-table{width:100%;border-collapse:collapse}.report-roster-table :is(th,td){text-align:left;padding:12px;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.report-group-options>legend,.report-dimensions>legend{font-weight:700;margin-block:14px}
+.report-grading fieldset>label,.report-evaluation fieldset>label{margin-bottom:14px}
+@media(max-width:760px){.page-heading,.section-title{align-items:flex-start;flex-wrap:wrap}.page-heading{gap:12px}.form-bottom{flex-wrap:wrap;justify-content:flex-start}.button{white-space:normal}.gradebook-summary{grid-template-columns:repeat(auto-fit,minmax(135px,1fr))}.workspace-main{padding-inline:16px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}

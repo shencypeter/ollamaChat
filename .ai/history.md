@@ -1,5 +1,49 @@
 # 開發歷程與決策紀錄
 
+## 2026-11-13 Portal 原生收合面板
+
+使用者希望資訊豐富的 Portal 每個區塊可收合。新增共用 PortalPanel，沿用既有設計與 Lucide chevron，以原生 details／summary 提供整列點擊、鍵盤、持續可見的標題與數量；接入 OverviewView 全部資訊面板及 PortalActivity 訊息／行程。預設展開，localStorage 依帳號 ID、教師／學生視角及固定面板 key 存開關值，無帳號不寫、儲存被禁不阻擋操作；不存課程內容。內容保留 DOM，避免關閉後重掛 API 或遺失表單／篩選。摘要捷徑可再次打開已收合的待辦／批改／討論，原錨點導航保留。兩欄面板頂端對齊，關閉時不被鄰欄拉長。
+
+先確認缺元件的失敗，再加入狀態保存、帳號／視角隔離、儲存例外、內容保留及錨點專項。最終 Vue 48 檔 160/160、Vite production build 通過；既有 7173 上的教師／學生 2 個 Chrome fixture journey 加入 Enter／Space、收合後數量、reload 還原、摘要展開及桌面／390px 手機無橫向溢出，全數通過。已檢視完整收合的桌面與手機截圖。沒有後端或資料庫變更，沒有重啟程序／新增埠；新 JS index-BO9310bi.js，由既有 7173 提供。agents／elearning 同步更新，尚未提交 Git。
+
+## 2026-11-13 會議差距：訊息、行程與基本評分
+
+使用者核准差距示意後，補齊跨課活動流與行程、持久化課程公告、同成績簿的紙本期中／期末考後登分、左側選組的 PDF 批改，以及課程首頁本課進度。基本小組流程先填基礎分、全組同分，已有個別調整會自動展開且收合／儲存不遺失；互評與同分意願獨立收合，不自動計分。正式新增 PDF 個人／小組整班發布 API，核對完整名冊／指定組、快照、分數及版本後同交易同步成績簿與稽核；單份發布拒絕。缺交、退回及空白不偷偷變成零分。
+
+公告管理沿用 materials 能力（助教權限標籤改教材與公告編輯），封存／預覽不可寫；新公告也列入安全刪課依賴。跨課 feed 僅授權範圍，學生只有本人公開成績事件，不含分數或私密評語。行程含一般評量及線上／紙本正式考試；審查發現線上考試原連結誤落紙本區，已拆 onlineExam query、自動展開線上區且只選本課授權清單 ID，外課 ID 不發明細請求。
+
+Migration 036 已套用 public 並 COMMIT：新增 course_announcements、選填 scheduled_at、course_grade_scores.published_at 與維護 trigger。歷史公開分數以 updated_at 近似回填時間，既有分數及發布快照未改；之後未發布草稿不會更新公開訊息時間。獨立 group_test_* schema 實跑 035→036 舊資料升級，項目／歷史權重／草稿與公開分數雜湊一致。13 項新 DB 整合全部通過（公告／角色／跨課／發布時鐘 4、紙本整班登分 4、PDF 全班發布 5），包含失敗後真正交易回滾；schema 均已刪除。初次 DB run 揭露兩套新 fixture 漏填舊 weight NOT NULL，已修正後重建重跑。
+
+最終 Vue 47 檔 157/157，後端一般回歸 231 通過／28 需外部條件略過；13 項上述 DB 測試另實跑全過。Visual Studio MSBuild 正常 Build 自動建置 Vue，0 錯誤；Chrome 4 個 fixture journey 通過（師生首頁／公告／成績／單元、小組 PDF、紙本全班草稿與發布），已檢視桌面及手機截圖、檢查整頁無橫向溢出。瀏覽器使用合成 API，沒有在真實學生資料執行交卷或發布。
+
+精確停止原 VS app PID 36860，保持 Visual Studio 開啟；新版由 bin/Debug 啟動 PID 28360，只綁 https://localhost:7173。session 200，/courses 載入新 production bundle；5097／5107／5173／5180／5084 無 listener。沒有新增工作樹或平行站台。操作流程、假設與後續項目見 docs/meeting-followup-2026-11-13.md；文件同步更新 agents／elearning，尚未提交 Git。
+
+最後視覺檢查修正首頁課程篩選標籤斷行，Vite 與 4 個瀏覽器流程重跑通過；最終 JS 為 index-DC1ODivo.js。暫存 exam／report／meeting 編譯與升級目錄均清除，保留忽略的瀏覽器截圖供驗收；執行站台來自正常 bin/Debug，沒有依賴暫存輸出。
+
+## 2026-11-13 移除評分項目權重
+
+使用者要求權重留在測驗命題層，並明確確認課程平均採每項百分制等比平均。GradebookPolicy、分類摘要、練習平均及發布總成績 SQL 均移除 course_grade_items.weight 因子；未評空值排除、0 分計入，發布只採已發布分數並保留調分。既有 published_total 不改寫，下一次教師明確重新發布才採新算法。相容 input Weight 固定回傳 1、忽略舊 payload；歷史資料欄位不刪、不批次更新。學習歷程仍讀已發布總分快照。測驗配分／題內評分規準未改。
+
+驗證：Vue 41 檔案 134/134、Vite production build、後端編譯與 217 測試通過／19 條件式略過。另於獨立 group_test_* schema 套用 001–035，實跑 2 項資料庫整合：舊權重 30/70 得分 10/20 與 80/100 的平均為 65，已發布快照 71 保持，明確重新發布後為 65；前一項 YouTube 教材按課程與型態計數亦通過。測試 schema 已刪除。Chrome 兩個 fixture journey 通過，新增成績頁不含權重／加權文案的斷言。既有 VS 程序不重啟，使用者須重新 F5 載入新的後端算法。
+
+## 2026-11-13 數學改英文後的討論內容調整
+
+唯讀確認英文課 f7ffac9b-a7e0-437e-bc2f-cd3a517a1679 仍有原數學百分比／平均數／估算示範討論，依使用者要求原地更新 3 串與 9 則確定性 demo 回覆，內容為 do/does、一般過去式 did + 原形與咖啡店情境對話。交易保留作者、IDs、投票及關閉狀態，沒有更新其他討論或課程。增加 Development-only 指定課程 refresh／preview／唯讀 audit；未來一般 seed 也識別英文課名。工具建置 0 警告／錯誤，資料庫 audit 逐一核對 3 串標題／問題與 9 則回覆全文通過。原全課程 audit 仍可能因其他已改名課程而失敗，本次只宣稱英文課專項 audit。
+
+## 2026-11-13 我的授課顯示 YouTube 教材
+
+使用者希望課程清單即可辨識含影音的課程。CourseSummary 增加預設 0 的 YouTubeCount，同課 course_resources 按 youtube 型態計數，List／Get 均提供；沿用原 membership 隔離。授課卡片增加 Lucide Video 圖示與實際部數，零部隱藏。沒有 Migration。前端 132/132、Vite build 通過；新後端在 ignored youtube-verify 編譯／測試為 215 通過／19 條件式略過。新增課程隔離／型態計數整合案例，但未設 FORMATIVE_TEST_CONNECTION，此 DB 案例未實際執行。保持既有 VS 程序，使用者重新 F5 後才會載入新增 DTO。
+
+## 2026-11-13 11/15 展示 UX 修正
+
+依使用者完整 UX sweep 要求，重用既有課程／單元／通知／成績／學習歷程／PDF API，將登入導向個人儀表板，補全域歷程及帳號選單 Portal 入口；課內歷程改為課程學習進度。成績介面由活動橫向膨脹改為摘要與可篩選明細，學生取消重複表；保留既有相對權重與課程調分。小組回饋與教師成績分開呈現、增加全名冊與載入／重試；單元儲存失敗保留編輯內容。沒有 Migration、後端或模型設定修改。
+
+展示資料唯讀 audit：成績線上 151/151、成績簿 151/151、PDF 72/72、未發布小組成員 0；舊討論 audit 因「個案分析課程A」不在內容對照中失敗，未覆寫討論。後端一般測試建置被 Visual Studio 正在執行的 apphost PID 35060 鎖定，改以無重新建置模式執行既有後端測試，214 通過／19 條件式略過。實作、瀏覽器驗證範圍及未完成項目記錄於 docs/ux-sweep-2026-11-13.md。
+
+整合驗證為 Vue 41 檔案 130/130、Vite 2023 modules production build 通過。完整 VS MSBuild 改至 ignored ux-verify 暫存輸出以避開執行中 DLL 鎖後通過，沒有啟動第二服務。Chrome 兩個教師／學生 fixture journey 通過，測試 Portal 選單、課程／單元、成績、跨課歷程與 1440px／390px 無整頁溢出；已實際檢視教師首頁與學生手機成績截圖。視覺檢查後將手機學生成績改為完整六欄卡片，避免得分被橫向裁切。討論儀表板連結加入同課授權清單內的 thread 深連結，新增跨課 ID 不會送出明細請求的測試。
+
+最終獨立審查另修正成績連結一般作業誤用 quiz-only 路由，新增回歸後完整 Vue 131/131，Vite 重建成功。審查無其餘 Important／Critical 問題。此次沒有執行登入後交卷／調分／發布的資料庫寫入 E2E。
+
 ## 2026-11-12 修正 Visual Studio npm 9009
 
 Visual Studio F5 首次使用一般 Build target 後回報 `npm run build` code 9009。查核 csproj 並無 `npn` 拼字錯誤；系統 PATH 只有 Codex runtime 的 Node，沒有 npm，但 Visual Studio 2026 Community 自己隨附 npm 11.19.0 於其 MSBuild `Microsoft\VisualStudio\NodeJs` 目錄。根因是該目錄未加入 Visual Studio build process PATH。

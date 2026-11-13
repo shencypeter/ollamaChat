@@ -1,5 +1,35 @@
 # 代理工作規則與目前交接
 
+## 2026-11-13 Portal 面板收合
+
+我的首頁資訊面板（跨課訊息、行程、待辦／待批改、成績／討論、課程、最近繳交）使用共用 PortalPanel 原生 details／summary，預設展開、標題／數量常駐，支援鍵盤。localStorage 只保存按帳號與教師／學生視角分開的開關值，儲存受限仍能操作。摘要捷徑及錨點會展開目標。Vue 160/160、師生瀏覽器 2 流程（含 reload／鍵盤／手機）通過，Vite 已更新既有 7173；無後端、Migration 或程序變更，尚未提交 Git。
+
+## 2026-11-13 會議差距落實
+
+個人首頁新增跨課活動流／考試行程，課程側欄新增持久化公告；公告沿用助教 materials 能力。正式考試預設同一成績簿的紙本期中／期末全班登分，原線上考試收合保留。小組 PDF 採選組側欄、進階個別調分／回饋，PDF 成績改為完整度與版本檢查後整班交易發布，單份發布明確拒絕。課程首頁新增本課進度摘要。詳見 [會議後續交付](../docs/meeting-followup-2026-11-13.md)。
+
+Migration 036 新增公告、選填考試時間與分數發布時間 trigger，防止新草稿誤成公開成績事件。歷史發布時間以 updated_at 近似回填；不更動既有分數與發布快照。這項取代下方「公告尚無後端」及「正式考試只用 exams」的舊交接，原線上 exams 資料與流程仍保留。
+
+036 已套用 public。最終 Vue 157/157、後端 231 通過／28 條件式略過，另獨立 schema 真跑 13 項 DB 整合與舊資料升級全過；Chrome 4 個合成 API journey 通過。新版 bin/Debug PID 28360 僅綁 7173，Visual Studio 保持開啟，其他舊埠無 listener；下次仍須重查。尚未提交 Git。
+
+## 2026-11-13 評分項目改等比平均
+
+使用者確認移除課程評分項目權重：各項先換算百分制後等比平均，空白不計、0 分計入。成績簿／分類摘要／個人預覽採同一原則；已發布課程總成績保持原快照，重新發布才套用等比平均與既有全班／個人調分。課程權重 UI 移除；相容 API 欄位固定 1、舊資料權重欄位保留但不參與算法。測驗題目配分與題內評分規準不變。這項取代下方保留課程加權算法的早期記錄。
+
+## 2026-11-13 英文課討論示範
+
+原數學課已由使用者改名「英文課」。該課原 3 串示範提問與 9 則教師／同學／助教回覆已原地改成 do/does、did + 原形及咖啡店禮貌對話；IDs、作者、讚數與關閉狀態保持。新增 Development-only `--english-discussion-demo-preview`、`--english-discussion-demo --course=<id>` 及唯讀 `--english-discussion-demo-audit --course=<id>`；只更新該課確定性 demo IDs，不執行全課程 seed。
+
+## 2026-11-13 我的授課影音標示
+
+授課課程卡片在 YouTube 教材數量大於零時，顯示 Video 圖示及「YouTube 影音教材・N 部」。課程清單／詳情既有 CourseSummary 新增 `youTubeCount`，同一個授權查詢按 course_id 與 resource_type 計數，不額外逐課請求、不改資料庫。重新 F5 才會讓執行中的舊後端提供新增欄位。
+
+## 2026-11-13 UX／導覽整合
+
+登入首頁改為教師／學生個人儀表板，重用真實授權 API；全域側欄與右上帳號選單加入我的首頁（Portal），側欄另有跨課／跨學期我的學習歷程。課內使用課程學習進度，隱藏跨課篩選。教師成績預設固定摘要，支援單元／類型／活動與明細；學生合併為一張我的成績表。小組 PDF 顯示完整指定名冊與未交數，分開成績分配／組員回饋，強調個別最終分數與調整原因。後端 API／Migration／授權與計分沒有修改。
+
+操作、限制、11/15 驗收與驗證見 [UX 整合紀錄](../docs/ux-sweep-2026-11-13.md)。公告、獨立同分調查及獨立正式考試跨成績簿整合尚需後端支持。Demo 成績 audit 通過；討論 audit 因課名已變更而未通過。保留 Visual Studio 執行中的程序，不另開 port；狀態需每次重查。
+
 ## 2026-11-12 Visual Studio 自動建置 Vue
 
 一般 Visual Studio Build／F5 與 `dotnet build` 現會先檢查 `ClientApp/package-lock.json`：npm 安裝標記缺少或較舊時執行 `npm ci`，並在每次 Build 執行 Vite，避免 Git 忽略的 `wwwroot/portal` 殘留舊 bundle。`DisableFastUpToDateCheck=true` 防止 Visual Studio 在只改 Vue 時略過整個 MSBuild。Publish 復用同一 `BuildVue` target，只收集一次產物；`SkipFrontendBuild=true` 僅供前端已另行建置驗證的隔離流程。Node/npm 缺少或 Vue 失敗會讓 .NET build 明確失敗。

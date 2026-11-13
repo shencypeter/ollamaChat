@@ -219,16 +219,17 @@ public sealed partial class LearningAssessmentsController
           ? Query(conn,"""
               SELECT jsonb_build_object('name',COALESCE(s.group_name,g.name),'submitted',s.id IS NOT NULL,'late',s.submitted_at>a.due_at,
                'canSubmit',s.id IS NULL AND g.dissolved_at IS NULL AND (m.is_leader OR a.allow_delegate),'dissolved',g.dissolved_at IS NOT NULL)
+               || CASE WHEN $3 THEN jsonb_build_object('groupId',g.id,'submissionId',s.id) ELSE '{}'::jsonb END
               FROM report_groups rg JOIN report_assignments a ON a.id=rg.report_id JOIN course_groups g ON g.id=rg.group_id
               LEFT JOIN course_group_members m ON m.group_id=g.id AND m.left_at IS NULL AND m.user_id=$2
               LEFT JOIN report_submissions s ON s.group_id=g.id AND s.report_id=rg.report_id
               WHERE rg.report_id=$1 AND ($3 OR s.id IS NULL AND m.user_id IS NOT NULL OR EXISTS(SELECT 1 FROM report_snapshot x WHERE x.submission_id=s.id AND x.student_id=$2)) ORDER BY g.name
               """,id,Actor,staff)
           : Query(conn,"""
-              SELECT jsonb_build_object('name',u.display_name,'submitted',s.id IS NOT NULL,'late',s.submitted_at>a.due_at)
+              SELECT jsonb_build_object('studentId',u.id,'submissionId',s.id,'name',u.display_name,'submitted',s.id IS NOT NULL,'late',s.submitted_at>a.due_at)
               FROM report_assignments a JOIN course_members m ON m.course_id=a.course_id AND m.course_role='student' AND m.status='active'
               JOIN app_users u ON u.id=m.user_id LEFT JOIN report_submissions s ON s.report_id=a.id AND s.student_id=u.id AND NOT s.is_practice
-              WHERE a.id=$1 ORDER BY u.student_number,u.display_name
+              WHERE a.id=$1 AND u.status='active' ORDER BY u.student_number,u.display_name
               """,id);
         return Ok(await Rows(rows,ct));
     });

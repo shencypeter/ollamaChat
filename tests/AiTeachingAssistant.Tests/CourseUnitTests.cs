@@ -128,6 +128,40 @@ public class CourseUnitTests : IAsyncLifetime
         Assert.IsType<ConflictObjectResult>(await Courses(teacher).Update(course,new(){Code=input.Code,Title=input.Title,TermCode=input.TermCode,ClassLabel=input.ClassLabel,ExpectedVersion=version+1},default));
     }
 
+    [Fact]
+    public async Task CourseYouTubeCountsOnlyIncludeResourcesInThatCourse()
+    {
+        if(!Enabled)return;
+        var own=Json(await Units(teacher).Create(course,new(){Name="影音單元"},default)).GetProperty("id").GetGuid();
+        var foreign=Json(await Units(teacher).Create(other,new(){Name="其他課影音"},default)).GetProperty("id").GetGuid();
+        await Tools(teacher).AddYouTube(course,new(){Title="課程回放",Url="https://youtu.be/M7lc1UVf-VE",UnitId=own},default);
+        await Tools(teacher).AddYouTube(other,new(){Title="別課回放",Url="https://youtu.be/M7lc1UVf-VE",UnitId=foreign},default);
+        var detail=Assert.IsType<CourseSummary>(Assert.IsType<OkObjectResult>(await Courses(teacher).Get(course,default)).Value);
+        Assert.Equal(1,detail.YouTubeCount);Assert.Equal(2,detail.ResourceCount);
+        var listed=Assert.IsAssignableFrom<IEnumerable<CourseSummary>>(Assert.IsType<OkObjectResult>(await Courses(teacher).List(default)).Value);
+        Assert.Equal(1,listed.Single(item=>item.Id==course).YouTubeCount);
+        var studentList=Assert.IsAssignableFrom<IEnumerable<CourseSummary>>(Assert.IsType<OkObjectResult>(await Courses(student).List(default)).Value);
+        Assert.DoesNotContain(studentList,item=>item.Id==other);
+    }
+
+    [Fact]
+    public async Task EqualItemAveragesPreservePublishedSnapshotUntilExplicitRepublish()
+    {
+        if(!Enabled)return;
+        var first=Guid.NewGuid();var second=Guid.NewGuid();
+        await Sql("INSERT INTO course_grade_items(id,course_id,title,category,max_score,weight,created_by) VALUES($1,$3,'legacy A','other',20,30,$4),($2,$3,'legacy B','other',100,70,$4)",first,second,course,teacher);
+        await Sql("INSERT INTO course_grade_scores(item_id,course_id,student_id,score,published_score,updated_by) VALUES($1,$3,$4,10,10,$5),($2,$3,$4,80,80,$5)",first,second,course,student,teacher);
+        await Sql("INSERT INTO course_final_grades(course_id,student_id,published_total) VALUES($1,$2,71)",course,student);
+        var context=Context(teacher);var controller=new GradebookController(db,context.Experience){ControllerContext=new(){HttpContext=context.Context}};
+        var book=Json(await controller.Read(course,default));
+        Assert.Equal(65m,book.GetProperty("classAverage").GetDecimal());
+        Assert.Equal(71m,book.GetProperty("finals")[0].GetProperty("publishedTotal").GetDecimal());
+        Assert.IsType<OkObjectResult>(await controller.SaveItem(course,new(){Title="renamed legacy A",Category="other",MaxScore=20,ExpectedVersion=1,Weight=99},default,first));
+        Assert.Equal(30m,(decimal)(await Sql("SELECT weight FROM course_grade_items WHERE id=$1",first))!);
+        Assert.IsType<NoContentResult>(await controller.PublishFinals(course,default));
+        Assert.Equal(65m,(decimal)(await Sql("SELECT published_total FROM course_final_grades WHERE course_id=$1 AND student_id=$2",course,student))!);
+    }
+
     public async Task DisposeAsync()
     {
         if(!Enabled)return;
@@ -135,6 +169,9 @@ public class CourseUnitTests : IAsyncLifetime
         await Sql("DELETE FROM course_resources WHERE course_id=ANY($1)",new[]{course,other});
         await Sql("DELETE FROM assignments WHERE course_id=ANY($1)",new[]{course,other});
         await Sql("DELETE FROM course_units WHERE course_id=ANY($1)",new[]{course,other});
+        await Sql("DELETE FROM course_grade_scores WHERE course_id=ANY($1)",new[]{course,other});
+        await Sql("DELETE FROM course_final_grades WHERE course_id=ANY($1)",new[]{course,other});
+        await Sql("DELETE FROM course_grade_items WHERE course_id=ANY($1)",new[]{course,other});
         await Sql("DELETE FROM course_members WHERE course_id=ANY($1)",new[]{course,other});
         await Sql("DELETE FROM courses WHERE id=ANY($1)",new[]{course,other});
         await Sql("DELETE FROM app_users WHERE id=ANY($1)",new[]{teacher,ta,student});await db.DisposeAsync();

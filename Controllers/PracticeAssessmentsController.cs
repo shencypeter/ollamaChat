@@ -32,7 +32,7 @@ public sealed class PracticeAssessmentsController(NpgsqlDataSource source,Learne
         await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead,ct);
         if(!await Allowed(conn,course,false,ct))return Forbid();var records=new List<Record>();
         await using(var cmd=new NpgsqlCommand("""
-            SELECT r.id,a.id,a.title,a.max_score,i.weight,r.submitted_at,g.score,COALESCE(g.feedback,''),g.id,
+            SELECT r.id,a.id,a.title,a.max_score,1::numeric,r.submitted_at,g.score,COALESCE(g.feedback,''),g.id,
               (SELECT jsonb_agg(jsonb_build_object('prompt',q.prompt_text,'text',v->>'text','questionType',q.question_type,'options',q.options,'standardAnswer',CASE WHEN $3::boolean THEN q.standard_answer ELSE NULL END,'gradingGuidance',CASE WHEN $3::boolean THEN q.grading_guidance ELSE NULL END) ORDER BY q.sort_order)::text
                FROM jsonb_array_elements(r.answers) v JOIN assignment_questions q ON q.id=(v->>'questionId')::uuid)
             FROM submissions s JOIN assignments a ON a.id=s.assignment_id JOIN course_grade_items i ON i.source_assignment_id=a.id
@@ -43,7 +43,7 @@ public sealed class PracticeAssessmentsController(NpgsqlDataSource source,Learne
             cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(Actor);cmd.Parameters.AddWithValue(!experience.IsPractice);await using var r=await cmd.ExecuteReaderAsync(ct);
             while(await r.ReadAsync(ct))records.Add(new("quiz",r.GetGuid(0),r.GetGuid(1),r.GetString(2),r.GetDecimal(3),r.GetDecimal(4),r.GetFieldValue<DateTimeOffset>(5),r.IsDBNull(6)?null:r.GetDecimal(6),r.GetString(7),0,r.IsDBNull(8)?null:r.GetGuid(8),r.IsDBNull(9)?null:JsonSerializer.Deserialize<JsonElement>(r.GetString(9)),null));
         }
-        await using(var cmd=new NpgsqlCommand("SELECT s.id,a.id,a.title,a.max_score,i.weight,s.submitted_at,s.score,s.feedback,s.version,s.file_name FROM report_submissions s JOIN report_assignments a ON a.id=s.report_id JOIN course_grade_items i ON i.source_report_id=a.id WHERE a.course_id=$1 AND s.student_id=$2 AND s.is_practice ORDER BY s.submitted_at DESC",conn)){
+        await using(var cmd=new NpgsqlCommand("SELECT s.id,a.id,a.title,a.max_score,1::numeric,s.submitted_at,s.score,s.feedback,s.version,s.file_name FROM report_submissions s JOIN report_assignments a ON a.id=s.report_id JOIN course_grade_items i ON i.source_report_id=a.id WHERE a.course_id=$1 AND s.student_id=$2 AND s.is_practice ORDER BY s.submitted_at DESC",conn)){
             cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(Actor);await using var r=await cmd.ExecuteReaderAsync(ct);
             while(await r.ReadAsync(ct))records.Add(new("report",r.GetGuid(0),r.GetGuid(1),r.GetString(2),r.GetDecimal(3),r.GetDecimal(4),r.GetFieldValue<DateTimeOffset>(5),r.IsDBNull(6)?null:r.GetDecimal(6),r.GetString(7),r.GetInt32(8),null,null,r.GetString(9)));
         }
@@ -52,7 +52,7 @@ public sealed class PracticeAssessmentsController(NpgsqlDataSource source,Learne
             Dictionary<Guid,decimal> essays=[];if(record.ExpectedGradeId.HasValue){await using var cmd=new NpgsqlCommand("SELECT essay_scores::text FROM grades WHERE id=$1",conn);cmd.Parameters.AddWithValue(record.ExpectedGradeId.Value);essays=JsonSerializer.Deserialize<Dictionary<Guid,decimal>>((string)(await cmd.ExecuteScalarAsync(ct))!)!;}
             var pending=marks.Count(m=>m.QuestionType=="essay"&&!essays.ContainsKey(m.QuestionId));records[index]=record with{Quiz=new(marks,marks.Sum(m=>m.AutoScore??0),pending,pending==0),EssayScores=essays};
         }
-        var scored=records.Where(r=>r.Score.HasValue).ToArray();decimal? average=scored.Length==0?null:Math.Round(scored.Sum(r=>r.Score!.Value/r.MaxScore*100*r.Weight)/scored.Sum(r=>r.Weight),2,MidpointRounding.AwayFromZero);
+        var scored=records.Where(r=>r.Score.HasValue).ToArray();decimal? average=scored.Length==0?null:Math.Round(scored.Average(r=>r.Score!.Value/r.MaxScore*100),2,MidpointRounding.AwayFromZero);
         await tx.CommitAsync(ct);return Ok(new{records,average,canGrade=!experience.IsPractice,isPractice=true});
     }
     [HttpPut("{kind}/{id:guid}/grade")]

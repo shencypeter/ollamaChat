@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch, onMounted, onBeforeUnmount, provide, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {BookOpen,Settings,LogOut,Moon,Sun,GraduationCap,Menu,X,UserRoundCog,ChevronDown,ChevronLeft,KeyRound} from '@lucide/vue'
+import {BookOpen,Settings,LogOut,Moon,Sun,GraduationCap,Menu,X,UserRoundCog,ChevronDown,ChevronLeft,KeyRound,Home,History} from '@lucide/vue'
 import {api} from './api'
 import {courseNotifications} from './composables/notifications'
 import {courseSections} from './utils/courseNavigation'
@@ -74,6 +74,7 @@ async function logout() { try { await signOut(); router.replace('/login') } catc
       <div class="global-actions"><button class="icon-button" :aria-label="theme === 'dark' ? '切換淺色模式' : '切換深色模式'" @click="toggleTheme"><Sun v-if="theme === 'dark'" :size="19" /><Moon v-else :size="19" /></button><div ref="accountBox" class="account-control" @keydown.esc.stop="closeAccount" @focusout="!accountBox?.contains($event.relatedTarget) && (accountOpen=false)">
         <button ref="accountButton" type="button" class="global-user" :aria-label="userName+'，帳號選單'" aria-controls="account-actions" :aria-expanded="accountOpen" @click="accountOpen=!accountOpen"><span class="avatar">{{ initials }}</span><span class="user-copy">{{userName}}<small>{{roleLabels[auth.user.role]}}</small></span><ChevronDown :size="15"/></button>
         <nav v-show="accountOpen" id="account-actions" aria-label="帳號操作" @click="accountOpen=false">
+          <RouterLink to="/"><Home :size="16"/>我的首頁（Portal）</RouterLink>
           <RouterLink to="/account"><UserRoundCog :size="16"/>個人資料</RouterLink>
           <RouterLink to="/account/password"><KeyRound :size="16"/>更改密碼</RouterLink>
           <button type="button" @click.stop="logout"><LogOut :size="16"/>登出</button>
@@ -93,14 +94,16 @@ async function logout() { try { await signOut(); router.replace('/login') } catc
         </template>
         
         <template v-else>
+          <RouterLink to="/" :class="{selected:route.path==='/'}"><Home :size="18"/>我的首頁 <NotificationBadge :count="notifications.total" label="未讀課程通知"/></RouterLink>
           <RouterLink v-if="hasTeachingPortal" to="/courses" :class="{selected:route.path==='/courses'}"><BookOpen :size="18"/>我的授課</RouterLink>
-          <RouterLink to="/student/courses" :class="{selected:route.path==='/student/courses'||(!hasTeachingPortal&&route.path==='/courses')}"><GraduationCap :size="18"/>學生視角 · 我的修課</RouterLink>
+          <RouterLink to="/student/courses" :class="{selected:route.path==='/student/courses'||(!hasTeachingPortal&&route.path==='/courses')}"><GraduationCap :size="18"/>{{hasTeachingPortal?'學生視角 · 我的修課':'我的修課'}}</RouterLink>
+          <RouterLink to="/learning-history" :class="{selected:route.path==='/learning-history'}"><History :size="18"/>我的學習歷程</RouterLink>
         </template>
         <RouterLink v-if="auth.user.role==='Administrator'&&!experience.student" to="/admin"><Settings :size="18"/>管理後台</RouterLink>
       </nav>
       
     </aside>
-    <main id="main-content" class="workspace-main" tabindex="-1" :inert="mobileOpen"><nav class="breadcrumb" aria-label="所在位置"><RouterLink :to="portalPath">{{portalLabel}}</RouterLink><template v-if="course"><span>/</span><RouterLink :to="'/courses/'+course.id">{{course.title}}</RouterLink></template><template v-if="unit"><span>/</span><strong>{{unit.name}}</strong></template><template v-else-if="!['/courses','/student/courses'].includes(route.path)"><span>/</span><strong>{{current}}</strong></template></nav>
+    <main id="main-content" class="workspace-main" tabindex="-1" :inert="mobileOpen"><nav class="breadcrumb" aria-label="所在位置"><RouterLink to="/">我的首頁</RouterLink><template v-if="course||['/courses','/student/courses'].includes(route.path)"><span>/</span><RouterLink :to="portalPath">{{portalLabel}}</RouterLink></template><template v-if="course"><span>/</span><RouterLink :to="'/courses/'+course.id">{{course.title}}</RouterLink></template><template v-if="unit"><span>/</span><strong>{{unit.name}}</strong></template><template v-else-if="route.path!=='/'&&!['/courses','/student/courses'].includes(route.path)"><span>/</span><strong>{{current}}</strong></template></nav>
       <p v-if="experience.student" class="experience-banner" role="status">學生視角預覽 · 唯讀，無法交卷、評分或累積學習紀錄。</p>
       <RouterView :key="route.path+':'+experience.student" />
     </main>

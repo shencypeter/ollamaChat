@@ -1,11 +1,13 @@
 <script setup>
-import {computed,nextTick,onMounted,ref} from 'vue'
+import {computed,nextTick,onMounted,ref,watch} from 'vue'
+import {useRoute} from 'vue-router'
 import {ChevronLeft,ChevronRight,Lock,LockOpen,MessageCircle,MessagesSquare,Paperclip,Plus,RefreshCw,ThumbsUp,X} from '@lucide/vue'
 import {api} from '../api'
 import {markNotificationsRead} from '../composables/notifications'
 import {newRequestId} from '../utils/requestId'
 
 const props=defineProps({course:Object})
+const route=useRoute()
 const base=`/courses/${props.course.id}/questions`
 const data=ref(null),selectedId=ref(null),replies=ref([]),error=ref(''),notice=ref(''),busy=ref(false)
 const creating=ref(false),title=ref(''),question=ref(''),replyText=ref(''),file=ref(null),picker=ref(null)
@@ -21,7 +23,7 @@ const format=value=>new Date(value).toLocaleString()
 async function run(action){busy.value=true;error.value='';notice.value='';try{await action()}catch(e){error.value=e.message}finally{busy.value=false}}
 async function load(keepSelection=true){
   const result=await api(`${base}?all=true`);data.value=result
-  if(!keepSelection||!result.items.some(item=>item.id===selectedId.value))selectedId.value=result.items[0]?.id||null
+  if(!keepSelection||!result.items.some(item=>item.id===selectedId.value))selectedId.value=result.items.find(item=>item.id===route.query.thread)?.id||result.items[0]?.id||null
   if(result.canModerate){await nextTick();await markNotificationsRead('question',result.items.map(item=>item.id))}
   await loadReplies()
 }
@@ -47,6 +49,7 @@ async function likeThread(){await run(async()=>{await api(`${base}/${selected.va
 async function likeReply(item){await run(async()=>{await api(`${base}/${selected.value.id}/replies/${item.id}/like`,{method:'PUT',body:{liked:!item.liked}});await loadReplies()})}
 async function toggleClosed(){await run(async()=>{await api(`${base}/${selected.value.id}/lock`,{method:'PUT',body:!selected.value.locked});await load(true);notice.value=selected.value.locked?'討論串已關閉，仍可閱讀與按讚。':'討論串已重新開放。'})}
 onMounted(()=>run(()=>load(false)))
+watch(()=>route.query.thread,id=>{const item=data.value?.items.find(item=>item.id===id);if(item&&id!==selectedId.value)selectThread(item)})
 </script>
 
 <template>

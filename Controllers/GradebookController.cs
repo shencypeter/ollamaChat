@@ -7,16 +7,16 @@ using Npgsql;
 namespace AiTeachingAssistant.Controllers;
 
 [ApiController,Authorize,Route("api/courses/{course:guid}/gradebook")]
-public sealed class GradebookController(NpgsqlDataSource source,LearnerExperience experience):ControllerBase
+public sealed partial class GradebookController(NpgsqlDataSource source,LearnerExperience experience):ControllerBase
 {
     private Guid Actor=>Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private async Task<string> Access(NpgsqlConnection conn,Guid course,bool write,CancellationToken ct)
     {
-        await using var cmd=new NpgsqlCommand("SELECT m.course_role,c.status FROM course_members m JOIN courses c ON c.id=m.course_id WHERE m.course_id=$1 AND m.user_id=$2 AND m.status='active'"+(write?" FOR UPDATE OF c":""),conn);
+        await using var cmd=new NpgsqlCommand("SELECT m.course_role,c.status,m.ta_restrictions FROM course_members m JOIN courses c ON c.id=m.course_id WHERE m.course_id=$1 AND m.user_id=$2 AND m.status='active'"+(write?" FOR UPDATE OF c":""),conn);
         cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(Actor);await using var r=await cmd.ExecuteReaderAsync(ct);
         if(!await r.ReadAsync(ct))throw new AssignmentWorkflowException(403,"你不是本課程有效成員。");
         var role=experience.IsPractice?"student":r.GetString(0);
-        if(write && (!AssignmentPolicy.IsStaff(role)||r.GetString(1)=="archived"))throw new AssignmentWorkflowException(403,"只有未封存課程的教師／助教可登錄成績。");
+        if(write && (!AssignmentPolicy.IsStaff(role)||r.GetString(1)=="archived"||role=="ta"&&r.GetFieldValue<string[]>(2).Contains("grading")))throw new AssignmentWorkflowException(403,"只有未封存課程的教師／授權助教可登錄成績。");
         return role;
     }
     private async Task<IActionResult> Run(Func<Task<IActionResult>> action)
@@ -27,8 +27,8 @@ public sealed class GradebookController(NpgsqlDataSource source,LearnerExperienc
         await using var tx=await conn.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead,ct);
         var staff=AssignmentPolicy.IsStaff(await Access(conn,course,false,ct));
         var items=new List<GradeItem>();var students=new List<GradeStudent>();var scores=new List<GradeScore>();
-        await using(var cmd=new NpgsqlCommand("SELECT id,title,category,max_score,weight,version,source_assignment_id,source_report_id FROM course_grade_items i WHERE course_id=$1 AND ($2 OR (NOT EXISTS(SELECT 1 FROM assignments a WHERE a.id=i.source_assignment_id AND a.status='draft') AND NOT EXISTS(SELECT 1 FROM report_assignments a WHERE a.id=i.source_report_id AND (a.status='draft' OR a.submission_mode='group' AND NOT EXISTS(SELECT 1 FROM report_group_audience WHERE report_id=a.id AND student_id=$3))))) ORDER BY created_at,id",conn)){
-            cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(staff);cmd.Parameters.AddWithValue(Actor);await using var r=await cmd.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))items.Add(new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetDecimal(3),r.GetDecimal(4),r.GetInt32(5),r.IsDBNull(6)?null:r.GetGuid(6),r.IsDBNull(7)?null:r.GetGuid(7)));
+        await using(var cmd=new NpgsqlCommand("SELECT id,title,category,max_score,1::numeric AS weight,version,source_assignment_id,source_report_id,scheduled_at FROM course_grade_items i WHERE course_id=$1 AND ($2 OR (NOT EXISTS(SELECT 1 FROM assignments a WHERE a.id=i.source_assignment_id AND a.status='draft') AND NOT EXISTS(SELECT 1 FROM report_assignments a WHERE a.id=i.source_report_id AND (a.status='draft' OR a.submission_mode='group' AND NOT EXISTS(SELECT 1 FROM report_group_audience WHERE report_id=a.id AND student_id=$3))))) ORDER BY created_at,id",conn)){
+            cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(staff);cmd.Parameters.AddWithValue(Actor);await using var r=await cmd.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))items.Add(new(r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetDecimal(3),r.GetDecimal(4),r.GetInt32(5),r.IsDBNull(6)?null:r.GetGuid(6),r.IsDBNull(7)?null:r.GetGuid(7),r.IsDBNull(8)?null:r.GetFieldValue<DateTimeOffset>(8)));
         }
         await using(var cmd=new NpgsqlCommand("SELECT u.id,u.display_name,u.student_number FROM course_members m JOIN app_users u ON u.id=m.user_id WHERE m.course_id=$1 AND m.course_role='student' AND m.status='active' AND u.status='active' ORDER BY u.student_number NULLS LAST,u.display_name,u.id",conn)){
             cmd.Parameters.AddWithValue(course);await using var r=await cmd.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))students.Add(new(r.GetGuid(0),r.GetString(1),r.IsDBNull(2)?null:r.GetString(2)));
@@ -58,13 +58,14 @@ public sealed class GradebookController(NpgsqlDataSource source,LearnerExperienc
         GradebookPolicy.Validate(input);await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);await Access(conn,course,true,ct);
         var item=id??Guid.NewGuid();
         if(id.HasValue){
-            await using(var linked=new NpgsqlCommand("SELECT title,category,max_score FROM course_grade_items WHERE id=$1 AND course_id=$2 AND (source_assignment_id IS NOT NULL OR source_report_id IS NOT NULL)",conn)){linked.Parameters.AddWithValue(id.Value);linked.Parameters.AddWithValue(course);await using var r=await linked.ExecuteReaderAsync(ct);if(await r.ReadAsync(ct) && (r.GetString(0)!=input.Title.Trim()||r.GetString(1)!=input.Category||r.GetDecimal(2)!=input.MaxScore))return BadRequest(new{error="連動評量項目只可調整權重；名稱、類型與滿分請由原評量維護。"});}
-            await using var check=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM course_grade_scores WHERE item_id=$1 AND course_id=$2 AND score>$3)",conn);check.Parameters.AddWithValue(item);check.Parameters.AddWithValue(course);check.Parameters.AddWithValue(input.MaxScore);
+            await using(var linked=new NpgsqlCommand("SELECT title,category,max_score FROM course_grade_items WHERE id=$1 AND course_id=$2 AND (source_assignment_id IS NOT NULL OR source_report_id IS NOT NULL)",conn)){linked.Parameters.AddWithValue(id.Value);linked.Parameters.AddWithValue(course);await using var r=await linked.ExecuteReaderAsync(ct);if(await r.ReadAsync(ct) && (r.GetString(0)!=input.Title.Trim()||r.GetString(1)!=input.Category||r.GetDecimal(2)!=input.MaxScore))return BadRequest(new{error="連動評量項目的名稱、類型與滿分請由原評量維護。"});}
+            await using var check=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM course_grade_scores WHERE item_id=$1 AND course_id=$2 AND (score>$3 OR published_score>$3))",conn);check.Parameters.AddWithValue(item);check.Parameters.AddWithValue(course);check.Parameters.AddWithValue(input.MaxScore);
             if(await check.ExecuteScalarAsync(ct) is true)return BadRequest(new{error="滿分不能低於已登錄得分。"});
         }
-        await using var cmd=new NpgsqlCommand(id.HasValue?"UPDATE course_grade_items SET title=$3,category=$4,max_score=$5,weight=$6,version=version+1 WHERE id=$1 AND course_id=$2 AND version=$7 RETURNING id":"INSERT INTO course_grade_items(id,course_id,title,category,max_score,weight,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id",conn);
-        cmd.Parameters.AddWithValue(item);cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(input.Title.Trim());cmd.Parameters.AddWithValue(input.Category);cmd.Parameters.AddWithValue(input.MaxScore);cmd.Parameters.AddWithValue(input.Weight);
-        if(id.HasValue)cmd.Parameters.AddWithValue(input.ExpectedVersion);else cmd.Parameters.AddWithValue(Actor);
+        await using var cmd=new NpgsqlCommand(id.HasValue?"UPDATE course_grade_items SET title=$3,category=$4,max_score=$5,version=version+1,scheduled_at=$7 WHERE id=$1 AND course_id=$2 AND version=$6 RETURNING id":"INSERT INTO course_grade_items(id,course_id,title,category,max_score,weight,created_by,scheduled_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id",conn);
+        cmd.Parameters.AddWithValue(item);cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(input.Title.Trim());cmd.Parameters.AddWithValue(input.Category);cmd.Parameters.AddWithValue(input.MaxScore);
+        if(id.HasValue)cmd.Parameters.AddWithValue(input.ExpectedVersion);else{cmd.Parameters.AddWithValue(input.Weight);cmd.Parameters.AddWithValue(Actor);}
+        cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.TimestampTz,Value=(object?)input.ScheduledAt?.ToUniversalTime()??DBNull.Value});
         if(await cmd.ExecuteScalarAsync(ct)==null)return Conflict(new{error="項目不存在或已被修改，請重新載入。"});
         await Audit(conn,item,"gradebook.item.saved",ct);await tx.CommitAsync(ct);return Ok(new{id=item});
     });
@@ -72,6 +73,7 @@ public sealed class GradebookController(NpgsqlDataSource source,LearnerExperienc
     [HttpPut("items/{id:guid}/score")]
     public Task<IActionResult> SaveScore(Guid course,Guid id,GradeScoreInput input,CancellationToken ct)=>Run(async()=>{
         await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);await Access(conn,course,true,ct);
+        if(input.Publish){await using var exam=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM course_grade_items WHERE id=$1 AND course_id=$2 AND category IN ('midterm','final') AND source_assignment_id IS NULL AND source_report_id IS NULL)",conn);exam.Parameters.AddWithValue(id);exam.Parameters.AddWithValue(course);if(await exam.ExecuteScalarAsync(ct) is true)return Conflict(new{error="紙本期中／期末考須從正式考試頁完成全班登分後，一次發布全班成績。"});}
         await using(var check=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM course_members m JOIN app_users u ON u.id=m.user_id WHERE m.course_id=$1 AND m.user_id=$2 AND m.course_role='student' AND m.status='active' AND u.status='active')",conn)){
             check.Parameters.AddWithValue(course);check.Parameters.AddWithValue(input.StudentId);if(await check.ExecuteScalarAsync(ct) is not true)return BadRequest(new{error="只能登錄本課程有效學生的得分。"});
         }
@@ -115,7 +117,7 @@ public sealed class GradebookController(NpgsqlDataSource source,LearnerExperienc
         if(await Access(conn,course,true,ct)!="teacher")return Forbid();
         await using var cmd=new NpgsqlCommand("""
             INSERT INTO course_final_grades(course_id,student_id,published_total)
-            SELECT c.id,m.user_id,round(sum(s.published_score/i.max_score*100*i.weight)/nullif(sum(i.weight) FILTER(WHERE s.published_score IS NOT NULL),0)+c.grade_adjustment+coalesce(f.adjustment,0),2)
+            SELECT c.id,m.user_id,round(avg(s.published_score/i.max_score*100)+c.grade_adjustment+coalesce(f.adjustment,0),2)
             FROM courses c JOIN course_members m ON m.course_id=c.id AND m.course_role='student' AND m.status='active'
             JOIN app_users u ON u.id=m.user_id AND u.status='active'
             LEFT JOIN course_grade_scores s ON s.course_id=c.id AND s.student_id=u.id

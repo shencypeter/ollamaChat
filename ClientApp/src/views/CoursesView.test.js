@@ -52,3 +52,9 @@ it('publishes drafts and requires a second explicit delete action',async()=>{
   expect(api).toHaveBeenCalledWith('/courses/draft',{method:'DELETE'})
   view.unmount()
 })
+it('identifies teaching courses with YouTube materials without extra course requests',async()=>{
+ api.mockResolvedValue(rows.map(row=>({...row,youTubeCount:row.id==='a'?3:0})))
+ const view=mount(CoursesView,{global});await flushPromises()
+ expect(view.findAll('.course-video-badge')).toHaveLength(1);expect(view.get('.course-video-badge').text()).toBe('YouTube 影音教材・3 部')
+ expect(view.findAll('.course-card')[1].find('.course-video-badge').exists()).toBe(false);expect(api).toHaveBeenCalledTimes(1);view.unmount()
+})

@@ -2,6 +2,10 @@
 
 > 2026-11-09 已加入新測驗／作業及學生提問的紅色數字徽章、個人持久已讀與手機提示，教材複製連結改為固定 Copy 重疊方框圖示按鈕。需套用 025；詳見 [站內通知徽章規格](docs/notification-badges-spec.md)。
 
+> 2026-11-13 登入後使用個人儀表板，整合跨課待辦、教師批改入口與我的學習歷程；右上帳號選單可返回 Portal。成績總覽／明細與小組評分介面已整合，11/15 操作及限制見 [UX 驗收紀錄](docs/ux-sweep-2026-11-13.md)。
+
+> 2026-11-13 會議後續已補課程公告、跨課訊息／考試行程、紙本期中期末全班登分與發布、小組 PDF 選組批改及課程首頁進度。需套用 036，操作與設計假設見 [會議後續及 Demo 驗收](docs/meeting-followup-2026-11-13.md)。
+
 ## 師生入口、示範登入與啟動步驟
 
 課程導覽、唯讀學生預覽、逐人批改、成績發布、角色矩陣與開發示範以[師生入口指南](docs/course-portals.md)為準。舊學生練習及直接顯示平均的說明保留作歷史紀錄。
@@ -26,6 +30,8 @@ Development API documentation is available at `/swagger` after restarting the re
 > 2026-10-29 現行站台：S1–S3a 學生案例學習、T1–T4 教師歷程／統計／匯出、A1–A6 管理；教授兼任管理者。新案例提供純文字 AI 回饋、不給分，舊資料保留但舊導覽不再顯示。另有線上／課後命題測驗與 PDF 報告作業，人工成績連動到加權成績管理。請先讀 [案例站台](docs/case-studio.md) 與 [測驗／PDF／成績管理](docs/learning-assessments.md)，下方原課程平台說明保留其歷史範圍。資料庫需明確套用 001–009；目前本機預覽仍為 http://127.0.0.1:5097 。
 
 # NSYSU Learn — Vue + ASP.NET Core Web API
+
+2026-11-13 grading update: course grade items now contribute equally after normalization to a percentage. Missing scores are excluded and zero scores count. Quiz question points remain configurable in the question editor. Existing published course totals remain snapshots until a teacher explicitly republishes them; historical item weight columns are retained for compatibility but ignored by current calculations.
 
 An e-learning POC with a Teams-inspired collaboration workspace, light/dark themes, PostgreSQL-backed accounts and courses, individual assignment publishing/submission, and an AI teaching portal.
 

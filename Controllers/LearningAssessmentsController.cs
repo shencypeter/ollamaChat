@@ -12,13 +12,13 @@ namespace AiTeachingAssistant.Controllers;
 public sealed partial class LearningAssessmentsController(NpgsqlDataSource source,StudioWorkflow studio,LearnerExperience experience,TimeProvider clock):ControllerBase
 {
     private Guid Actor=>Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-    public sealed class QuizInput{[Required]public SaveAssignmentRequest Assignment{get;set;}=new();[Range(0.001,999999)]public decimal Weight{get;set;}=1;}
+    public sealed class QuizInput{[Required]public SaveAssignmentRequest Assignment{get;set;}=new();public decimal Weight{get=>1;set{}}}
     public sealed class ReportInput{
         public Guid? UnitId{get;set;}
         [Required,StringLength(200)]public string Title{get;set;}="";
         [StringLength(24000)]public string Instructions{get;set;}="";
         [Range(0.01,999999)]public decimal MaxScore{get;set;}=100;
-        [Range(0.001,999999)]public decimal Weight{get;set;}=1;
+        public decimal Weight{get=>1;set{}}
         public string SubmissionMode{get;set;}="individual";
         public Guid[] GroupIds{get;set;}=[];
         public bool AllowDelegate{get;set;}
@@ -40,10 +40,10 @@ public sealed partial class LearningAssessmentsController(NpgsqlDataSource sourc
     [HttpGet("api/courses/{course:guid}/assessments")]
     public Task<IActionResult> List(Guid course,CancellationToken ct)=>Run(async()=>{
         await using var conn=await source.OpenConnectionAsync(ct);var role=await Access(conn,course,false,ct);var staff=StudioWorkflow.Staff(role);var quizzes=new List<object>();var reports=new List<object>();
-        await using(var cmd=new NpgsqlCommand("SELECT a.id,a.title,a.status,a.due_at,i.weight,COALESCE(s.status,'not_started'),a.opens_at,EXISTS(SELECT 1 FROM course_grade_scores gs WHERE gs.item_id=i.id AND gs.student_id=$2 AND gs.published_score IS NOT NULL),a.notify_students FROM assignments a JOIN course_grade_items i ON i.source_assignment_id=a.id LEFT JOIN submissions s ON s.assignment_id=a.id AND s.student_user_id=$2 AND s.attempt_no=1 AND s.is_practice=$4 WHERE a.course_id=$1 AND ($3 OR a.status<>'draft') ORDER BY a.created_at DESC",conn)){
+        await using(var cmd=new NpgsqlCommand("SELECT a.id,a.title,a.status,a.due_at,1::numeric,COALESCE(s.status,'not_started'),a.opens_at,EXISTS(SELECT 1 FROM course_grade_scores gs WHERE gs.item_id=i.id AND gs.student_id=$2 AND gs.published_score IS NOT NULL),a.notify_students FROM assignments a JOIN course_grade_items i ON i.source_assignment_id=a.id LEFT JOIN submissions s ON s.assignment_id=a.id AND s.student_user_id=$2 AND s.attempt_no=1 AND s.is_practice=$4 WHERE a.course_id=$1 AND ($3 OR a.status<>'draft') ORDER BY a.created_at DESC",conn)){
             cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(Actor);cmd.Parameters.AddWithValue(staff);cmd.Parameters.AddWithValue(experience.IsPractice);await using var r=await cmd.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))quizzes.Add(new{id=r.GetGuid(0),title=r.GetString(1),status=r.GetString(2),dueAt=r.IsDBNull(3)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(3),weight=r.GetDecimal(4),myStatus=r.GetString(5),opensAt=r.IsDBNull(6)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(6),released=r.GetBoolean(7),notifyStudents=r.GetBoolean(8)});
         }
-        await using(var cmd=new NpgsqlCommand("SELECT a.id,a.title,a.status,a.due_at,i.weight,s.id IS NOT NULL,a.notify_students FROM report_assignments a JOIN course_grade_items i ON i.source_report_id=a.id LEFT JOIN report_submissions s ON s.report_id=a.id AND (s.student_id=$2 OR EXISTS(SELECT 1 FROM report_snapshot m WHERE m.submission_id=s.id AND m.student_id=$2)) AND s.is_practice=$4 WHERE a.course_id=$1 AND ($3 OR a.status<>'draft') AND ($3 OR a.submission_mode='individual' OR EXISTS(SELECT 1 FROM report_group_audience WHERE report_id=a.id AND student_id=$2)) ORDER BY a.created_at DESC",conn)){
+        await using(var cmd=new NpgsqlCommand("SELECT a.id,a.title,a.status,a.due_at,1::numeric,s.id IS NOT NULL,a.notify_students FROM report_assignments a JOIN course_grade_items i ON i.source_report_id=a.id LEFT JOIN report_submissions s ON s.report_id=a.id AND (s.student_id=$2 OR EXISTS(SELECT 1 FROM report_snapshot m WHERE m.submission_id=s.id AND m.student_id=$2)) AND s.is_practice=$4 WHERE a.course_id=$1 AND ($3 OR a.status<>'draft') AND ($3 OR a.submission_mode='individual' OR EXISTS(SELECT 1 FROM report_group_audience WHERE report_id=a.id AND student_id=$2)) ORDER BY a.created_at DESC",conn)){
             cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(Actor);cmd.Parameters.AddWithValue(staff);cmd.Parameters.AddWithValue(experience.IsPractice);await using var r=await cmd.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))reports.Add(new{id=r.GetGuid(0),title=r.GetString(1),status=r.GetString(2),dueAt=r.IsDBNull(3)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(3),weight=r.GetDecimal(4),submitted=r.GetBoolean(5),notifyStudents=r.GetBoolean(6)});
         }
         return Ok(new{quizzes,reports,staff});
@@ -89,7 +89,7 @@ public sealed partial class LearningAssessmentsController(NpgsqlDataSource sourc
     private sealed record Report(Guid Id,Guid CourseId,string Title,string Instructions,string Status,decimal MaxScore,DateTimeOffset? OpensAt,DateTimeOffset? DueAt,int Version,decimal Weight,Guid ItemId,string CourseRole,bool IsPractice=false,bool NotifyStudents=true,string SubmissionMode="individual",bool AllowDelegate=false,bool AllowLate=false,string EvaluationMode="off",string[]? Dimensions=null,Guid[]? GroupIds=null,Guid? UnitId=null);
     private async Task<Report> ReadReport(NpgsqlConnection conn,Guid id,bool update,CancellationToken ct)
     {
-        Report report;await using(var cmd=new NpgsqlCommand("SELECT a.course_id,a.title,a.instructions,a.status,a.max_score,a.opens_at,a.due_at,a.version,i.weight,i.id,a.notify_students,a.submission_mode,a.allow_delegate,a.allow_late,a.evaluation_mode,a.dimensions,ARRAY(SELECT group_id FROM report_groups WHERE report_id=a.id),a.unit_id FROM report_assignments a JOIN course_grade_items i ON i.source_report_id=a.id WHERE a.id=$1",conn)){
+        Report report;await using(var cmd=new NpgsqlCommand("SELECT a.course_id,a.title,a.instructions,a.status,a.max_score,a.opens_at,a.due_at,a.version,1::numeric,i.id,a.notify_students,a.submission_mode,a.allow_delegate,a.allow_late,a.evaluation_mode,a.dimensions,ARRAY(SELECT group_id FROM report_groups WHERE report_id=a.id),a.unit_id FROM report_assignments a JOIN course_grade_items i ON i.source_report_id=a.id WHERE a.id=$1",conn)){
             cmd.Parameters.AddWithValue(id);await using var r=await cmd.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct))throw new AssignmentWorkflowException(404,"找不到 PDF 作業。");report=new(id,r.GetGuid(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetDecimal(4),r.IsDBNull(5)?null:r.GetFieldValue<DateTimeOffset>(5),r.IsDBNull(6)?null:r.GetFieldValue<DateTimeOffset>(6),r.GetInt32(7),r.GetDecimal(8),r.GetGuid(9),"",false,r.GetBoolean(10),r.GetString(11),r.GetBoolean(12),r.GetBoolean(13),r.GetString(14),r.GetFieldValue<string[]>(15),r.GetFieldValue<Guid[]>(16),r.IsDBNull(17)?null:r.GetGuid(17));
         }
         var role=await Access(conn,report.CourseId,update,ct);
@@ -145,6 +145,7 @@ public sealed partial class LearningAssessmentsController(NpgsqlDataSource sourc
     [HttpPut("api/reports/{id:guid}/submissions/{submission:guid}/grade")]
     public Task<IActionResult> Grade(Guid id,Guid submission,ReportGradeInput input,CancellationToken ct)=>Run(async()=>{
         await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);var report=await ReadReport(conn,id,true,ct);AssignmentPolicy.RequireStaff(report.CourseRole);GradebookPolicy.ValidateScore(input.Score,report.MaxScore);
+        if(input.Publish)return Conflict(new{error="請先儲存評分草稿，再使用本作業的全班發布成績。"});
         Guid student;await using(var cmd=new NpgsqlCommand("UPDATE report_submissions SET score=$3,feedback=$4,published_score=CASE WHEN $7 THEN $3 ELSE published_score END,published_feedback=CASE WHEN $7 THEN $4 ELSE published_feedback END,graded_by=$5,graded_at=now(),version=version+1 WHERE id=$1 AND report_id=$2 AND version=$6 AND NOT returned AND NOT is_practice RETURNING student_id",conn)){cmd.Parameters.AddWithValue(submission);cmd.Parameters.AddWithValue(id);cmd.Parameters.AddWithValue(input.Score!.Value);cmd.Parameters.AddWithValue(input.Feedback);cmd.Parameters.AddWithValue(Actor);cmd.Parameters.AddWithValue(input.ExpectedVersion);cmd.Parameters.AddWithValue(input.Publish);if(await cmd.ExecuteScalarAsync(ct) is not Guid user)return Conflict(new{error="繳交或評分版本已變更，請重新載入。"});student=user;}
         if(report.SubmissionMode=="group")await GradeMembers(conn,report,submission,input,ct);
         else if(input.Publish)await AssessmentGradeSync.SetScore(conn,report.ItemId,report.CourseId,student,input.Score!.Value,Actor,ct);
