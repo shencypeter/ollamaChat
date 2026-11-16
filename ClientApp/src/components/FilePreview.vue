@@ -21,7 +21,7 @@ watch(()=>props.active,v=>{if(!v)clear()})
 onBeforeUnmount(clear)
 </script>
 <template>
-<div v-if="contentType" class="file-preview">
+<div v-if="contentType==='application/pdf'||contentType?.startsWith('image/')" class="file-preview">
  <p v-if="busy" role="status">載入預覽中…</p>
  <p v-if="error" role="alert">{{error}} <button class="text-button" @click="load">重試預覽</button></p>
  <button v-if="compact&&contentType.startsWith('image/')&&!expanded" class="button secondary" @click="expanded=true;load()">預覽圖片</button>
@@ -41,6 +41,7 @@ onBeforeUnmount(clear)
   </div>
  </template>
 </div>
+<p v-else class="field-hint">此格式不支援線上預覽，請下載原始檔案後開啟。</p>
 </template>
 <style scoped>
 .file-preview{margin:.8rem 0;min-width:0}

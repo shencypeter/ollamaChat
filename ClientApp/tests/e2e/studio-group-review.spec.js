@@ -60,9 +60,9 @@ test('group PDF review selects one real submission and keeps missing groups read
 
  await sidebar.getByRole('button',{name:/C 組.*未繳交/}).click()
  await expect(paper.getByRole('heading',{name:'C 組',exact:true})).toBeVisible()
- await expect(paper.getByText('此小組尚未繳交 PDF。',{exact:false})).toBeVisible()
+ await expect(paper.getByText('此小組尚未繳交檔案。',{exact:false})).toBeVisible()
  await expect(paper.locator('form,input,textarea,.file-preview')).toHaveCount(0)
- await expect(paper.getByRole('button',{name:'下載／閱讀 PDF'})).toHaveCount(0)
+ await expect(paper.getByRole('button',{name:'下載作業檔案'})).toHaveCount(0)
  expect(writes).toHaveLength(1)
  await page.screenshot({path:'test-results/group-review-missing-desktop.png',fullPage:true})
  await page.setViewportSize({width:390,height:844})

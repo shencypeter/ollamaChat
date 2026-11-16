@@ -1,4 +1,5 @@
 import { activityLocation } from './courseActivityNavigation'
+import {matchesTerm,termQuery} from './academicCalendar'
 
 function limitedApi(api, concurrency = 4) {
   const queue = []
@@ -13,7 +14,8 @@ function limitedApi(api, concurrency = 4) {
   return path => new Promise((resolve, reject) => { queue.push({ path, resolve, reject }); next() })
 }
 
-export async function loadDashboard(api, teaching, {taskPage=1,taskPageSize=5}={}) {
+export async function loadDashboard(api, teaching, {taskPage=1,taskPageSize=5,year='',semester=''}={}) {
+  const query=termQuery(year,semester),suffix=query?`&${query}`:''
   const request = limitedApi(api)
   const data = { courses: [], learningCourses: [], tasks: [], taskTotal: 0, grades: [], pending: [], recent: [], discussions: [], errors: [], unavailable: {}, restricted: [] }
   async function read(path, label, area, accept) {
@@ -21,14 +23,14 @@ export async function loadDashboard(api, teaching, {taskPage=1,taskPageSize=5}={
     catch (error) { data.errors.push(`${label}：${error.message}`); data.unavailable[area] = true }
   }
   const courses = read('/courses', '課程清單', 'courses', rows => {
-    data.courses = rows.filter(course => teaching ? ['teacher', 'ta'].includes(course.courseRole) : course.courseRole === 'student')
+    data.courses = rows.filter(course => (teaching ? ['teacher', 'ta'].includes(course.courseRole) : course.courseRole === 'student'&&course.status!=='draft')&&matchesTerm(course.termCode,year,semester))
   })
   if (!teaching) {
     await Promise.all([
       courses,
-      read('/learning-history/courses', '修課進度', 'progress', rows => { data.learningCourses = rows }),
-      read(`/learning-history?todo=true&page=${taskPage}&pageSize=${taskPageSize}`, '學習待辦', 'tasks', page => { data.tasks = page.items; data.taskTotal = page.total }),
-      read('/learning-history?page=1&pageSize=12', '近期成績', 'grades', page => { data.grades = page.items.filter(item => item.state === 'graded' && item.score != null) })
+      read('/learning-history/courses', '修課紀錄', 'progress', rows => { data.learningCourses = rows.filter(course=>matchesTerm(course.term,year,semester)) }),
+      read(`/learning-history?todo=true&page=${taskPage}&pageSize=${taskPageSize}${suffix}`, '學習待辦', 'tasks', page => { data.tasks = page.items; data.taskTotal = page.total }),
+      read(`/learning-history?page=1&pageSize=12${suffix}`, '近期成績', 'grades', page => { data.grades = page.items.filter(item => item.state === 'graded' && item.score != null) })
     ])
     return data
   }

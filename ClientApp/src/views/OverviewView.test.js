@@ -25,7 +25,27 @@ it('shows actionable student tasks, course progress and published grades only', 
   expect(view.get('a[href="/quizzes/g"]').text()).toContain('已公布測驗')
   expect(view.text()).not.toContain('尚未發布的草稿分數')
   expect(view.get('a[href="/courses/c"]').text()).toContain('數學課')
+  expect(view.find('.dashboard-course progress').exists()).toBe(false)
+  expect(view.get('.dashboard-course').text()).not.toContain('已繳交')
+  expect(view.get('.dashboard-course').text()).not.toContain('進行中')
   view.unmount()
+})
+it('scopes all student dashboard requests to the configured term and preserves historical selection',async()=>{
+ api.mockImplementation(async path=>{
+  if(path==='/academic-calendar')return {currentTerm:'115-2',terms:['115-2','114-1']}
+  if(path==='/courses')return [{...course,id:'current',termCode:'115-2'},{...course,id:'old',title:'歷年數學',termCode:'114-1'}]
+  if(path==='/learning-history/courses')return []
+  if(path.includes('term=115-2'))return {items:[{id:'now',title:'當學期紀錄',state:'graded',score:80,courseId:'current',url:'/current'}],total:1}
+  if(path.includes('term=114-1'))return {items:[{id:'past',title:'歷年紀錄',state:'graded',score:90,courseId:'old',url:'/old'}],total:1}
+  return {items:[],total:0}
+ })
+ const view=mount(OverviewView,{global});await flushPromises()
+ expect(view.findAll('.dashboard-course')).toHaveLength(1);expect(view.text()).not.toContain('歷年數學')
+ expect(api).toHaveBeenCalledWith('/learning-history?todo=true&page=1&pageSize=5&term=115-2')
+ expect(api).toHaveBeenCalledWith('/learning-history?page=1&pageSize=12&term=115-2')
+ await view.get('select[aria-label="學年度"]').setValue('114');await view.get('select[aria-label="學期"]').setValue('1');await flushPromises()
+ expect(view.text()).toContain('歷年數學');expect(view.text()).toContain('歷年紀錄');expect(view.text()).not.toContain('當學期紀錄')
+ view.unmount()
 })
 
 it('keeps successful sections visible and explains unavailable data', async () => {
@@ -48,7 +68,7 @@ it('shows teacher work queues and skips restricted grading/statistics requests',
   api.mockImplementation(async path => {
     if (path === '/courses') return [{ ...course, courseRole: 'teacher' }, { ...course, id: 'ta', title: '助教課程', courseRole: 'ta', taRestrictions: ['grading', 'statistics'] }]
     if (path.includes('/questions')) return { items: [{ id: 'q', title: '尚無回覆的討論', replyCount: 0, locked: false }, { id: 'r', title: '已回覆', replyCount: 2 }, { id: 'closed', title: '已關閉', replyCount: 0, locked: true }] }
-    if (path === '/courses/c/curriculum') return { activities: [{ id: 'a', kind: 'assignment', title: '文字作業', status: 'published' }, { id: 'pdf', kind: 'report', title: 'PDF 作業', status: 'published' }] }
+    if (path === '/courses/c/curriculum') return { activities: [{ id: 'a', kind: 'assignment', title: '文字作業', status: 'published' }, { id: 'pdf', kind: 'report', title: '檔案繳交作業', status: 'published' }] }
     if (path === '/assignments/a/submissions') return [{ id: 's', studentName: '測試學員', submittedAt: '2026-11-12T10:00:00Z', gradingStatus: 'ungraded' }, { id: 'scored', studentName: '已評同學', gradingStatus: 'draft' }]
     if (path === '/reports/pdf/submissions') return [{ id: 'pdfs', studentName: '第一組', submittedAt: '2026-11-13T10:00:00Z', score: null }, { id: 'returned', score: null, returned: true }]
     throw new Error('Unexpected request: ' + path)
@@ -57,7 +77,7 @@ it('shows teacher work queues and skips restricted grading/statistics requests',
   expect(view.text()).toContain('待批改'); expect(view.text()).toContain('尚無回覆的討論')
   expect(view.text()).not.toContain('已關閉')
   expect(view.get('a[href="/courses/c/assignments/a"]').text()).toContain('文字作業')
-  expect(view.get('a[href="/courses/c/reports/pdf"]').text()).toContain('PDF 作業')
+  expect(view.get('a[href="/courses/c/reports/pdf"]').text()).toContain('檔案繳交作業')
   expect(api.mock.calls.some(([path]) => path.includes('/statistics') || path.includes('/courses/ta/curriculum'))).toBe(false)
   expect(view.text()).toContain('助教批改權限')
   view.unmount()

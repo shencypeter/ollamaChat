@@ -6,11 +6,12 @@ namespace AiTeachingAssistant.Services;
 public sealed record LearningCourse(Guid Id,string Code,string Title,string Term,string Status,DateTimeOffset JoinedAt,
     int Required,int Submitted,int Pending,decimal? Average);
 public sealed record LearningActivity(Guid Id,Guid CourseId,string Kind,string Title,string State,DateTimeOffset? OpensAt,
-    DateTimeOffset? DueAt,DateTimeOffset? OccurredAt,decimal? Score,decimal? MaxScore,string Feedback,string Url,int? Revision,long? EffectiveSeconds);
+    DateTimeOffset? DueAt,DateTimeOffset? OccurredAt,decimal? Score,decimal? MaxScore,string Feedback,string Url,int? Revision,long? EffectiveSeconds,bool IsTimedMaterial=true);
 public sealed record LearningPage(IReadOnlyList<LearningActivity> Items,long Total,int Page,int PageSize);
 
 // All branches derive ownership from the authenticated user and the real course role.
-// This projection never creates drafts and never reads answer bodies or attachment bytes.
+// This projection never creates drafts or reads answer bodies. Material detection
+// reads only the signature prefix, using the same policy as playback sessions.
 public sealed class LearningHistory(NpgsqlDataSource source,TimeProvider clock)
 {
     private const string CoursesSql="""
@@ -94,25 +95,27 @@ public sealed class LearningHistory(NpgsqlDataSource source,TimeProvider clock)
             result.Add(new(id,r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),r.GetFieldValue<DateTimeOffset>(5),s.Required,s.Submitted,s.Pending,averages.TryGetValue(id,out var avg)?avg:null));}}
         await tx.CommitAsync(ct);return result;
     }
-    public async Task<LearningPage> Activities(Guid actor,Guid? course,string? term,string? kind,DateTimeOffset? from,DateTimeOffset? until,int page,int pageSize,bool todo,CancellationToken ct)
+    public async Task<LearningPage> Activities(Guid actor,Guid? course,string? term,string? kind,DateTimeOffset? from,DateTimeOffset? until,int page,int pageSize,bool todo,CancellationToken ct,string? year=null,string? semester=null)
     {
-        if(page<1||page>100000||pageSize is <1 or >100||term?.Length>80||kind is not (null or "" or "quiz" or "report" or "case" or "offline" or "material")||from>until)
+        if(page<1||page>100000||pageSize is <1 or >100||term?.Length>80||year is {Length:>3}||(!string.IsNullOrEmpty(year)&&!year.All(char.IsAsciiDigit))||semester is not (null or "" or "1" or "2" or "S")||kind is not (null or "" or "quiz" or "report" or "case" or "offline" or "material")||from>until)
             throw new AssignmentWorkflowException(400,"歷程篩選或分頁參數無效。");
         await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead,ct);
         var filter="""
              FROM activities a JOIN courses c ON c.id=a.course_id
+             LEFT JOIN course_resources material_resource ON a.kind='material' AND material_resource.id=a.id
              WHERE ($3::uuid IS NULL OR a.course_id=$3) AND ($4='' OR c.term_code=$4) AND ($5='' OR a.kind=$5)
                AND ($6::timestamptz IS NULL OR a.occurred_at>=$6) AND ($7::timestamptz IS NULL OR a.occurred_at<$7)
                AND (NOT $8 OR (a.kind IN ('quiz','report') AND a.state IN ('todo','overdue','upcoming') AND c.status<>'archived'))
+               AND ($9='' OR split_part(c.term_code,'-',1)=$9) AND ($10='' OR split_part(c.term_code,'-',2)=$10)
             """;
         NpgsqlCommand Make(string select){var cmd=Query(conn,select,actor);
             cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlDbType.Uuid,Value=(object?)course??DBNull.Value});cmd.Parameters.AddWithValue(term??"");cmd.Parameters.AddWithValue(kind??"");
-            cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlDbType.TimestampTz,Value=(object?)from?.ToUniversalTime()??DBNull.Value});cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlDbType.TimestampTz,Value=(object?)until?.ToUniversalTime()??DBNull.Value});cmd.Parameters.AddWithValue(todo);return cmd;}
+            cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlDbType.TimestampTz,Value=(object?)from?.ToUniversalTime()??DBNull.Value});cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlDbType.TimestampTz,Value=(object?)until?.ToUniversalTime()??DBNull.Value});cmd.Parameters.AddWithValue(todo);cmd.Parameters.AddWithValue(year??"");cmd.Parameters.AddWithValue(semester??"");return cmd;}
         long total;await using(var cmd=Make(" SELECT count(*)"+filter))total=(long)(await cmd.ExecuteScalarAsync(ct))!;
         var items=new List<LearningActivity>();
-        await using(var cmd=Make(" SELECT a.*"+filter+(todo?" ORDER BY a.due_at ASC NULLS LAST,a.id":" ORDER BY a.occurred_at DESC NULLS LAST,a.due_at ASC NULLS LAST,a.id")+" LIMIT $9 OFFSET $10"))
+        await using(var cmd=Make(" SELECT a.*,material_resource.file_name,substring(material_resource.content from 1 for 16),material_resource.resource_type"+filter+(todo?" ORDER BY a.due_at ASC NULLS LAST,a.id":" ORDER BY a.occurred_at DESC NULLS LAST,a.due_at ASC NULLS LAST,a.id")+" LIMIT $11 OFFSET $12"))
         {cmd.Parameters.AddWithValue(pageSize);cmd.Parameters.AddWithValue((page-1)*pageSize);await using var r=await cmd.ExecuteReaderAsync(ct);
-            while(await r.ReadAsync(ct))items.Add(new(r.GetGuid(0),r.GetGuid(1),r.GetString(2),r.GetString(3),r.GetString(4),Date(r,5),Date(r,6),Date(r,7),r.IsDBNull(8)?null:r.GetDecimal(8),r.IsDBNull(9)?null:r.GetDecimal(9),r.GetString(10),r.GetString(11),r.IsDBNull(12)?null:r.GetInt32(12),r.IsDBNull(13)?null:r.GetInt64(13)));}
+            while(await r.ReadAsync(ct))items.Add(new(r.GetGuid(0),r.GetGuid(1),r.GetString(2),r.GetString(3),r.GetString(4),Date(r,5),Date(r,6),Date(r,7),r.IsDBNull(8)?null:r.GetDecimal(8),r.IsDBNull(9)?null:r.GetDecimal(9),r.GetString(10),r.GetString(11),r.IsDBNull(12)?null:r.GetInt32(12),r.IsDBNull(13)?null:r.GetInt64(13),!r.IsDBNull(14)&&LearningTimePolicy.MediaType(r.GetString(14),r.GetFieldValue<byte[]>(15),r.GetString(16))!=null));}
         await tx.CommitAsync(ct);return new(items,total,page,pageSize);
     }
 }

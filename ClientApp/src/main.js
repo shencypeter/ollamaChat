@@ -21,6 +21,8 @@ import {auth,loadSession} from './composables/auth'
 import {experience,bindExperience,setStudentExperience,setCourseExperience} from './composables/experience'
 import {api,resetCsrf} from './api'
 import './style.css'
+import {safeReturnPath} from './utils/returnPath'
+import {APP_NAME} from './utils/branding'
 const router=createRouter({history:createWebHistory(),routes:[
  {path:'/login',component:LoginView,meta:{public:true,title:'S1 · 登入'}},
  {path:'/',component:OverviewView,meta:{title:'我的首頁'}},
@@ -40,7 +42,7 @@ const router=createRouter({history:createWebHistory(),routes:[
  ...['assessments','assessment-grades'].map(page=>({path:'/'+page,redirect:to=>to.query.course?{path:'/courses/'+to.query.course,query:{section:page==='assessments'?'assessments':'grades'}}:'/courses'})),
  {path:'/courses/:courseId/quizzes/:assignmentId',component:AssignmentView,meta:{quiz:true,title:'線上測驗'}},
  {path:'/courses/:courseId/assignments/:assignmentId',component:AssignmentView,meta:{title:'線上作業'}},
- {path:'/courses/:courseId/reports/:reportId',component:ReportAssignmentView,meta:{title:'PDF 報告作業'}},
+ {path:'/courses/:courseId/reports/:reportId',component:ReportAssignmentView,meta:{title:'檔案繳交作業'}},
  ...['quizzes','reports'].map(kind=>({path:'/'+kind+'/:id',component:CoursesView,beforeEnter:async to=>{
    try {const item=await api('/'+(kind==='quizzes'?'assignments':'reports')+'/'+to.params.id);return '/courses/'+item.courseId+to.path}
    catch{return '/courses'}
@@ -51,9 +53,9 @@ const router=createRouter({history:createWebHistory(),routes:[
  {path:'/:pathMatch(.*)*',redirect:'/'}
 ]})
 router.beforeEach(async to=>{
- try{await loadSession()}catch{return to.path==='/login'?true:'/login'}
- if(!auth.user)return to.meta.public?true:'/login'
- if(to.path==='/login')return '/'
+ try{await loadSession()}catch{return to.path==='/login'?true:{path:'/login',query:{next:to.fullPath}}}
+ if(!auth.user)return to.meta.public?true:{path:'/login',query:{next:to.fullPath}}
+ if(to.path==='/login')return safeReturnPath(to.query.next)
  const learner=!auth.user.canTeach||experience.student
  if(auth.user.hasStudentCourses && !experience.student && to.meta.learner){
   if(auth.profileComplete==null){try{auth.profileComplete=(await api('/studio/profile')).completed}catch{return '/login'}}
@@ -71,6 +73,6 @@ router.beforeResolve(async to=>{
  if(to.query.view==='teaching'||!scope||sessionStorage.getItem('preview-course:'+auth.user?.id)!==scope){sessionStorage.removeItem('preview-course:'+auth.user?.id)}
  setStudentExperience(!!scope && sessionStorage.getItem('preview-course:'+auth.user?.id)===scope)
 })
-router.afterEach(()=>setCourseExperience(null))
-window.addEventListener('portal-session-expired',()=>{auth.user=null;auth.profileComplete=null;bindExperience(null);resetCsrf();router.replace('/login')})
+router.afterEach(to=>{setCourseExperience(null);document.title=`${to.meta.title||'我的首頁'} · ${APP_NAME}`})
+window.addEventListener('portal-session-expired',()=>{const next=safeReturnPath(router.currentRoute.value.fullPath);auth.user=null;auth.profileComplete=null;bindExperience(null);resetCsrf();router.replace({path:'/login',query:{next}})})
 createApp(App).use(router).mount('#app')

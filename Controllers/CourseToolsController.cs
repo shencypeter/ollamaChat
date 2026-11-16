@@ -38,7 +38,7 @@ public sealed partial class CourseToolsController(NpgsqlDataSource source,Learne
         cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Text,Value=string.IsNullOrWhiteSpace(q)?DBNull.Value:q.Trim()});
         cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Date,Value=(object?)from??DBNull.Value});cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Date,Value=(object?)to??DBNull.Value});cmd.Parameters.AddWithValue(undated);
         await using var r=await cmd.ExecuteReaderAsync(ct);var result=new List<object>();
-        while(await r.ReadAsync(ct))result.Add(new{id=r.GetGuid(0),fileName=r.GetString(1),size=r.GetInt32(2),downloadCount=r.GetInt64(3),createdAt=r.GetFieldValue<DateTimeOffset>(4),previewType=FilePreviewPolicy.ContentType(r.GetString(1),r.GetFieldValue<byte[]>(5)),learningType=LearningTimePolicy.MediaType(r.GetString(1),r.GetFieldValue<byte[]>(5),r.GetString(8)),title=r.GetString(6),titleVersion=r.GetInt32(7),resourceType=r.GetString(8),youtubeVideoId=r.IsDBNull(9)?null:r.GetString(9),teachingDate=r.IsDBNull(10)?(DateOnly?)null:r.GetFieldValue<DateOnly>(10),summary=r.GetString(11),metadataVersion=r.GetInt32(12),notifyStudents=r.GetBoolean(13),unitId=r.IsDBNull(14)?(Guid?)null:r.GetGuid(14)});
+        while(await r.ReadAsync(ct))result.Add(new{id=r.GetGuid(0),fileName=ResourceFileNamePolicy.SafeName(r.GetString(1)),size=r.GetInt32(2),downloadCount=r.GetInt64(3),createdAt=r.GetFieldValue<DateTimeOffset>(4),previewType=FilePreviewPolicy.ContentType(r.GetString(1),r.GetFieldValue<byte[]>(5)),learningType=LearningTimePolicy.MediaType(r.GetString(1),r.GetFieldValue<byte[]>(5),r.GetString(8)),title=r.GetString(6),titleVersion=r.GetInt32(7),resourceType=r.GetString(8),youtubeVideoId=r.IsDBNull(9)?null:r.GetString(9),teachingDate=r.IsDBNull(10)?(DateOnly?)null:r.GetFieldValue<DateOnly>(10),summary=r.GetString(11),metadataVersion=r.GetInt32(12),notifyStudents=r.GetBoolean(13),unitId=r.IsDBNull(14)?(Guid?)null:r.GetGuid(14)});
         return Ok(result);
     }
     [AiTeachingAssistant.Services.CourseCapability("materials")]
@@ -48,7 +48,7 @@ public sealed partial class CourseToolsController(NpgsqlDataSource source,Learne
         if(await Access(course,true,ct)==null)return Forbid();
         DateOnly? date;try{date=ResourceMetadataPolicy.Date(teachingDate);summary=ResourceMetadataPolicy.Summary(summary);}catch(ArgumentException e){return BadRequest(new{error=e.Message});}
         if(file.Length is <=0 or >20*1024*1024)return BadRequest(new{error="請上傳 1 byte 至 20 MB 的檔案。"});
-        var name=Path.GetFileName(file.FileName.Replace('\\','/'));if(string.IsNullOrWhiteSpace(name)||name.Length>200)return BadRequest(new{error="檔名無效或超過 200 字元。"});
+        var name=ResourceFileNamePolicy.SafeName(file.FileName);if(string.IsNullOrWhiteSpace(name)||name.Length>200)return BadRequest(new{error="檔名無效或超過 200 字元。"});
 
         using var buffer=new MemoryStream();await file.CopyToAsync(buffer,ct);
         await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);
@@ -87,7 +87,7 @@ public sealed partial class CourseToolsController(NpgsqlDataSource source,Learne
         // One authorized download request counts once; range/retry traffic is not counted separately.
         await using var cmd=source.CreateCommand("UPDATE course_resources SET download_count=download_count+1 WHERE id=$1 AND course_id=$2 AND resource_type='file' RETURNING file_name,content");cmd.Parameters.AddWithValue(id);cmd.Parameters.AddWithValue(course);
         await using var r=await cmd.ExecuteReaderAsync(ct);if(!await r.ReadAsync(ct))return NotFound();
-        Response.Headers["X-Content-Type-Options"]="nosniff";return File(r.GetFieldValue<byte[]>(1),"application/octet-stream",r.GetString(0));
+        Response.Headers["X-Content-Type-Options"]="nosniff";return File(r.GetFieldValue<byte[]>(1),"application/octet-stream",ResourceFileNamePolicy.SafeName(r.GetString(0)));
     }
     [HttpGet("resources/{id:guid}/preview")]
     public async Task<IActionResult> Preview(Guid course,Guid id,CancellationToken ct)
@@ -116,17 +116,21 @@ public sealed partial class CourseToolsController(NpgsqlDataSource source,Learne
     public async Task<IActionResult> SaveGroup(Guid course,GroupInput request,CancellationToken ct,Guid? id=null)
     {
         if(await Access(course,true,ct)==null)return Forbid();
-        if(!request.LeaderId.HasValue || request.Members?.Contains(request.LeaderId.Value)!=true)return BadRequest(new{error="組長必須是本組成員。"});
+        if(request.LeaderId.HasValue && request.Members?.Contains(request.LeaderId.Value)!=true)return BadRequest(new{error="組長必須是本組成員；也可清除組長後儲存。"});
         if(string.IsNullOrWhiteSpace(request.Name)||request.Members==null||request.Members.Count>500||request.Members.Distinct().Count()!=request.Members.Count)return BadRequest(new{error="小組名稱或成員無效。"});
         await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);
-        await using(var gate=new NpgsqlCommand("SELECT id FROM courses WHERE id=$1 FOR UPDATE",conn)){gate.Parameters.AddWithValue(course);await gate.ExecuteScalarAsync(ct);}
+        await using(var gate=new NpgsqlCommand("SELECT status FROM courses WHERE id=$1 FOR UPDATE",conn)){gate.Parameters.AddWithValue(course);if(await gate.ExecuteScalarAsync(ct) is not string status || status=="archived")return Forbid();}
 
         foreach(var user in request.Members){await using var check=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM course_members WHERE course_id=$1 AND user_id=$2 AND course_role='student' AND status='active' AND EXISTS(SELECT 1 FROM app_users u WHERE u.id=$2 AND u.status='active') AND NOT EXISTS(SELECT 1 FROM course_group_members gm JOIN course_groups g ON g.id=gm.group_id WHERE g.course_id=$1 AND gm.user_id=$2 AND gm.left_at IS NULL AND g.id<>$3))",conn);check.Parameters.AddWithValue(course);check.Parameters.AddWithValue(user);check.Parameters.AddWithValue(id??Guid.Empty);if(await check.ExecuteScalarAsync(ct) is not true)return BadRequest(new{error="只能加入本課有效學生，且每人只能屬於一個小組。"});}
         var group=id??Guid.NewGuid();
         try{
             await using(var cmd=new NpgsqlCommand(id.HasValue?"UPDATE course_groups SET name=$3 WHERE id=$1 AND course_id=$2 AND dissolved_at IS NULL":"INSERT INTO course_groups(id,course_id,name) VALUES($1,$2,$3)",conn)) {cmd.Parameters.AddWithValue(group);cmd.Parameters.AddWithValue(course);cmd.Parameters.AddWithValue(request.Name.Trim());if(await cmd.ExecuteNonQueryAsync(ct)==0)return NotFound();}
-            await using(var close=new NpgsqlCommand("UPDATE course_group_members SET left_at=now() WHERE group_id=$1 AND left_at IS NULL",conn)){close.Parameters.AddWithValue(group);await close.ExecuteNonQueryAsync(ct);}
-            foreach(var user in request.Members){await using var add=new NpgsqlCommand("INSERT INTO course_group_members(group_id,user_id,is_leader) VALUES($1,$2,$3)",conn);add.Parameters.AddWithValue(group);add.Parameters.AddWithValue(user);add.Parameters.AddWithValue(user==request.LeaderId);await add.ExecuteNonQueryAsync(ct);}
+            // Preserve retained memberships and submitted report snapshots. Close only removed members.
+            await using(var close=new NpgsqlCommand("UPDATE course_group_members SET left_at=GREATEST(clock_timestamp(),joined_at) WHERE group_id=$1 AND left_at IS NULL AND NOT(user_id=ANY($2))",conn)){close.Parameters.AddWithValue(group);close.Parameters.AddWithValue(request.Members.ToArray());await close.ExecuteNonQueryAsync(ct);}
+            // The partial unique leader index is immediate: clear the old leader before choosing the new one.
+            await using(var clear=new NpgsqlCommand("UPDATE course_group_members SET is_leader=false WHERE group_id=$1 AND left_at IS NULL AND is_leader",conn)){clear.Parameters.AddWithValue(group);await clear.ExecuteNonQueryAsync(ct);}
+            foreach(var user in request.Members){await using var add=new NpgsqlCommand("INSERT INTO course_group_members(group_id,user_id,joined_at,is_leader) SELECT $1,$2,clock_timestamp(),false WHERE NOT EXISTS(SELECT 1 FROM course_group_members WHERE group_id=$1 AND user_id=$2 AND left_at IS NULL)",conn);add.Parameters.AddWithValue(group);add.Parameters.AddWithValue(user);await add.ExecuteNonQueryAsync(ct);}
+            if(request.LeaderId.HasValue){await using var leader=new NpgsqlCommand("UPDATE course_group_members SET is_leader=true WHERE group_id=$1 AND user_id=$2 AND left_at IS NULL",conn);leader.Parameters.AddWithValue(group);leader.Parameters.AddWithValue(request.LeaderId.Value);await leader.ExecuteNonQueryAsync(ct);}
             await StudioWorkflow.Audit(conn,Actor,group,"group.saved",ct);await tx.CommitAsync(ct);return Ok(new{id=group});
         }catch(PostgresException e)when(e.SqlState==PostgresErrorCodes.UniqueViolation){return Conflict(new{error="本課程已有此小組名稱，請重新載入。"});}
     }

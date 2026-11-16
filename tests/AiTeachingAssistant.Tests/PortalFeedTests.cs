@@ -95,6 +95,12 @@ public class PortalFeedDatabaseTests : IAsyncLifetime
         var agenda=Items(await Feed(student).Agenda(default,"student"));Assert.Contains(agenda,x=>x.GetProperty("id").GetGuid()==item);Assert.Contains(agenda,x=>x.GetProperty("id").GetGuid()==assignment);Assert.DoesNotContain(agenda,x=>x.GetProperty("id").GetGuid()==report);
         Assert.Equal($"/courses/{course}?section=assessments&exam={item}",Assert.Single(agenda.Where(x=>x.GetProperty("id").GetGuid()==item)).GetProperty("url").GetString());
         Assert.Equal($"/courses/{course}?section=assessments&onlineExam={onlineExam}",Assert.Single(agenda.Where(x=>x.GetProperty("id").GetGuid()==onlineExam)).GetProperty("url").GetString());
+        await Sql("UPDATE courses SET term_code='115-S' WHERE id=$1",course);
+        Assert.NotEmpty(Items(await Feed(student).Feed(default,1,50,"student",term:"115-S")));
+        Assert.NotEmpty(Items(await Feed(student).Agenda(default,"student",year:"115",semester:"S")));
+        Assert.Empty(Items(await Feed(student).Feed(default,1,50,"student",year:"114")));
+        Assert.Empty(Items(await Feed(student).Agenda(default,"student",term:"115-1")));
+        Assert.Empty(Items(await Feed(student).Feed(default,1,50,"student",year:"115",semester:"1")));
         await Sql("UPDATE course_members SET status='inactive' WHERE course_id=$1 AND user_id=$2",course,student);
         Assert.Empty(Items(await Feed(student).Feed(default)));Assert.Empty(Items(await Feed(student).Agenda(default)));
     }

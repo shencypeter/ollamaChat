@@ -52,7 +52,7 @@ async function save(path,body,subject=null){
     <label v-for="(d,i) in report.dimensions" :key="d">{{d}}<select required v-model="forms[m.id].ratings[i]"><option disabled :value="null">選擇分數</option><option v-for="n in 5" :key="n" :value="n">{{n}} 分</option></select></label>
     <label>意見（選填）<textarea maxlength="500" v-model="forms[m.id].comment"></textarea></label><button class="button secondary" :disabled="busy">儲存對此組員的評量</button>
    </fieldset></form>
-   <form v-if="report.evaluationMode==='consensus'" @submit.prevent="save('/vote',vote)"><fieldset :disabled="busy"><legend>我的同分意願</legend><label v-for="(label,key) in choices" :key="key"><input type="radio" v-model="vote.choice" :value="key">{{label}}</label><label>說明（選填）<textarea maxlength="500" v-model="vote.explanation"></textarea></label><button class="button secondary" :disabled="busy">儲存我的表態</button></fieldset></form>
+   <form v-if="report.evaluationMode==='consensus'" @submit.prevent="save('/vote',vote)"><fieldset :disabled="busy"><legend>我的同分意願</legend><label class="choice-label" v-for="(label,key) in choices" :key="key"><input type="radio" :name="'consensus-'+submission.id" v-model="vote.choice" :value="key"><span class="choice-text">{{label}}</span></label><label>說明（選填）<textarea maxlength="500" v-model="vote.explanation"></textarea></label><button class="button secondary" :disabled="busy">儲存我的表態</button></fieldset></form>
   </template>
  </section>
 </template>

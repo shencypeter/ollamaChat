@@ -1,4 +1,5 @@
 using AiTeachingAssistant.Models;
+using AiTeachingAssistant.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 using Npgsql;
@@ -62,9 +63,11 @@ internal static class DemoClassmateAccounts
         {
             var row = classmates[index];
             var ordinal = index + 1;
-            var email = string.IsNullOrWhiteSpace(row.Email)
-                ? $"demo.classmate{ordinal:00}@portal-demo.example.invalid"
-                : row.Email.Trim().ToLowerInvariant();
+            var email = row.HasCredential && !string.IsNullOrWhiteSpace(row.Email)
+                ? row.Email.Trim()
+                : StudentEmailPolicy.InstitutionalAddress(string.IsNullOrWhiteSpace(row.Email)
+                    ? $"demo.classmate{ordinal:00}@csmu.edu.tw"
+                    : row.Email);
             var studentNumber = string.IsNullOrWhiteSpace(row.StudentNumber)
                 ? $"DEMO115{ordinal:000}"
                 : row.StudentNumber.Trim();

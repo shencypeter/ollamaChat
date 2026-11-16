@@ -5,7 +5,7 @@ import {markNotificationsRead} from '../composables/notifications'
 import {api} from '../api'
 import {filterMaterialMetadata} from '../utils/materialMetadata'
 import {groupResourcesByUnit,searchResources} from '../utils/courseResourceList'
-import {materialFormat} from '../utils/materialFormat'
+import {materialFormat,safeMaterialFileName} from '../utils/materialFormat'
 import ResourceLearningStats from './ResourceLearningStats.vue'
 import ResourceVisual from './ResourceVisual.vue'
 import FilePreview from './FilePreview.vue'
@@ -14,7 +14,8 @@ import {Pencil,Play,UsersRound} from '@lucide/vue'
 const props=defineProps({course:Object,staff:Boolean,section:{type:String,default:'resources'},showClassmates:{type:Boolean,default:true},lockedUnitId:{type:String,default:''},creatorOnly:Boolean})
 const emit=defineEmits(['changed'])
 const loading=ref(true),resources=ref([]),groups=ref([]),classmates=ref([]),units=ref([]),error=ref(''),notice=ref(''),busy=ref(false)
-const file=ref(null),group=ref({name:'',members:[]}),titleEdits=reactive({}),metadataEdits=reactive({}),statsResource=ref(null)
+const emptyGroup=()=>({name:'',members:[],leaderId:null})
+const file=ref(null),group=ref(emptyGroup()),groupHint=ref(''),titleEdits=reactive({}),metadataEdits=reactive({}),statsResource=ref(null)
 const uploadTitle=ref(''),sourceKind=ref('file'),youtubeUrl=ref(''),uploadTranscript=ref(''),notifyStudents=ref(false),uploadUnit=ref(''),uploadDate=ref(''),uploadSummary=ref('')
 const search=ref(''),dateFrom=ref(''),dateTo=ref(''),undated=ref(false),materialSort=ref('teaching_desc')
 const base=`/courses/${props.course.id}`
@@ -23,7 +24,8 @@ const rangeError=computed(()=>dateFrom.value&&dateTo.value&&dateFrom.value>dateT
 const visibleResources=computed(()=>filterMaterialMetadata(searchResources(props.lockedUnitId?resources.value.filter(item=>item.unitId===props.lockedUnitId):resources.value,search.value),{from:dateFrom.value,to:dateTo.value,undated:undated.value,sort:materialSort.value}))
 const resourceSections=computed(()=>groupResourcesByUnit(visibleResources.value,units.value).filter(section=>section.items.length))
 const membership=computed(()=>new Map(groups.value.flatMap(g=>g.members.map(m=>[m.id,g]))))
-const groupCandidates=computed(()=>classmates.value)
+const groupCandidates=computed(()=>classmates.value.filter(member=>!assignedElsewhere(member.id)))
+const selectedMembers=computed(()=>classmates.value.filter(member=>group.value.members.includes(member.id)))
 
 function metadataChanged(edit){return edit.date!==edit.originalDate||edit.summary!==edit.originalSummary}
 function editMetadata(item){metadataEdits[item.id]={date:item.teachingDate||'',summary:item.summary||'',originalDate:item.teachingDate||'',originalSummary:item.summary||'',expectedVersion:item.metadataVersion}}
@@ -37,6 +39,7 @@ function titleUnload(event){if(dirtyTitles.value){event.preventDefault();event.r
 window.addEventListener('beforeunload',titleUnload);onBeforeUnmount(()=>window.removeEventListener('beforeunload',titleUnload))
 
 async function load(){
+ error.value=''
  try{
   if(props.section==='resources'){
    const [items,curriculum]=await Promise.all([api(`${base}/resources`),api(`${base}/curriculum`)])
@@ -60,12 +63,16 @@ async function upload(){
  })
 }
 async function moveResource(item,unitId){if(unitId===item.unitId)return;await run(async()=>{await api(`${base}/units/activities/material/${item.id}`,{method:'PUT',body:{unitId}});emit('changed');notice.value='教材已移至指定單元。'})}
-async function download(item){await run(async()=>{const blob=await api(`${base}/resources/${item.id}/download`,{method:'POST',download:true});const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=item.fileName;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)})}
+async function download(item){await run(async()=>{const blob=await api(`${base}/resources/${item.id}/download`,{method:'POST',download:true});const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=originalName(item);link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)})}
+function originalName(item){return safeMaterialFileName(item.fileName)}
 function sizeLabel(item){return item.resourceType==='youtube'?'YouTube':`${Math.max(1,Math.ceil(item.size/1024))} KB`}
 function videoResource(item){return item.resourceType==='youtube'||item.learningType?.startsWith('video/')}
 function assignedElsewhere(id){const owner=membership.value.get(id);return owner&&owner.id!==group.value.id}
-async function dissolve(item){if(confirm('解散「'+item.name+'」？已繳交的作業會保留成員紀錄。'))await run(async()=>{await api(base+'/groups/'+item.id,{method:'DELETE'});group.value={name:'',members:[]}})}
-async function saveGroup(){await run(async()=>{await api(`${base}/groups${group.value.id?'/'+group.value.id:''}`,{method:group.value.id?'PUT':'POST',body:group.value});group.value={name:'',members:[]};notice.value='小組已儲存。'})}
+function resetGroup(){group.value=emptyGroup();groupHint.value='';error.value='';notice.value=''}
+function editGroup(item){resetGroup();group.value={id:item.id,name:item.name,leaderId:item.members.find(member=>member.isLeader)?.id||null,members:item.members.map(member=>member.id)}}
+function membersChanged(){if(group.value.leaderId&&!group.value.members.includes(group.value.leaderId)){group.value.leaderId=null;groupHint.value='原組長已移出本組。可重新指定組長，或先以未指定組長儲存。'}}
+async function dissolve(item){if(confirm('解散「'+item.name+'」？已繳交的作業會保留成員紀錄。'))await run(async()=>{await api(base+'/groups/'+item.id,{method:'DELETE'});resetGroup();notice.value='小組已解散。'})}
+async function saveGroup(){await run(async()=>{const draft={...group.value,members:[...group.value.members]};await api(`${base}/groups${draft.id?'/'+draft.id:''}`,{method:draft.id?'PUT':'POST',body:draft});resetGroup();notice.value='小組已儲存。'})}
 defineExpose({reload:load})
 onMounted(load)
 </script>
@@ -84,7 +91,7 @@ onMounted(load)
    <label v-if="sourceKind==='youtube'">逐字稿（選填）<textarea aria-label="新增回放逐字稿" v-model="uploadTranscript" rows="6" maxlength="100000" /></label>
    <label>授課日期（選填）<input aria-label="新增教材授課日期" type="date" v-model="uploadDate" /></label>
    <label>教師摘要（選填）<textarea aria-label="新增教材教師摘要" v-model="uploadSummary" rows="4" maxlength="10000" placeholder="本次教學重點" /></label>
-   <label><input type="checkbox" v-model="notifyStudents" />通知學生有新教材</label>
+   <label class="choice-label"><input type="checkbox" v-model="notifyStudents" /><span class="choice-text">通知學生有新教材</span></label>
    <button type="submit" class="button primary" :disabled="busy||!uploadUnit||(sourceKind==='file'?!file:!youtubeUrl)">{{sourceKind==='youtube'?'新增回放':'上傳'}}</button>
   </form></details>
   <p v-else-if="editable&&!units.length" class="submission-notice">請先建立課程單元，再新增教材。 <RouterLink :to="{query:{section:'units'}}">前往單元管理 →</RouterLink></p>
@@ -94,7 +101,7 @@ onMounted(load)
    <label>授課日期起日<input aria-label="授課日期起日" type="date" v-model="dateFrom" :disabled="undated" /></label>
    <label>授課日期迄日<input aria-label="授課日期迄日" type="date" v-model="dateTo" :disabled="undated" /></label>
    <label>教材排序<select aria-label="教材排序" v-model="materialSort"><option value="teaching_desc">授課日期新到舊</option><option value="teaching_asc">授課日期舊到新</option><option value="uploaded_desc">上傳日期新到舊</option></select></label>
-  </div><label class="choice-label"><input type="checkbox" v-model="undated" @change="dateFrom='';dateTo=''" />只看未指定授課日期</label><p v-if="rangeError" class="error-box" role="alert">{{rangeError}}</p></details>
+  </div><label class="choice-label"><input type="checkbox" v-model="undated" @change="dateFrom='';dateTo=''" /><span class="choice-text">只看未指定授課日期</span></label><p v-if="rangeError" class="error-box" role="alert">{{rangeError}}</p></details>
   <p v-if="loading" role="status">載入教材中…</p><p v-else class="field-hint">顯示 {{visibleResources.length}} / {{resources.length}} 份教材</p>
 
   <section v-for="resourceUnit in resourceSections" :key="resourceUnit.key" class="resource-unit-section" :class="{'legacy-unit':resourceUnit.legacy}">
@@ -102,8 +109,8 @@ onMounted(load)
    <ol class="resource-list"><li v-for="item in resourceUnit.items" :key="item.id" class="resource-row">
     <ResourceVisual :item="item" :endpoint="`${base}/resources/${item.id}/preview`" />
     <div class="resource-info">
-     <div class="resource-title-line"><strong>{{item.title||item.fileName}}</strong><span>{{materialFormat(item).label}}</span></div>
-     <p v-if="item.title&&item.resourceType!=='youtube'" class="resource-original-name">{{item.fileName}}</p>
+     <div class="resource-title-line"><strong>{{item.title||originalName(item)}}</strong><span>{{materialFormat(item).label}}</span></div>
+     <p v-if="item.resourceType!=='youtube'" class="resource-original-name">原始檔名：{{originalName(item)}}</p>
      <div class="resource-meta"><span>{{sizeLabel(item)}}</span><span v-if="item.resourceType!=='youtube'">{{item.downloadCount}} 次下載</span><span>授課 {{item.teachingDate||'未指定'}}</span><span>上傳 {{new Date(item.createdAt).toLocaleDateString()}}</span></div>
      <p v-if="item.summary" class="resource-summary">{{item.summary}}</p><p v-else class="resource-summary muted">尚無教師摘要</p>
      <details v-if="editable||item.previewType" class="resource-details"><summary>更多資訊與管理</summary>
@@ -128,9 +135,22 @@ onMounted(load)
 </template>
 
 <template v-else>
- <section class="surface form-surface"><h2>課程小組設定</h2><p class="muted">由本課程教師／助教安排，每人每課至多一個小組。教師可指定小組共同繳交 PDF 作業。</p>
-  <form v-if="editable" @submit.prevent="saveGroup"><label>小組名稱<input v-model="group.name" required maxlength="100" /></label><fieldset><legend>選擇本課學生</legend><label class="choice-label" v-for="member in groupCandidates" :key="member.id" style="display:block"><input type="checkbox" v-model="group.members" :disabled="!!assignedElsewhere(member.id)" :value="member.id" @change="!group.members.includes(group.leaderId)&&(group.leaderId=null)" />{{member.studentNumber}} {{member.displayName}} · {{membership.get(member.id)?.name||'未分組'}}</label><p v-if="!groupCandidates.length">請先加入課程學生。</p></fieldset><label>組長<select required v-model="group.leaderId"><option disabled :value="null">請選擇組長</option><option v-for="member in classmates.filter(member=>group.members.includes(member.id))" :key="member.id" :value="member.id">{{member.displayName}}</option></select></label><button class="button primary" :disabled="busy">{{group.id?'更新小組':'建立小組'}}</button><button type="button" class="button secondary" :disabled="busy" @click="group={name:'',members:[]}">清除編輯</button></form>
-  <article v-for="item in groups" :key="item.id" class="question-editor"><h3>{{item.name}}</h3><p>{{item.members.map(member=>member.displayName+(member.isLeader?'（組長）':'')).join('、')||'尚無成員'}}</p><button v-if="editable" class="button secondary" :disabled="busy" @click="group={id:item.id,name:item.name,leaderId:item.members.find(member=>member.isLeader)?.id||null,members:item.members.map(member=>member.id)}">編輯小組</button> <button v-if="editable" class="button secondary" @click="dissolve(item)">解散小組</button></article>
+ <section class="surface form-surface"><h2>課程小組設定</h2><p class="muted">由本課程教師／助教安排，每人每課至多一個小組。教師可指定小組共同完成檔案繳交作業（目前支援 PDF）。</p>
+  <form v-if="editable" @submit.prevent="saveGroup">
+   <h3>{{group.id?'編輯小組':'建立小組'}}</h3>
+   <label>小組名稱<input aria-label="小組名稱" v-model="group.name" required maxlength="100" :disabled="busy" /></label>
+   <fieldset :disabled="busy"><legend>選擇本課學生</legend><p class="field-hint">僅列出未分組及目前小組的學生；已加入其他小組者須先從原組移出。</p>
+    <label class="choice-label" v-for="member in groupCandidates" :key="member.id"><input type="checkbox" v-model="group.members" :value="member.id" @change="membersChanged" /><span class="choice-text">{{member.studentNumber}} {{member.displayName}} · {{membership.get(member.id)?.name||'未分組'}}</span></label>
+    <p v-if="!groupCandidates.length">{{classmates.length?'目前沒有可加入的學生。':'請先加入課程學生。'}}</p>
+   </fieldset>
+   <p v-if="groupHint" class="submission-notice" role="status">{{groupHint}}</p>
+   <label>組長<select aria-label="組長" :value="group.leaderId||''" :disabled="busy" @change="group.leaderId=$event.target.value||null;groupHint=''">
+    <option value="">未指定組長</option><option v-for="member in selectedMembers" :key="member.id" :value="member.id">{{member.displayName}}</option>
+   </select></label>
+   <p class="field-hint">可隨時調整名稱、組員或組長。未指定組長時，請在小組繳交作業前完成指定。</p>
+   <button class="button primary" :disabled="busy">{{group.id?'更新小組':'建立小組'}}</button><button type="button" class="button secondary" :disabled="busy" @click="resetGroup">清除編輯</button>
+  </form>
+  <article v-for="item in groups" :key="item.id" class="question-editor"><h3>{{item.name}}</h3><p>{{item.members.map(member=>member.displayName+(member.isLeader?'（組長）':'')).join('、')||'尚無成員'}}</p><p v-if="!item.members.some(member=>member.isLeader)" class="field-hint">未指定組長</p><button v-if="editable" class="button secondary" :disabled="busy" @click="editGroup(item)">編輯小組</button> <button v-if="editable" class="button secondary" :disabled="busy" @click="dissolve(item)">解散小組</button></article>
  </section>
 </template>
 </template>

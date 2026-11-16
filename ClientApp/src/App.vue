@@ -69,7 +69,7 @@ async function logout() { try { await signOut(); router.replace('/login') } catc
     <a class="skip-link" href="#main-content">跳至主要內容</a>
     <header class="global-bar">
       <button ref="menuButton" class="icon-button mobile-menu" :aria-label="mobileOpen ? '關閉選單' : '開啟選單'" :aria-expanded="mobileOpen" aria-controls="workspace-navigation" @click="mobileOpen ? closeDrawer() : openDrawer()"><X v-if="mobileOpen" :size="20" /><Menu v-else :size="20" /><NotificationBadge :count="notifications.total" label="工作區未讀通知" /></button>
-      <RouterLink to="/" aria-label="NSYSU Learn 首頁" class="brand"><span class="brand-icon"><GraduationCap :size="23" /></span><span>NSYSU <b>Learn</b></span></RouterLink>
+      <RouterLink to="/" aria-label="CSMU Learn 首頁" title="中山醫學大學個案分析 AI 助教系統" class="brand"><span class="brand-icon"><GraduationCap :size="23" /></span><span>CSMU <b>Learn</b></span></RouterLink>
 
       <div class="global-actions"><button class="icon-button" :aria-label="theme === 'dark' ? '切換淺色模式' : '切換深色模式'" @click="toggleTheme"><Sun v-if="theme === 'dark'" :size="19" /><Moon v-else :size="19" /></button><div ref="accountBox" class="account-control" @keydown.esc.stop="closeAccount" @focusout="!accountBox?.contains($event.relatedTarget) && (accountOpen=false)">
         <button ref="accountButton" type="button" class="global-user" :aria-label="userName+'，帳號選單'" aria-controls="account-actions" :aria-expanded="accountOpen" @click="accountOpen=!accountOpen"><span class="avatar">{{ initials }}</span><span class="user-copy">{{userName}}<small>{{roleLabels[auth.user.role]}}</small></span><ChevronDown :size="15"/></button>

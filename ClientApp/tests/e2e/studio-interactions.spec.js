@@ -24,7 +24,7 @@ test('resource sharing, likes, comments, profiles, public course questions and r
  const copy=sp.getByRole('button',{name:'複製連結',exact:true});if(await copy.isVisible())await copy.click();else await sp.getByRole('button',{name:'分享連結',exact:true}).click();await expect(sp.getByRole('status').filter({hasText:'連結已複製'})).toBeVisible()
  expect(await sp.evaluate(()=>navigator.clipboard.readText())).toBe(baseURL+base+`/materials/${resource.id}`)
  await sp.screenshot({path:'.codex-build/resource-copy-button.png',fullPage:true})
- const downloaded=sp.waitForEvent('download');await sp.getByRole('button',{name:'下載檔案',exact:true}).click();expect((await downloaded).suggestedFilename()).toBe('synthetic.txt')
+ const downloaded=sp.waitForEvent('download');await sp.getByRole('button',{name:'下載原始檔案',exact:true}).click();expect((await downloaded).suggestedFilename()).toBe('synthetic.txt')
  await sp.getByRole('button',{name:'讚 0',exact:true}).click();await expect(sp.getByRole('button',{name:'已按讚 1',exact:true})).toBeVisible()
  await Promise.all([write(student,rb+'/like',{liked:true},'PUT'),write(student,rb+'/like',{liked:true},'PUT')]);expect((await(await teacher.get('/api'+rb+'/interactions')).json()).likes).toBe(1)
  await sp.getByLabel('留言',{exact:true}).fill('<b>合成留言純文字</b>');await sp.getByRole('button',{name:'送出留言'}).click();await expect(sp.locator('.interaction-text')).toHaveText('<b>合成留言純文字</b>');expect(await sp.locator('.interaction-text b').count()).toBe(0)

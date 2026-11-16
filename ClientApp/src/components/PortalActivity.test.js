@@ -5,6 +5,15 @@ import {api} from '../api'
 vi.mock('../api',()=>({api:vi.fn()}))
 const global={stubs:{RouterLink:{props:['to'],template:'<a :href="to"><slot/></a>'}}}
 beforeEach(()=>{api.mockReset()})
+it('applies the selected academic scope to both inbox and agenda and reloads on change',async()=>{
+ api.mockResolvedValue({items:[],hasMore:false})
+ const v=mount(PortalActivity,{props:{term:'115-1',year:'115',semester:'1'},global});await flushPromises()
+ for(const [path] of api.mock.calls){const q=new URLSearchParams(path.split('?')[1]);expect(q.get('term')).toBe('115-1');expect(q.get('year')).toBe('115');expect(q.get('semester')).toBe('1')}
+ api.mockClear();await v.setProps({term:'',year:'114',semester:''});await flushPromises()
+ expect(api.mock.calls).toHaveLength(2)
+ for(const [path] of api.mock.calls){const q=new URLSearchParams(path.split('?')[1]);expect(q.get('year')).toBe('114');expect(q.has('term')).toBe(false);expect(q.has('semester')).toBe(false)}
+ v.unmount()
+})
 it('shows course and author context in the inbox and formal exams on the agenda',async()=>{
  api.mockImplementation(async path=>path.includes('/agenda')?{items:[{id:'exam',kind:'exam',courseId:'c',courseTitle:'英文',title:'期中考',dueAt:'2026-11-20T02:00:00Z',url:'/courses/c?section=assessments'}]}:{items:[{id:'n',kind:'announcement',courseId:'c',courseTitle:'英文',title:'考試範圍',authorName:'王老師',occurredAt:'2026-11-13T01:00:00Z',url:'/courses/c?section=announcements'}],hasMore:true})
  const view=mount(PortalActivity,{props:{teaching:false,courses:[{id:'c',title:'英文'}]},global});await flushPromises()

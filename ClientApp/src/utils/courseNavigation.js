@@ -9,7 +9,7 @@ export function courseSections(course) {
     {key:'groups',label:staff?'課程分組':'我的小組',icon:Users},
     {key:'questions',label:'課程討論',icon:MessagesSquare,badge:'questions'},
     {key:'grades',label:staff?'課程成績':'我的成績',icon:ChartColumn},
-    ...(!staff||!course.taRestrictions?.includes('statistics')?[{key:'history',label:staff?'學習統計':'課程學習進度',icon:GraduationCap}]:[]),
+    ...(!staff||!course.taRestrictions?.includes('statistics')?[{key:'history',label:staff?'學習統計':'本課學習歷程',icon:GraduationCap}]:[]),
     ...(staff?[{key:'settings',label:'課程設定',icon:Settings}]:[])
   ]
 }

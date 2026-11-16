@@ -42,8 +42,17 @@
 .experience-banner { padding: 14px 18px; background: var(--accent-soft); color: var(--text); border: 1px solid var(--line); border-radius: 10px; line-height: 1.7; }
 .global-bar .experience-toggle { font-size: 12px; padding: 7px 10px; white-space: nowrap; }
 
-.choice-label { display:flex !important; flex-direction:row !important; align-items:center; gap:8px; padding:8px 0; }
-.choice-label input[type="checkbox"], .choice-label input[type="radio"] { width:auto; min-height:auto; flex:0 0 auto; margin:0; }
+/* Native choice controls must not inherit full-width text-field dimensions. */
+input:is([type="checkbox"], [type="radio"]) { width:18px; height:18px; min-width:18px; max-width:18px; min-height:18px; padding:0; margin:0; flex:0 0 18px; accent-color:var(--accent); vertical-align:middle; cursor:pointer; }
+input:is([type="checkbox"], [type="radio"]):focus-visible { outline:2px solid var(--accent); outline-offset:3px; box-shadow:none; }
+input:is([type="checkbox"], [type="radio"]):disabled { cursor:not-allowed; }
+label.choice-label { display:flex !important; flex-direction:row !important; align-items:flex-start; gap:10px; min-width:0; min-height:40px; margin:0 !important; padding:8px 0; line-height:1.65; cursor:pointer; }
+label.choice-label > input:is([type="checkbox"], [type="radio"]) { margin:2px 0 0; }
+.choice-text { display:block; flex:1; min-width:0; overflow-wrap:anywhere; font-weight:400; }
+.choice-text .field-hint { margin:4px 0 0; }
+label.choice-label:has(> input:disabled) { cursor:not-allowed; color:var(--muted); }
+.form-grid > label.choice-label { align-self:center; }
+@media(max-width:650px) { label.choice-label { min-height:44px; } }
 .surface.form-surface + .surface.form-surface { margin-top:24px; }
 
 .course-navigation { display:flex; flex-wrap:wrap; gap:8px; margin:20px 0 24px; padding-bottom:12px; border-bottom:1px solid var(--line); }

@@ -4,6 +4,11 @@ namespace AiTeachingAssistant.Tests;
 public class ResourceMaterialPolicyTests
 {
     [Theory]
+    [InlineData("C:\\fakepath\\實驗\u202e報告\n.pdf","實驗報告.pdf")]
+    [InlineData("../作業.docx","作業.docx")]
+    [InlineData("\n","")]
+    public void OriginalFileNamesKeepTheirBasenameAndRemoveInvisibleControls(string input,string expected)=>Assert.Equal(expected,ResourceFileNamePolicy.SafeName(input));
+    [Theory]
     [InlineData(2,20,10000)]
     [InlineData(0.5,5,10000)]
     [InlineData(2,120,0)]

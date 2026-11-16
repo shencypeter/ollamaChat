@@ -1,6 +1,12 @@
 import { expect, it } from 'vitest'
 import { loadDashboard } from './dashboard'
 
+it('limits teacher grading and discussion fanout to the selected academic year and semester',async()=>{
+ const paths=[]
+ const data=await loadDashboard(async path=>{paths.push(path);if(path==='/courses')return [{id:'now',title:'當學期',status:'active',courseRole:'teacher',termCode:'115-2'},{id:'past',title:'歷年',status:'active',courseRole:'teacher',termCode:'114-1'}];if(path.includes('questions'))return {items:[]};return {activities:[]}},true,{year:'114',semester:'1'})
+ expect(data.courses.map(c=>c.id)).toEqual(['past']);expect(paths.some(path=>path.includes('/now/'))).toBe(false);expect(paths).toContain('/courses/past/curriculum')
+})
+
 it('bounds concurrent HTTP requests even when each course fans out into activities', async () => {
   let active = 0, maximum = 0
   const courses = Array.from({ length: 8 }, (_, index) => ({ id: String(index), title: `課程 ${index}`, status: 'active', courseRole: 'teacher' }))

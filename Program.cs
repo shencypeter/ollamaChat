@@ -33,6 +33,7 @@ builder.Services.AddScoped<LearningTime>();
 builder.Services.AddScoped<StudioWorkflow>();
 builder.Services.AddScoped<LearnerExperience>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddOptions<AcademicCalendarOptions>().Bind(builder.Configuration.GetSection(AcademicCalendarOptions.SectionName)).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.Configure<PasswordHasherOptions>(o=>o.IterationCount=210000);
 builder.Services.AddScoped<IPasswordHasher<PortalUser>,PasswordHasher<PortalUser>>();
 builder.Services.AddScoped<ApiAntiforgeryFilter>();

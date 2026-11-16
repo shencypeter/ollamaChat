@@ -12,7 +12,7 @@ const rows=[
   {id:'c',code:'C',title:'協同助教課程',termCode:'115-1',classLabel:'',courseRole:'ta',status:'active',isOwner:false,version:1}
 ]
 const global={stubs:{RouterLink:{name:'RouterLink',props:['to'],template:'<a><slot/></a>'}}}
-beforeEach(()=>api.mockReset().mockImplementation(async(path,options)=>options?undefined:rows))
+beforeEach(()=>{api.mockReset().mockImplementation(async(path,options)=>options?undefined:rows)})
 
 it.each([
   [true,['指導課程','進修課程','備課中'],false],
@@ -56,5 +56,23 @@ it('identifies teaching courses with YouTube materials without extra course requ
  api.mockResolvedValue(rows.map(row=>({...row,youTubeCount:row.id==='a'?3:0})))
  const view=mount(CoursesView,{global});await flushPromises()
  expect(view.findAll('.course-video-badge')).toHaveLength(1);expect(view.get('.course-video-badge').text()).toBe('YouTube 影音教材・3 部')
- expect(view.findAll('.course-card')[1].find('.course-video-badge').exists()).toBe(false);expect(api).toHaveBeenCalledTimes(1);view.unmount()
+ expect(view.findAll('.course-card')[1].find('.course-video-badge').exists()).toBe(false);expect(api).toHaveBeenCalledTimes(2);view.unmount()
+})
+it('defaults to the configured term, supports historical queries and hides student management badges',async()=>{
+ api.mockImplementation(async path=>path.startsWith('/academic-calendar')?{currentTerm:'115-2',terms:['115-2','114-1']}:[{...rows[1],id:'now',title:'當學期課程',termCode:'115-2'},{...rows[1],id:'old',title:'歷年課程',termCode:'114-1',status:'archived'},{...rows[1],id:'hidden',title:'未公開學生課程',status:'draft',termCode:'115-2'}])
+ const view=mount(CoursesView,{props:{enrolled:true},global});await flushPromises()
+ expect(view.findAll('.course-card h2').map(x=>x.text())).toEqual(['當學期課程'])
+ expect(view.find('.course-card-top .status-badge').exists()).toBe(false);expect(view.text()).not.toContain('未公開學生課程')
+ await view.get('select[aria-label="學年度"]').setValue('114');await view.get('select[aria-label="學期"]').setValue('1')
+ expect(view.findAll('.course-card h2').map(x=>x.text())).toEqual(['歷年課程']);expect(view.find('.course-card-top .status-badge').exists()).toBe(false);view.unmount()
+})
+it('shows all accessible years with an explicit explanation when current term is unset',async()=>{
+ api.mockImplementation(async path=>path.startsWith('/academic-calendar')?{currentTerm:null,terms:['115-1','114-2']}:[rows[1],{...rows[1],id:'old',termCode:'114-2'}])
+ const view=mount(CoursesView,{props:{enrolled:true},global});await flushPromises();expect(view.text()).toContain('未設定當學期');expect(view.findAll('.course-card')).toHaveLength(2);view.unmount()
+})
+it('explains that past courses are filtered when no current-term course exists',async()=>{
+ api.mockImplementation(async path=>path.startsWith('/academic-calendar')?{currentTerm:'115-1',terms:['114-2']}:[{...rows[1],termCode:'114-2',status:'archived'}])
+ const view=mount(CoursesView,{props:{enrolled:true},global});await flushPromises()
+ expect(view.text()).toContain('目前篩選沒有符合的課程');expect(view.text()).toContain('查看歷年課程');expect(view.text()).not.toContain('目前沒有已選修的課程')
+ await view.get('select[aria-label="學年度"]').setValue('');await view.get('select[aria-label="學期"]').setValue('');expect(view.findAll('.course-card')).toHaveLength(1);view.unmount()
 })

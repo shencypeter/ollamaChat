@@ -72,7 +72,7 @@ public sealed partial class LearningAssessmentsController
         }
         if(report.Status!="published")throw new AssignmentWorkflowException(409,"已關閉繳交。");
         if(!report.AllowLate && report.DueAt.HasValue && clock.GetUtcNow()>=report.DueAt)
-            throw new AssignmentWorkflowException(409,"已超過 PDF 作業截止時間。");
+            throw new AssignmentWorkflowException(409,"已超過 檔案繳交作業截止時間。");
         Guid? group=null;string groupName="";
         if(report.SubmissionMode=="group")
         {

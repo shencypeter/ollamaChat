@@ -1,3 +1,7 @@
+> 2026-11-16 當學期依使用者確認改由系統日期產生，僅預設收起過往學期，不刪除或自動封存。`AcademicCalendar:CurrentTerm=null`採台灣日期、民國學年度，預設8月起上學期、2月起下學期（`FirstSemesterStartMonth`／`SecondSemesterStartMonth`可調整），例如2026/11為115-1；暑修仍可手動查詢。明確CurrentTerm仍可覆寫，舊課從學年／學期篩選查看。
+
+> 2026-11-13 現行校名為「中山醫學大學個案分析 AI 助教系統」（CSMU Learn）。學生課程、教材與分組 UI 修正、影片專屬計時及分享登入返回見 [交付與驗收](docs/ux-corrections-2026-11-13.md)。新示範學生使用 `@csmu.edu.tw`；既有學生更名工具保留原密碼與資料。以下較早紀錄的文件計時說明已由本次規格取代。
+
 > 2026-11-11 課程已加入版本化編輯、安全封存／空白草稿刪除，以及「課程 → 單元 → 教材／作業／測驗」架構；Migration 030 保留並回填既有活動。操作、權限與 Demo 流程見 [課程編輯與教學單元](docs/course-units.md)。
 
 > 2026-11-09 已加入新測驗／作業及學生提問的紅色數字徽章、個人持久已讀與手機提示，教材複製連結改為固定 Copy 重疊方框圖示按鈕。需套用 025；詳見 [站內通知徽章規格](docs/notification-badges-spec.md)。
@@ -29,7 +33,7 @@ Development API documentation is available at `/swagger` after restarting the re
 
 > 2026-10-29 現行站台：S1–S3a 學生案例學習、T1–T4 教師歷程／統計／匯出、A1–A6 管理；教授兼任管理者。新案例提供純文字 AI 回饋、不給分，舊資料保留但舊導覽不再顯示。另有線上／課後命題測驗與 PDF 報告作業，人工成績連動到加權成績管理。請先讀 [案例站台](docs/case-studio.md) 與 [測驗／PDF／成績管理](docs/learning-assessments.md)，下方原課程平台說明保留其歷史範圍。資料庫需明確套用 001–009；目前本機預覽仍為 http://127.0.0.1:5097 。
 
-# NSYSU Learn — Vue + ASP.NET Core Web API
+# CSMU Learn — Vue + ASP.NET Core Web API
 
 2026-11-13 grading update: course grade items now contribute equally after normalization to a percentage. Missing scores are excluded and zero scores count. Quiz question points remain configurable in the question editor. Existing published course totals remain snapshots until a teacher explicitly republishes them; historical item weight columns are retained for compatibility but ignored by current calculations.
 

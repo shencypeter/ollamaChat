@@ -3,6 +3,7 @@ import {onMounted,onBeforeUnmount,ref,computed} from 'vue'
 import {useRoute} from 'vue-router'
 import {api} from '../api'
 import {activityReturnLocation} from '../utils/courseActivityNavigation'
+import {safeMaterialFileName} from '../utils/materialFormat'
 import {Eye} from '@lucide/vue'
 import {setCourseExperience} from '../composables/experience'
 import {newRequestId} from '../utils/requestId'
@@ -15,6 +16,8 @@ import YouTubeReplay from '../components/YouTubeReplay.vue'
 const route=useRoute(),meta=ref(null),canEditTranscript=ref(false),url=ref(''),video=ref(null),youtube=ref(null),error=ref(''),active=ref(false),busy=ref(false),loaded=ref(false),seconds=ref(0),currentRate=ref(1),contentSeconds=ref(0)
 const untimed=ref(false),teachingPreview=ref(false),demoActualMs=ref(0),demoContentMs=ref(0),demoRunning=ref(false)
 const viewRequestId=newRequestId()
+const originalFileName=computed(()=>safeMaterialFileName(meta.value?.fileName))
+const previewType=computed(()=>meta.value?.previewType||(untimed.value?meta.value?.mediaType:null))
 const displaySeconds=computed(()=>teachingPreview.value?Math.floor(demoActualMs.value/1000):seconds.value)
 const displayContentSeconds=computed(()=>teachingPreview.value?Math.floor(demoContentMs.value/1000):contentSeconds.value)
 let demoSample=null,demoTimer=null
@@ -32,7 +35,7 @@ function demoTick(close=false){
  demoRunning.value=!close&&loaded.value&&document.visibilityState==='visible'&&!!playing()
  demoSample=demoRunning.value?{at:now,position:pos,rate:speed}:null
 }
-async function downloadOriginal(){try{const blob=await api(`/courses/${route.params.courseId}/resources/${route.params.resourceId}/download`,{method:'POST',download:true});const href=URL.createObjectURL(blob),a=document.createElement('a');a.href=href;a.download=meta.value.fileName;a.click();setTimeout(()=>URL.revokeObjectURL(href),1000)}catch(e){error.value=e.message}}
+async function downloadOriginal(){try{const blob=await api(`/courses/${route.params.courseId}/resources/${route.params.resourceId}/download`,{method:'POST',download:true});const href=URL.createObjectURL(blob),a=document.createElement('a');a.href=href;a.download=originalFileName.value;a.click();setTimeout(()=>URL.revokeObjectURL(href),1000)}catch(e){error.value=e.message}}
 const base=`/courses/${route.params.courseId}/resources/${route.params.resourceId}/learning`
 let session=null,sessionRate=1,timer=null,lastInput=Date.now(),sending=false,disposed=false,pendingBeat=Promise.resolve()
 function activity(event){if(event.isTrusted)lastInput=Date.now()}
@@ -40,6 +43,7 @@ function position(){return meta.value?.youTubeVideoId?youtube.value?.getCurrentT
 function rate(){return meta.value?.youTubeVideoId?youtube.value?.getPlaybackRate()||1:video.value?.playbackRate||1}
 function playing(){return meta.value?.youTubeVideoId?youtube.value?.isPlaying()&&rate()>=.25&&rate()<=4:video.value&&!video.value.paused&&!video.value.seeking&&!video.value.ended&&rate()>=.25&&rate()<=4}
 async function start(){
+ if(untimed.value||!meta.value?.mediaType?.startsWith('video/'))return
  if(teachingPreview.value){demoTick();return}
  if(busy.value||!loaded.value||session||disposed||document.visibilityState!=='visible')return
  if(meta.value.youTubeVideoId&&!playing())return
@@ -58,16 +62,45 @@ async function youtubeState(state){if(teachingPreview.value){demoTick(state!==1)
 async function youtubeRestart(){if(teachingPreview.value){demoSample=null;demoTick();return}currentRate.value=rate();await beat(true);if(meta.value?.canTrack&&playing())start()}
 function hidden(){if(document.visibilityState!=='visible'){youtube.value?.pause?.();video.value?.pause();demoTick(true);beat(true)}}
 function mediaError(message){demoSample=null;demoRunning.value=false;loaded.value=false;error.value=typeof message==='string'?message:'無法開啟教材，請返回課程檢查原檔。';beat(true)}
-onMounted(async()=>{try{try{meta.value=await api(base)}catch(e){if(e.status!==415)throw e;const resources=await api(`/courses/${route.params.courseId}/resources`);const item=resources.find(r=>r.id===route.params.resourceId);if(!item)throw new Error('找不到教材。');untimed.value=true;meta.value={...item,title:item.title||item.fileName,mediaType:'',canTrack:false,isPractice:false}}if(disposed)return;if(!meta.value.mediaType?.startsWith('video/'))void api(`/courses/${route.params.courseId}/resources/${route.params.resourceId}/views`,{method:'POST',body:{id:viewRequestId}}).catch(()=>{});if(meta.value.isPractice)meta.value.canTrack=false;setCourseExperience(meta.value.canTrack?null:false);seconds.value=meta.value.accumulatedSeconds;contentSeconds.value=meta.value.contentSeconds||0;if(meta.value.youTubeVideoId){const course=await api(`/courses/${route.params.courseId}`);teachingPreview.value=['teacher','ta'].includes(course.courseRole)&&!meta.value.isPractice;canEditTranscript.value=['teacher','ta'].includes(course.courseRole)&&course.status!=='archived'&&!course.taRestrictions?.includes('materials')&&!meta.value.isPractice}if(!untimed.value&&!meta.value.youTubeVideoId){const blob=await api(`${base}/content`,{download:true});if(!disposed)url.value=URL.createObjectURL(blob)}}catch(e){error.value=e.message}
+onMounted(async()=>{try{
+ try{meta.value=await api(base)}catch(e){
+  if(e.status!==415)throw e
+  const resources=await api(`/courses/${route.params.courseId}/resources`),item=resources.find(r=>r.id===route.params.resourceId)
+  if(!item)throw new Error('找不到教材。')
+  meta.value={...item,title:item.title||safeMaterialFileName(item.fileName),mediaType:'',canTrack:false,isPractice:false}
+ }
+ if(disposed)return
+ untimed.value=!meta.value.mediaType?.startsWith('video/')
+ if(untimed.value){meta.value.canTrack=false;void api(`/courses/${route.params.courseId}/resources/${route.params.resourceId}/views`,{method:'POST',body:{id:viewRequestId}}).catch(()=>{})}
+ if(meta.value.isPractice)meta.value.canTrack=false
+ setCourseExperience(meta.value.canTrack?null:false);seconds.value=meta.value.accumulatedSeconds||0;contentSeconds.value=meta.value.contentSeconds||0
+ if(meta.value.youTubeVideoId){const course=await api(`/courses/${route.params.courseId}`);teachingPreview.value=['teacher','ta'].includes(course.courseRole)&&!meta.value.isPractice;canEditTranscript.value=['teacher','ta'].includes(course.courseRole)&&course.status!=='archived'&&!course.taRestrictions?.includes('materials')&&!meta.value.isPractice}
+ if(!untimed.value&&!meta.value.youTubeVideoId){const blob=await api(`${base}/content`,{download:true});if(!disposed)url.value=URL.createObjectURL(blob)}
+ }catch(e){error.value=e.message}
  demoTimer=setInterval(()=>demoTick(),1000);timer=setInterval(()=>beat(),10000);document.addEventListener('visibilitychange',hidden);for(const name of ['pointerdown','keydown','wheel'])window.addEventListener(name,activity,{passive:true})})
 onBeforeUnmount(()=>{disposed=true;clearInterval(demoTimer);demoSample=null;clearInterval(timer);document.removeEventListener('visibilitychange',hidden);for(const name of ['pointerdown','keydown','wheel'])window.removeEventListener(name,activity);beat(true);if(url.value)URL.revokeObjectURL(url.value)})
 </script>
 <template><RouterLink :to="activityReturnLocation(route.params.courseId,meta?.unitId)" class="back-link">← {{meta?.unitId?'返回所屬單元':'返回課程內容'}}</RouterLink><section v-if="meta" class="page-heading"><div><p class="eyebrow">LEARNING MATERIAL</p><h1>{{meta.title}}</h1><p class="muted">{{untimed?'課程教材與互動':teachingPreview?'教師／助教計時示範・不記錄或計入學習時間':meta.isPractice?'學生視角預覽・唯讀':meta.canTrack?'本人正式教材學習紀錄':'唯讀教材・不記錄學習時間'}}</p></div><ShareResource :course-id="route.params.courseId" :resource-id="route.params.resourceId" :title="meta.title" /></section><p v-if="error" class="error-box" role="alert">{{error}}</p>
 <div v-if="meta&&!untimed" class="material-learning" :class="{'youtube-learning':meta.youTubeVideoId}">
-<section v-if="meta&&(url||meta.youTubeVideoId)" class="surface form-surface material-viewer"><YouTubeReplay v-if="meta.youTubeVideoId" ref="youtube" :video-id="meta.youTubeVideoId" :title="meta.title" @ready="loaded=true" @state="youtubeState" @rate="youtubeRestart" @seek="youtubeRestart" @error="mediaError" /><video v-else-if="meta.mediaType.startsWith('video/')" ref="video" :src="url" controls preload="metadata" @loadeddata="loaded=true" @pause="beat(true)" @seeking="beat(true)" @ended="beat(true)" @ratechange="youtubeRestart" @play="youtubeState(1)" @error="mediaError"></video><object v-else-if="meta.mediaType==='application/pdf'" :data="url" type="application/pdf" aria-label="教材 PDF 閱讀器" @load="loaded=true" @error="mediaError"><p>此瀏覽器不支援內嵌 PDF，請使用支援的瀏覽器閱讀；下載離線閱讀無法計時。</p></object><img v-else :src="url" :alt="meta.title" @load="loaded=true" @error="mediaError" /></section>
-<section v-if="meta&&!untimed" class="surface form-surface material-timer"><h2>{{teachingPreview?'計時示範':'學習計時'}}</h2><p v-if="teachingPreview" class="submission-notice" role="note"><strong>您是本課程的授課教師／助教：計時僅供示範。</strong><br />示範數字會隨播放變化，但不會儲存或計入學習時間、成績與測驗門檻；重新整理後歸零。</p><div class="timer-values"><p v-if="meta.isPractice" class="submission-notice" role="note">學生視角預覽不累積學習時間。</p><p>{{teachingPreview?'示範實際觀看時間：':'累積實際閱讀／觀看時間：'}}<strong>{{Math.floor(displaySeconds/60)}} 分 {{displaySeconds%60}} 秒</strong></p><p v-if="meta.mediaType.startsWith('video/')">{{teachingPreview?'示範影片內容時間：':'累積影片內容時間：'}}<strong>{{Math.floor(displayContentSeconds/60)}} 分 {{displayContentSeconds%60}} 秒</strong></p><p v-if="meta.mediaType.startsWith('video/')">目前播放速度：{{currentRate}} 倍 · {{teachingPreview?'倍速換算僅供示範':'門檻以影片內容時間計算'}}</p><p role="status">{{teachingPreview?(demoRunning?'示範計時中（不計入紀錄）':'示範計時已暫停'):active?'計時中':'計時已暫停'}}</p><div v-if="meta.youTubeVideoId" class="timer-visibility-note"><strong><Eye :size="17" aria-hidden="true" />前景播放才計時</strong><p>只有本教材分頁可見、影片正在播放時，才會累計{{teachingPreview?'示範時間':'學習時間'}}。切換至其他分頁或將視窗最小化後，播放器會暫停並停止計時；回到本頁後請自行播放。</p></div><p v-if="teachingPreview" class="field-hint">暫停或緩衝時停止，快轉跳過不計入示範數字。</p><p v-else class="field-hint">YouTube 回放正常播放時自動開始計時；其他教材請按開始。每 10 秒保存一次；切到背景、閒置或另開教材時停止。講義每分鐘至少與此頁互動一次，可按「繼續閱讀」；PDF 內部操作可能無法偵測。影片門檻依有效播放的內容時間累計，例如2倍速觀看10分鐘計20分鐘；實際時間與播放速度另列供參考；快轉略過不計，重新觀看可累積。此為活動紀錄，不代表已理解教材。</p><template v-if="meta.canTrack"><button class="button primary" :disabled="busy||!loaded||active" @click="start">{{busy?'開始中…':'開始／繼續計時'}}</button><button class="button secondary" :disabled="!active" @click="beat(true)">暫停計時</button><button v-if="!meta.mediaType.startsWith('video/')" class="button secondary" @click="lastInput=Date.now()">繼續閱讀</button></template><p v-else-if="!teachingPreview" class="muted">本課目前只供閱讀，不累積學習時間。</p></div></section>
+<section v-if="meta&&(url||meta.youTubeVideoId)" class="surface form-surface material-viewer"><p v-if="!meta.youTubeVideoId" class="material-original-name">原始檔名：{{originalFileName}}</p><YouTubeReplay v-if="meta.youTubeVideoId" ref="youtube" :video-id="meta.youTubeVideoId" :title="meta.title" @ready="loaded=true" @state="youtubeState" @rate="youtubeRestart" @seek="youtubeRestart" @error="mediaError" /><video v-else ref="video" :src="url" controls preload="metadata" @loadeddata="loaded=true" @pause="beat(true)" @seeking="beat(true)" @ended="beat(true)" @ratechange="youtubeRestart" @play="youtubeState(1)" @error="mediaError"></video></section>
+<section v-if="meta&&!untimed" class="surface form-surface material-timer">
+ <h2>{{teachingPreview?'計時示範':'學習計時'}}</h2>
+ <p v-if="teachingPreview" class="submission-notice" role="note"><strong>您是本課程的授課教師／助教：計時僅供示範。</strong><br />示範數字會隨播放變化，但不會儲存或計入學習時間、成績與測驗門檻；重新整理後歸零。</p>
+ <div class="timer-values">
+  <p v-if="meta.isPractice" class="submission-notice" role="note">學生視角預覽不累積學習時間。</p>
+  <p>{{teachingPreview?'示範實際觀看時間：':'累積實際觀看時間：'}}<strong>{{Math.floor(displaySeconds/60)}} 分 {{displaySeconds%60}} 秒</strong></p>
+  <p>{{teachingPreview?'示範影片內容時間：':'累積影片內容時間：'}}<strong>{{Math.floor(displayContentSeconds/60)}} 分 {{displayContentSeconds%60}} 秒</strong></p>
+  <p>目前播放速度：{{currentRate}} 倍 · {{teachingPreview?'倍速換算僅供示範':'門檻以影片內容時間計算'}}</p>
+  <p role="status">{{teachingPreview?(demoRunning?'示範計時中（不計入紀錄）':'示範計時已暫停'):active?'計時中':'計時已暫停'}}</p>
+  <div class="timer-visibility-note"><strong><Eye :size="17" aria-hidden="true" />前景播放才計時</strong><p>只有本教材分頁可見、影片正在播放時，才會累計{{teachingPreview?'示範時間':'學習時間'}}。切換至其他分頁或將視窗最小化後，播放器會暫停並停止計時；回到本頁後請自行播放。</p></div>
+  <p v-if="teachingPreview" class="field-hint">暫停或緩衝時停止，快轉跳過不計入示範數字。</p>
+  <p v-else class="field-hint">影片正常播放時自動開始計時，每 10 秒保存一次；暫停、切到背景或另開教材時停止。門檻依有效播放的影片內容時間累計，例如2倍速觀看10分鐘計20分鐘；實際觀看時間與播放速度另列供參考。快轉略過不計，重新觀看可累積。此為活動紀錄，不代表已理解教材。PDF、圖片、Office 與一般附件不計時。</p>
+  <template v-if="meta.canTrack"><button class="button primary" :disabled="busy||!loaded||active" @click="start">{{busy?'開始中…':'開始／繼續計時'}}</button><button class="button secondary" :disabled="!active" @click="beat(true)">暫停計時</button></template>
+  <p v-else-if="!teachingPreview" class="muted">本課目前只供觀看，不累積學習時間。</p>
+ </div>
+</section>
 </div>
-<section v-if="meta&&untimed" class="surface form-surface"><p>此格式提供預覽或下載，不累積學習時間。</p><FilePreview :endpoint="`/courses/${route.params.courseId}/resources/${route.params.resourceId}/preview`" :file-name="meta.fileName" :content-type="meta.previewType" /><button class="button secondary" @click="downloadOriginal">下載檔案</button></section>
+<section v-if="meta&&untimed" class="surface form-surface"><p class="material-original-name">原始檔名：{{originalFileName}}</p><p>靜態教材提供預覽或下載，不累積學習時間。</p><FilePreview :endpoint="`/courses/${route.params.courseId}/resources/${route.params.resourceId}/preview`" :file-name="originalFileName" :content-type="previewType" /><button class="button secondary" @click="downloadOriginal">下載原始檔案</button></section>
 <ResourceInteractions v-if="meta" :course-id="route.params.courseId" :resource-id="route.params.resourceId" />
 <MaterialSummary v-if="meta" :course-id="route.params.courseId" :resource-id="route.params.resourceId" />
 <ResourceTranscript v-if="meta?.youTubeVideoId" :course-id="route.params.courseId" :resource-id="route.params.resourceId" :editable="canEditTranscript" />

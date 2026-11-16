@@ -4,7 +4,7 @@ test('teacher overview uses assessment rows and learner columns with a pinned as
  const context=await browser.newContext({baseURL,ignoreHTTPSErrors:true}),page=await context.newPage(),errors=[]
  const course={id:'matrix-course',title:'英文溝通成績',code:'ENG',termCode:'115-1',status:'active',courseRole:'teacher',canPractice:true,taRestrictions:[],studentCount:8,resourceCount:2,quizCount:1,reportCount:1}
  const students=Array.from({length:8},(_,i)=>({id:`s${i}`,studentNumber:`11500${i+1}`,displayName:`同學 ${i+1}`}))
- const items=[{id:'a',title:'對話 PDF 報告',category:'assignment',sourceReportId:'r',maxScore:50},{id:'q',title:'文法測驗',category:'quiz',sourceAssignmentId:'quiz',maxScore:100},{id:'mid',title:'期中筆試',category:'midterm',maxScore:100}]
+ const items=[{id:'a',title:'對話 檔案繳交作業',category:'assignment',sourceReportId:'r',maxScore:50},{id:'q',title:'文法測驗',category:'quiz',sourceAssignmentId:'quiz',maxScore:100},{id:'mid',title:'期中筆試',category:'midterm',maxScore:100}]
  page.on('pageerror',e=>errors.push(e.message))
  page.on('console',message=>{if(message.type()==='error'&&!message.text().includes('status of 404'))errors.push(message.text())})
  await page.route('**/api/**',async route=>{

@@ -77,7 +77,7 @@ public sealed partial class GradebookController(NpgsqlDataSource source,LearnerE
         await using(var check=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM course_members m JOIN app_users u ON u.id=m.user_id WHERE m.course_id=$1 AND m.user_id=$2 AND m.course_role='student' AND m.status='active' AND u.status='active')",conn)){
             check.Parameters.AddWithValue(course);check.Parameters.AddWithValue(input.StudentId);if(await check.ExecuteScalarAsync(ct) is not true)return BadRequest(new{error="只能登錄本課程有效學生的得分。"});
         }
-        await using(var linked=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM course_grade_items WHERE id=$1 AND course_id=$2 AND (source_assignment_id IS NOT NULL OR source_report_id IS NOT NULL))",conn)){linked.Parameters.AddWithValue(id);linked.Parameters.AddWithValue(course);if(await linked.ExecuteScalarAsync(ct) is true)return Conflict(new{error="此成績由線上測驗或 PDF 作業連動，請從原評量評閱並給分。"});}
+        await using(var linked=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM course_grade_items WHERE id=$1 AND course_id=$2 AND (source_assignment_id IS NOT NULL OR source_report_id IS NOT NULL))",conn)){linked.Parameters.AddWithValue(id);linked.Parameters.AddWithValue(course);if(await linked.ExecuteScalarAsync(ct) is true)return Conflict(new{error="此成績由線上測驗或 檔案繳交作業連動，請從原評量評閱並給分。"});}
         decimal max;
         await using(var item=new NpgsqlCommand("SELECT max_score FROM course_grade_items WHERE id=$1 AND course_id=$2 FOR UPDATE",conn)){
             item.Parameters.AddWithValue(id);item.Parameters.AddWithValue(course);if(await item.ExecuteScalarAsync(ct) is not decimal value)return NotFound(new{error="找不到評分項目。"});max=value;

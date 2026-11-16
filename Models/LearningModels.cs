@@ -7,9 +7,10 @@ public sealed class LearningRequirementInput
     public Guid ResourceId {get;set;}
     [Range(1,86400)] public int MinimumSeconds {get;set;}
 }
-public sealed record LearningRequirement(Guid ResourceId,string Title,int MinimumSeconds,long AccumulatedSeconds,string? MediaType)
+public sealed record LearningRequirement(Guid ResourceId,string Title,int MinimumSeconds,long AccumulatedSeconds,string? MediaType,bool Viewed=false)
 {
-    public bool Met=>AccumulatedSeconds>=MinimumSeconds;
+    public string Mode=>MediaType?.StartsWith("video/")==true?"time":"view";
+    public bool Met=>AccumulatedSeconds>=MinimumSeconds||(Mode=="view"&&Viewed);
 }
 public sealed record LearningGate(bool Started,IReadOnlyList<LearningRequirement> Requirements,bool RequiresStart=false)
 {

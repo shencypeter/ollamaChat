@@ -5,6 +5,10 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using AiTeachingAssistant.Services;
 var root=Path.GetFullPath(args[0]);var file=Path.Combine(root,".codex-build","portal-smoke.json");
+if(args.Contains("--csmu-student-emails-check")){await CsmuStudentEmailVerification.Run();return;}
+if(args.Contains("--csmu-student-emails-preview")||args.Contains("--csmu-student-emails")||args.Contains("--csmu-student-emails-audit")){
+    await CsmuStudentEmails.Run(args.Contains("--csmu-student-emails-preview"),args.Contains("--csmu-student-emails-audit"));return;
+}
 if(args.Contains("--normalize-demo-feedback-preview")||args.Contains("--normalize-demo-feedback")||args.Contains("--normalize-demo-feedback-audit")){
     await DemoPresentationCleanup.Run(args.Contains("--normalize-demo-feedback-preview"),args.Contains("--normalize-demo-feedback-audit"));return;
 }

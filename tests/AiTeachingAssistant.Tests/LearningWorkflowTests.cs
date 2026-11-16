@@ -24,7 +24,16 @@ public class LearningTimePolicyTests
     {
         Assert.Null(LearningTimePolicy.MediaType("fake.mp4","<html>evil</html>"u8.ToArray()));
         Assert.Null(LearningTimePolicy.MediaType("fake.pdf","<html>evil</html>"u8.ToArray()));
-        Assert.Equal("application/pdf",LearningTimePolicy.MediaType("notes.pdf","%PDF-1.4"u8.ToArray()));
+        Assert.Null(LearningTimePolicy.MediaType("notes.pdf","%PDF-1.4"u8.ToArray()));
+        Assert.Null(LearningTimePolicy.MediaType("photo.png",new byte[]{137,80,78,71,13,10,26,10}));
+        Assert.Equal("video/mp4",LearningTimePolicy.MediaType("lesson.mp4",new byte[]{0,0,0,20,102,116,121,112,105,115,111,109}));
+    }
+    [Fact] public void LegacyStaticGateRequiresAViewOrExistingCompletedTime()
+    {
+        Assert.False(new LearningRequirement(Guid.NewGuid(),"講義",60,0,null).Met);
+        Assert.True(new LearningRequirement(Guid.NewGuid(),"講義",60,60,null).Met);
+        Assert.True(new LearningRequirement(Guid.NewGuid(),"講義",60,0,null,true).Met);
+        Assert.False(new LearningRequirement(Guid.NewGuid(),"影片",60,0,"video/mp4",true).Met);
     }
 }
 
@@ -57,7 +66,7 @@ public class LearningWorkflowTests:IAsyncLifetime
         return await workflow.Get(a.Id,teacher,default);
     }
     private async Task<Guid> Resource(Guid c)
-    {return (Guid)(await Exec("INSERT INTO course_resources(course_id,file_name,content,uploaded_by) VALUES($1,'synthetic.pdf',$2,$3) RETURNING id",c,"%PDF-1.4 synthetic"u8.ToArray(),teacher))!;}
+    {return (Guid)(await Exec("INSERT INTO course_resources(course_id,file_name,content,uploaded_by) VALUES($1,'synthetic.mp4',$2,$3) RETURNING id",c,new byte[]{0,0,0,20,102,116,121,112,105,115,111,109},teacher))!;}
     private async Task<AssignmentDetail> Gated(params Guid[] resources)
     {
         var a=await Quiz(course);a=await workflow.Update(a.Id,teacher,new(){Title=a.Title,ExpectedEditVersion=a.EditVersion,Questions=[new(){PromptText="門檻題目"}],LearningRequirements=resources.Select(r=>new LearningRequirementInput{ResourceId=r,MinimumSeconds=10}).ToList()},default);
@@ -110,8 +119,8 @@ public class LearningWorkflowTests:IAsyncLifetime
         Assert.Equal(409,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>workflow.StartLearningQuiz(a.Id,student,default))).StatusCode);
         Assert.Equal(409,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>workflow.Save(a.Id,student,new(){Answers=[]},default))).StatusCode);
         foreach(var resource in new[]{first,next}){
-            var session=await time.Start(course,resource,student,false,null,default);clock.Advance(10);
-            var result=await time.Heartbeat(course,resource,session.Id,student,false,new(){Active=true},default);Assert.Equal(10,result.AccumulatedSeconds);
+            var session=await time.Start(course,resource,student,false,0,default);clock.Advance(10);
+            var result=await time.Heartbeat(course,resource,session.Id,student,false,new(){Active=true,Position=10},default);Assert.Equal(10,result.AccumulatedSeconds);
             if(resource==first)Assert.False((await workflow.Get(a.Id,student,default)).LearningGate!.Met);
         }
         locked=await workflow.Get(a.Id,student,default);Assert.True(locked.LearningGate!.Met);Assert.Empty(locked.Questions);
@@ -121,18 +130,18 @@ public class LearningWorkflowTests:IAsyncLifetime
         var saved=await workflow.Save(a.Id,student,new(){Submit=true,Answers=[new(){QuestionId=open.Questions[0].Id,Text="synthetic"}]},default);Assert.Equal("submitted",saved.Status);
         Assert.Equal(1L,(long)(await Exec("SELECT count(*) FROM quiz_learning_starts WHERE assignment_id=$1",a.Id))!);
         Assert.False((await workflow.Get(a.Id,peer,default)).LearningGate!.Met);
-        var material=await history.Activities(student,null,null,"material",null,null,1,20,false,default);Assert.Equal(2,material.Total);Assert.All(material.Items,x=>Assert.Equal(10,x.EffectiveSeconds));
+        var material=await history.Activities(student,null,null,"material",null,null,1,20,false,default);Assert.Equal(2,material.Total);Assert.All(material.Items,x=>{Assert.Equal(10,x.EffectiveSeconds);Assert.True(x.IsTimedMaterial);});
     }
     [FormativeDatabaseFact] public async Task TimeIsIsolatedDeduplicatedAndBoundedAndCrossCourseRequirementsFail()
     {
         var first=await Resource(course);var other=await Resource(second);var a=await Quiz(course);
         await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>workflow.Update(a.Id,teacher,new(){Title=a.Title,ExpectedEditVersion=a.EditVersion,Questions=[new(){PromptText="q"}],LearningRequirements=[new(){ResourceId=other,MinimumSeconds=10}]},default));
-        var one=await time.Start(course,first,student,false,null,default);clock.Advance(5);
-        var two=await time.Start(course,first,student,false,null,default);
+        var one=await time.Start(course,first,student,false,0,default);clock.Advance(5);
+        var two=await time.Start(course,first,student,false,0,default);
         Assert.Equal(409,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Heartbeat(course,first,one.Id,student,false,new(){Active=true},default))).StatusCode);
-        clock.Advance(10);Assert.Equal(10,(await time.Heartbeat(course,first,two.Id,student,false,new(){Active=true},default)).AccumulatedSeconds);
-        Assert.Equal(10,(await time.Heartbeat(course,first,two.Id,student,false,new(){Active=true},default)).AccumulatedSeconds);
-        clock.Advance(30);Assert.Equal(10,(await time.Heartbeat(course,first,two.Id,student,false,new(){Active=true},default)).AccumulatedSeconds);
+        clock.Advance(10);Assert.Equal(10,(await time.Heartbeat(course,first,two.Id,student,false,new(){Active=true,Position=10},default)).AccumulatedSeconds);
+        Assert.Equal(10,(await time.Heartbeat(course,first,two.Id,student,false,new(){Active=true,Position=10},default)).AccumulatedSeconds);
+        clock.Advance(30);Assert.Equal(10,(await time.Heartbeat(course,first,two.Id,student,false,new(){Active=true,Position=40},default)).AccumulatedSeconds);
         await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Heartbeat(course,first,two.Id,peer,false,new(){Active=true},default));
         await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Resource(second,first,student,false,default));
         Assert.Equal(0,(await time.Resource(course,first,teacher,true,default)).AccumulatedSeconds);
@@ -146,12 +155,39 @@ public class LearningWorkflowTests:IAsyncLifetime
         await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Start(course,r,teacher,true,null,default));
         Assert.Equal(0,(await time.Resource(course,r,teacher,false,default)).AccumulatedSeconds);
         Assert.False((await workflow.Get(a.Id,student,default)).LearningGate!.Met);
-        var own=await time.Start(course,r,student,false,null,default);clock.Advance(10);await time.Heartbeat(course,r,own.Id,student,false,new(){Active=true},default);
+        var own=await time.Start(course,r,student,false,0,default);clock.Advance(10);await time.Heartbeat(course,r,own.Id,student,false,new(){Active=true,Position=10},default);
         Assert.True((await workflow.Get(a.Id,student,default)).LearningGate!.Met);
         await Exec("UPDATE assignments SET due_at=$2 WHERE id=$1",a.Id,clock.GetUtcNow().AddSeconds(-1));
         Assert.Equal(409,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>workflow.StartLearningQuiz(a.Id,student,default))).StatusCode);
         await Exec("UPDATE courses SET status='archived' WHERE id=$1",course);
         await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Start(course,r,student,false,null,default));
+    }
+    [FormativeDatabaseFact] public async Task StaticMaterialsRejectNewSessionsAndRequirementsButKeepLegacyEvidenceAndRequireAView()
+    {
+        var resource=(Guid)(await Exec("INSERT INTO course_resources(course_id,file_name,content,uploaded_by) VALUES($1,'synthetic.pdf',$2,$3) RETURNING id",course,"%PDF-1.4 synthetic"u8.ToArray(),teacher))!;
+        var draft=await Quiz(course);
+        var input=new SaveAssignmentRequest{Title=draft.Title,ExpectedEditVersion=draft.EditVersion,Questions=[new(){PromptText="legacy gate"}],LearningRequirements=[new(){ResourceId=resource,MinimumSeconds=60}]};
+        Assert.Equal(400,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>workflow.Update(draft.Id,teacher,input,default))).StatusCode);
+        await Exec("INSERT INTO quiz_learning_requirements(assignment_id,resource_id,minimum_seconds) VALUES($1,$2,60)",draft.Id,resource);
+        // Existing draft static requirements survive unrelated edits with their original value.
+        input.ExpectedEditVersion=(await workflow.Get(draft.Id,teacher,default)).EditVersion;
+        draft=await workflow.Update(draft.Id,teacher,input,default);
+        await workflow.Transition(draft.Id,teacher,"published",default);
+        var oldSession=Guid.NewGuid();
+        await Exec("INSERT INTO learning_time_sessions(id,resource_id,user_id,is_practice,started_at,last_seen_at,credited_milliseconds,content_milliseconds) VALUES($1,$2,$3,false,now(),now(),60000,60000)",oldSession,resource,peer);
+        Assert.True((await workflow.Get(draft.Id,peer,default)).LearningGate!.Met);
+        Assert.False((await workflow.Get(draft.Id,student,default)).LearningGate!.Met);
+        Assert.Equal(409,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>workflow.StartLearningQuiz(draft.Id,student,default))).StatusCode);
+        Assert.Equal(415,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Start(course,resource,student,false,null,default))).StatusCode);
+        Assert.Equal(415,(await Assert.ThrowsAsync<AssignmentWorkflowException>(()=>time.Heartbeat(course,resource,oldSession,peer,false,new(){Active=true},default))).StatusCode);
+        Assert.Equal(60000L,(long)(await Exec("SELECT credited_milliseconds FROM learning_time_sessions WHERE id=$1",oldSession))!);
+        var historical=(await history.Activities(peer,course,null,"material",null,null,1,20,false,default)).Items.Single(x=>x.Id==resource);
+        Assert.Equal(60,historical.EffectiveSeconds);Assert.False(historical.IsTimedMaterial);
+        await Exec("INSERT INTO resource_views(id,resource_id,user_id) VALUES($1,$2,$3)",Guid.NewGuid(),resource,student);
+        var gate=(await workflow.Get(draft.Id,student,default)).LearningGate!;
+        Assert.True(gate.Met);Assert.Equal("view",gate.Requirements[0].Mode);Assert.Equal(60,gate.Requirements[0].MinimumSeconds);Assert.Equal(0,gate.Requirements[0].AccumulatedSeconds);
+        await workflow.StartLearningQuiz(draft.Id,student,default);Assert.Single((await workflow.Get(draft.Id,student,default)).Questions);
+        await using var connection=await db.OpenConnectionAsync();Assert.False((await LearningTime.Gate(connection,draft.Id,student,true,default)).Met);
     }
     [FormativeDatabaseFact] public async Task YouTubeTimeUsesVideoEvidenceAndStaffStatisticsExcludePractice()
     {

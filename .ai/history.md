@@ -1,5 +1,33 @@
 # 開發歷程與決策紀錄
 
+## 2026-11-16 當學期依系統日期預設收起歷年課
+
+使用者回答11/13學期待確認問題：依系統當年日期即可，功能只為預設收起已結束學期。AcademicCalendarOptions新增共用判定，Controller沿用既有TimeProvider／授權回傳當學期；null／空白自動，明確值仍相容覆寫。採台灣UTC+8、既有民國學年度，預設8月1日上學期、2月1日下學期，兩月份可設定且驗證先後範圍；暑修保留手動查詢。此為可調整產品預設，非宣稱校方正式上課日。2026/11對應115-1，跨年1月仍同學年度。只改預設篩選，不更動課程status、成績或授權，舊課仍可歷年篩選。
+
+若本學期沒有課但有歷年課，CoursesView空狀態改提示「目前篩選沒有符合的課程」與歷年查詢方式，避免誤稱沒有修課。保留所有既有未提交變更。README、elearning、agents與原交付報告新增11/16現行規則，取代早先「必須人工指定／未設定」待辦；歷史決策仍保留日期脈絡。
+
+先新增日期／月份設定／權限API回歸，確認缺少實作失敗；空狀態測試亦先重現失敗。最終後端266通過、35條件式DB略過；另授權group_test隔離schema完整001–036及21項AcademicCalendar測試通過、0略過，完成即刪除。Vue54檔188項、Chrome師生首頁／當學期歷年／分享共4流程通過。標準VS MSBuild含Vite成功，無Migration／正式資料寫入。確認7173舊PID31956為本專案bin/Debug後更新，新PID21464僅綁7173；/courses200並提供index-ozAiTLef.js，未登入calendar401，5097／5107／5173／5180無listener。未提交推送Git，未擴充其他功能。
+
+## 2026-11-13 CSMU 會議 UI／UX 修正與學生Email
+
+最終檢查補齊舊靜態教材歷程的媒體類型標記：原事件／歷史值保留，畫面不再顯示為觀看秒數；共用影片簽名判斷。相關回歸先重現失敗再修正，Vue最終187通過，30項DB與9個Chrome流程重新通過。本次3個隔離建置輸出目錄已清除，保留唯一7173執行日誌與驗證摘要。
+
+依使用者11/13逐項需求盤點並增量修正：學生管理狀態／繳交比例進度／重複總數移除，安全原始附件名與格式下載，靜態教材後端不再計時，分享登入返回本機教材，明確AcademicCalendar設定與學年／學期篩選，小組換組長／取消指定／增減成員保留原加入時間，檔案繳交作業命名與PDF20MB限制提示，CSMU品牌及現行說明文件。原未提交checkbox／radio修正保留，未引入UI框架或擴充AI／個案功能。
+
+當學期未獲校方指定，設定null並明示，不猜日期。舊靜態門檻原秒數／已達標／開始依據保留，未達標者採正式點閱確認；新要求僅能選影片。無新Migration。使用者另要求學生帳號改校域：19個明確純學生登入原地改csmu.edu.tw，Email與normalized login同步交易更新，碰撞先拒絕，原密碼／角色／ID／學習歷程保留，逐筆audit；教師／TA／管理員排除。public preview19、apply19、audit0、再跑0，未建立校方信箱或舊Email別名。
+
+Vue54檔187項、Vite、.NET253通過／35外部DB條件式略過；授權隔離schema完整001–036及30項DB整合通過，另學生Email碰撞回滾／preview／原密碼雜湊驗證／教師排除／可重入通過，測試schema已刪。Chrome9流程（含師生、1440／390、分享登入返回、靜態附件、當學期與歷史暑修、評分）通過。Code review找出舊示範帳號啟用工具可能只改顯示Email而未改登入key，已修正為已有憑證時不擅自更名，由專用交易工具處理。未執行完整歷史E2E、獨立TypeScript檢查（專案無設定）或外站YouTube實播。
+
+標準Visual Studio MSBuild（含Vue）成功。核對舊7173 PID17604為本專案bin/Debug後停止，僅以新版同路徑PID31956綁7173；/courses200、CSMU title、index-BnImiIQw.js及academic-calendar／term API均確認；5097／5107／5173／5180無listener。完整結果、主要檔案、Demo步驟及業務待確認見 [CSMU交付](../docs/ux-corrections-2026-11-13.md)。README、學習歷程規格及agents／elearning同步最新規則，保留早期決策時間脈絡；未提交／推送Git。
+
+## 2026-11-13 全站核取方塊與標籤位置修正
+
+使用者要求全站checkbox及label位置一致。查明通用input寬100%、padding及label input的margin-top流入原生選項；只有部分標籤使用choice-label，其他混用grid／block，甚至另有inline display:block。先以真實PDF建立頁的合成API瀏覽器測試重現：原checkbox寬1034px，預期18px而失敗。用Vue模板AST盤點並改好12個Vue檔案21處choice宣告，保留綁定與權限，補choice-text文字容器，統一18px、首行對齊、10px間距、整列可點及44px手機列。補原生focus-visible；同分意願radio加相同submission的name以支援方向鍵。平台帳號列操作允許換行，舊MVC思考開關尺寸／aria-label亦更新。
+
+驗證：Vue48檔165/165、Vite production build、.NET隔離OutDir編譯0警告錯誤。新增桌面1440px與手機390px Chrome檢查PDF個人／小組、長組名、教材門檻、命題選項、助教權限、帳號建立／表格及學生同分意願，測量18px／文字右距與首行中心差，驗證label文字點選、Space取消、focus outline與radio方向鍵；與既有師生／小組批改／紙本登分／成績矩陣共7流程全過。初次測試的精確select標籤名稱包含option文字導致定位逾時，改用現行語意定位後通過。已檢視桌面與手機截圖，無整頁橫向溢出。
+
+只改呈現及原生鍵盤分組，不改資料、授權、計分或Migration。既有7173 PID17604保持，前端bundle index-ea1aQqqd.js；舊MVC樣板已編譯驗證。agents／elearning同步更新，未提交Git。
+
 ## 2026-11-13 清理固定展示評語與檔名
 
 使用者指定目前教師評語中的「Codex 示範批改」及相關不自然展示標記。先盤點只有資料種子產生這些字樣，前端／正式API沒有固定Codex文案。新增 DemoPresentationText 精確規則及 Development-only DemoPresentationCleanup 工具（preview／apply／audit），只依線上 assignment seed 事件及 PDF codexDemo 事件確認來源，避免修改一般教師文字或正常提及 Codex 的檔名。移除固定前綴與 PDF 評語的展示草稿尾註，確定性檔名改作業報告.pdf，互評／意願去展示前綴；未來種子同步修正。

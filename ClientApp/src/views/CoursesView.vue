@@ -6,13 +6,16 @@ import {experience} from '../composables/experience'
 import {api} from '../api'
 import NotificationBadge from '../components/NotificationBadge.vue'
 import {courseNotifications} from '../composables/notifications'
+import {academicYears,matchesTerm,semesters,splitTerm} from '../utils/academicCalendar'
 
 const props=defineProps({enrolled:Boolean})
 const courses=ref([]),loading=ref(true),error=ref(''),notice=ref(''),showForm=ref(false),busy=ref(false)
 const editingId=ref(null),nameDraft=ref(''),confirmDeleteId=ref(null)
 const form=reactive({code:'',title:'',year:'',semester:'1',classLabel:''})
+const calendar=ref(null),calendarError=ref(''),year=ref(''),semester=ref('')
+const years=computed(()=>academicYears([...courses.value.map(c=>c.termCode),...(calendar.value?.terms||[])],calendar.value?.currentTerm))
 const teachingPortal=computed(()=>!props.enrolled && (auth.user.canTeach || auth.user.canCreateCourses))
-const visibleCourses=computed(()=>courses.value.filter(c=>teachingPortal.value ? ['teacher','ta'].includes(c.courseRole) : c.courseRole==='student' || taughtPreview(c)))
+const visibleCourses=computed(()=>courses.value.filter(c=>(teachingPortal.value ? ['teacher','ta'].includes(c.courseRole) : c.courseRole==='student' && c.status!=='draft' || taughtPreview(c))&&matchesTerm(c.termCode,year.value,semester.value)))
 const roles={teacher:'授課教師',ta:'課程助教',student:'學生'}
 
 function taughtPreview(c){return props.enrolled && c.courseRole==='teacher'}
@@ -24,7 +27,7 @@ async function saveName(course){busy.value=true;error.value='';notice.value='';t
 async function publish(course){busy.value=true;error.value='';notice.value='';try{await api(`/courses/${course.id}/activate`,{method:'POST'});await load();notice.value='課程已公開給學生。'}catch(e){error.value=e.message}finally{busy.value=false}}
 function requestDelete(course){confirmDeleteId.value=course.id;editingId.value=null;error.value='';notice.value=''}
 async function remove(course){busy.value=true;error.value='';notice.value='';try{await api(`/courses/${course.id}`,{method:'DELETE'});confirmDeleteId.value=null;await load();notice.value='空白草稿課程已刪除。'}catch(e){error.value=e.message}finally{busy.value=false}}
-onMounted(load)
+onMounted(async()=>{try{calendar.value=await api(`/academic-calendar${props.enrolled?'?studentPortal=true':''}`);const initial=splitTerm(calendar.value?.currentTerm);year.value=initial.year;semester.value=initial.semester}catch(e){calendarError.value='學期設定無法載入，暫顯示所有可用課程。'}await load()})
 </script>
 
 <template>
@@ -34,6 +37,7 @@ onMounted(load)
   </section>
   <p v-if="error" class="error-box" role="alert">{{error}} <button type="button" class="text-button" :disabled="loading" @click="load">重新載入課程</button></p>
   <p v-if="notice" class="success-box" role="status">{{notice}}</p>
+  <section class="surface term-filters" aria-label="課程學期篩選"><label>學年度<select v-model="year" aria-label="學年度"><option value="">所有學年度</option><option v-for="value in years" :key="value" :value="value">{{value}} 學年度</option></select></label><label>學期<select v-model="semester" aria-label="學期"><option value="">所有學期</option><option v-for="item in semesters" :key="item.code" :value="item.code">{{item.label}}</option></select></label><p class="field-hint">{{calendarError||(calendar?.currentTerm?`當學期：${calendar.currentTerm}`:'未設定當學期；顯示所有可用課程，可自行篩選歷年課程。')}}</p></section>
 
   <section v-if="showForm" class="surface form-surface">
     <div class="section-title"><h2>建立課程</h2><button class="icon-button" aria-label="關閉建立課程" @click="showForm=false"><X :size="18"/></button></div>
@@ -48,13 +52,16 @@ onMounted(load)
 
   <p v-if="loading" class="empty-inline">載入課程中…</p>
   <section v-else-if="!error && !visibleCourses.length" class="surface course-empty">
+    <template v-if="courses.length && (year||semester)"><BookOpen :size="32"/><h2>目前篩選沒有符合的課程</h2><p>可切換學年度／學期，或選擇「所有學年度」與「所有學期」查看歷年課程。</p></template>
+    <template v-else>
     <BookOpen :size="32"/><h2>{{teachingPortal?'目前沒有授課課程':'目前沒有已選修的課程'}}</h2>
     <p>{{teachingPortal?'建立課程或請課程擁有者加入教學團隊。':(auth.user.canTeach?'這裡會顯示你任教的課程，以及你已選修並開放的課程。':'課程開放且你已加入學員名單後，就會出現在這裡。')}}</p>
+    </template>
   </section>
 
   <div v-else class="course-grid">
     <article v-for="course in visibleCourses" :key="course.id" class="surface course-card">
-      <div class="course-card-top"><span class="course-emblem"><BookOpen :size="24"/></span><span class="status-badge">{{{draft:'草稿',active:'已公開',archived:'已封存'}[course.status]}}</span></div>
+      <div class="course-card-top"><span class="course-emblem"><BookOpen :size="24"/></span><span v-if="teachingPortal" class="status-badge">{{{draft:'草稿',active:'已公開',archived:'已封存'}[course.status]}}</span></div>
       <span class="eyebrow">{{course.code}} · {{course.termCode}} {{course.classLabel}}</span>
       <h2 :aria-label="course.title">{{course.title}} <NotificationBadge v-if="!taughtPreview(course)" :count="courseNotifications(course.id).total" label="本課未讀通知"/></h2>
       <div v-if="!taughtPreview(course)" class="course-notification-links">
@@ -65,7 +72,7 @@ onMounted(load)
       <p class="muted">{{taughtPreview(course)?'學生視角（授課課程）':roles[course.courseRole]}}<span v-if="course.isOwner"> · 課程擁有者</span></p>
       <div class="course-meta"><span><Users :size="15"/>{{course.studentCount}} 位學員</span><span>{{course.resourceCount}} 份教材</span></div>
       <p v-if="teachingPortal&&course.youTubeCount>0" class="course-video-badge"><Video :size="16" aria-hidden="true"/>YouTube 影音教材・{{course.youTubeCount}} 部</p>
-      <p class="field-hint">{{course.quizCount}} 份測驗 · {{course.reportCount}} 份 PDF 作業</p>
+      <p class="field-hint">{{course.quizCount}} 份測驗 · {{course.reportCount}} 份檔案繳交作業</p>
 
       <div v-if="teachingPortal&&course.isOwner&&!experience.student" class="course-quick-actions" aria-label="課程快速管理">
         <button class="button secondary" type="button" :disabled="busy" @click="editName(course)"><Pencil :size="14"/>修改名稱</button>
@@ -87,6 +94,7 @@ onMounted(load)
 </template>
 
 <style scoped>
+.term-filters{display:flex;gap:16px;align-items:end;flex-wrap:wrap;padding:18px;margin-bottom:20px}.term-filters label{min-width:150px}.term-filters p{flex:1 1 250px;margin:0}
 .course-video-badge{display:flex;align-items:center;gap:7px;align-self:flex-start;max-width:100%;padding:7px 10px;margin:10px 0;color:var(--accent);background:var(--accent-soft);border:1px solid var(--line);border-radius:7px;font-size:12px;font-weight:600;overflow-wrap:anywhere}.course-video-badge svg{flex-shrink:0}
 .course-quick-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0 0 12px}.course-quick-actions .button{padding:8px 7px;white-space:normal}.button.danger{background:var(--danger);color:white}.quick-editor,.delete-confirm{display:grid;gap:11px;padding:14px;margin:0 0 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft)}.quick-editor>div,.delete-confirm>div{display:flex;gap:8px}.quick-editor .button,.delete-confirm .button{width:auto}.delete-confirm{border-color:color-mix(in srgb,var(--danger) 32%,var(--line))}.delete-confirm p{color:var(--muted);font-size:11px}.course-open-link{margin-top:auto}@media(max-width:480px){.course-quick-actions{grid-template-columns:1fr}.quick-editor>div,.delete-confirm>div{flex-wrap:wrap}}
 </style>

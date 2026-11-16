@@ -9,7 +9,6 @@ public static class LearningTimePolicy
     public static string? MediaType(string name,byte[] prefix,string resourceType="file")
     {
         if(resourceType=="youtube")return "video/youtube";
-        var doc=FilePreviewPolicy.ContentType(name,prefix);if(doc!=null)return doc;
         if(Path.GetExtension(name).Equals(".mp4",StringComparison.OrdinalIgnoreCase)&&prefix.Length>=12&&prefix.AsSpan(4,4).SequenceEqual("ftyp"u8))return "video/mp4";
         if(Path.GetExtension(name).Equals(".webm",StringComparison.OrdinalIgnoreCase)&&prefix.AsSpan().StartsWith(new byte[]{0x1a,0x45,0xdf,0xa3}))return "video/webm";
         return null;
@@ -38,9 +37,9 @@ public sealed class LearningTime(NpgsqlDataSource source,TimeProvider clock)
     {
         if(inputs==null||inputs.Count>20||inputs.Select(x=>x.ResourceId).Distinct().Count()!=inputs.Count||inputs.Any(x=>x.MinimumSeconds is <1 or >86400))throw new AssignmentWorkflowException(400,"教材門檻最多 20 份，各需 1 秒至 24 小時，且不可重複。");
         foreach(var item in inputs){
-            await using var cmd=new NpgsqlCommand("SELECT file_name,substring(content from 1 for 16),resource_type FROM course_resources WHERE id=$1 AND course_id=$2",conn);Add(cmd,item.ResourceId);Add(cmd,course);
+            await using var cmd=new NpgsqlCommand("SELECT file_name,substring(content from 1 for 16),resource_type,EXISTS(SELECT 1 FROM quiz_learning_requirements WHERE assignment_id=$3 AND resource_id=$1 AND minimum_seconds=$4) FROM course_resources WHERE id=$1 AND course_id=$2",conn);Add(cmd,item.ResourceId);Add(cmd,course);Add(cmd,assignment);Add(cmd,item.MinimumSeconds);
             await using var r=await cmd.ExecuteReaderAsync(ct);
-            if(!await r.ReadAsync(ct)||LearningTimePolicy.MediaType(r.GetString(0),r.GetFieldValue<byte[]>(1),r.GetString(2))==null)throw new AssignmentWorkflowException(400,"門檻教材必須是本課可追蹤的 PDF、圖片、MP4／WebM 或 YouTube 影片。");
+            if(!await r.ReadAsync(ct)||(LearningTimePolicy.MediaType(r.GetString(0),r.GetFieldValue<byte[]>(1),r.GetString(2))==null&&!r.GetBoolean(3)))throw new AssignmentWorkflowException(400,"新增時間門檻教材必須是本課支援計時的 MP4／WebM 或 YouTube 影片；既有靜態教材門檻只能原樣保留或移除。");
         }
         await using(var cmd=new NpgsqlCommand("DELETE FROM quiz_learning_requirements WHERE assignment_id=$1",conn)){Add(cmd,assignment);await cmd.ExecuteNonQueryAsync(ct);}
         foreach(var item in inputs){await using var cmd=new NpgsqlCommand("INSERT INTO quiz_learning_requirements(assignment_id,resource_id,minimum_seconds) VALUES($1,$2,$3)",conn);Add(cmd,assignment);Add(cmd,item.ResourceId);Add(cmd,item.MinimumSeconds);await cmd.ExecuteNonQueryAsync(ct);}
@@ -52,12 +51,13 @@ public sealed class LearningTime(NpgsqlDataSource source,TimeProvider clock)
         await using(var cmd=new NpgsqlCommand("""
             SELECT r.id,COALESCE(NULLIF(r.display_title,''),r.file_name),q.minimum_seconds,
               COALESCE((SELECT floor(sum(s.content_milliseconds)/1000.0) FROM learning_time_sessions s WHERE s.resource_id=r.id AND s.user_id=$2 AND s.is_practice=$3),0)::bigint,
-              r.file_name,substring(r.content from 1 for 16),r.resource_type
+              r.file_name,substring(r.content from 1 for 16),r.resource_type,
+              NOT $3 AND EXISTS(SELECT 1 FROM resource_views v WHERE v.resource_id=r.id AND v.user_id=$2)
             FROM quiz_learning_requirements q JOIN course_resources r ON r.id=q.resource_id
             WHERE q.assignment_id=$1 ORDER BY r.created_at,r.id
             """,conn)){
             Add(cmd,assignment);Add(cmd,actor);Add(cmd,practice);await using var r=await cmd.ExecuteReaderAsync(ct);
-            while(await r.ReadAsync(ct))items.Add(new(r.GetGuid(0),r.GetString(1),r.GetInt32(2),r.GetInt64(3),LearningTimePolicy.MediaType(r.GetString(4),r.GetFieldValue<byte[]>(5),r.GetString(6))));}
+            while(await r.ReadAsync(ct))items.Add(new(r.GetGuid(0),r.GetString(1),r.GetInt32(2),r.GetInt64(3),LearningTimePolicy.MediaType(r.GetString(4),r.GetFieldValue<byte[]>(5),r.GetString(6)),r.GetBoolean(7)));}
         return new(started,items);
     }
     public static async Task RequireStarted(NpgsqlConnection conn,Guid assignment,Guid actor,bool practice,CancellationToken ct)
@@ -77,8 +77,9 @@ public sealed class LearningTime(NpgsqlDataSource source,TimeProvider clock)
              ,resource_type,youtube_video_id,COALESCE((SELECT floor(sum(content_milliseconds)/1000.0) FROM learning_time_sessions WHERE resource_id=$1 AND user_id=$3 AND is_practice=$4),0)::bigint,unit_id FROM course_resources WHERE id=$1 AND course_id=$2
             """,conn);Add(cmd,id);Add(cmd,course);Add(cmd,actor);Add(cmd,practice);await using var r=await cmd.ExecuteReaderAsync(ct);
         if(!await r.ReadAsync(ct))throw new AssignmentWorkflowException(404,"找不到教材。");
-        var media=LearningTimePolicy.MediaType(r.GetString(0),r.GetFieldValue<byte[]>(2),r.GetString(4));if(media==null)throw new AssignmentWorkflowException(415,"此教材尚不支援有效閱讀時間追蹤，請下載後開啟。");
-        return new(id,course,r.GetString(1),r.GetString(0),media,practice?0:r.GetInt64(3),status!="archived"&&role=="student"&&!practice,practice,r.IsDBNull(5)?null:r.GetString(5),practice?0:r.GetInt64(6),r.IsDBNull(7)?null:r.GetGuid(7));
+        var media=LearningTimePolicy.MediaType(r.GetString(0),r.GetFieldValue<byte[]>(2),r.GetString(4));if(media==null)throw new AssignmentWorkflowException(415,"此教材不計學習時間，請使用教材預覽或下載。");
+        var name=ResourceFileNamePolicy.SafeName(r.GetString(0));
+        return new(id,course,r.GetString(1)==r.GetString(0)?name:r.GetString(1),name,media,practice?0:r.GetInt64(3),status!="archived"&&role=="student"&&!practice,practice,r.IsDBNull(5)?null:r.GetString(5),practice?0:r.GetInt64(6),r.IsDBNull(7)?null:r.GetGuid(7));
     }
     public async Task<object> Statistics(Guid course,Guid id,Guid actor,bool practice,CancellationToken ct)
     {

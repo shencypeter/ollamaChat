@@ -1,4 +1,4 @@
-export const gradeCategories={offline_assignment:'線下作業',assignment:'PDF／線上作業',quiz:'測驗',midterm:'期中考試',final:'期末考試',other:'其他平時評量'}
+export const gradeCategories={offline_assignment:'線下作業',assignment:'檔案／線上作業',quiz:'測驗',midterm:'期中考試',final:'期末考試',other:'其他平時評量'}
 const assignments=new Set(['offline_assignment','assignment'])
 const formal=new Set(['midterm','final'])
 export function formatGrade(value){

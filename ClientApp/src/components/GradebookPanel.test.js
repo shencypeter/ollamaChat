@@ -5,7 +5,7 @@ import {api} from '../api'
 import {experience} from '../composables/experience'
 vi.mock('../api',()=>({api:vi.fn()}))
 vi.mock('vue-router',()=>({onBeforeRouteLeave:vi.fn(),onBeforeRouteUpdate:vi.fn()}))
-const items=[{id:'a',title:'PDF 報告',category:'assignment',sourceReportId:'r',maxScore:50,weight:1},{id:'q',title:'觀念測驗',category:'quiz',sourceAssignmentId:'q1',maxScore:100,weight:3}]
+const items=[{id:'a',title:'檔案繳交作業',category:'assignment',sourceReportId:'r',maxScore:50,weight:1},{id:'q',title:'觀念測驗',category:'quiz',sourceAssignmentId:'q1',maxScore:100,weight:3}]
 const curriculum={units:[{id:'u1',name:'基礎單元'},{id:'u2',name:'進階單元'}],activities:[{id:'r',kind:'report',unitId:'u1'},{id:'q1',kind:'quiz',unitId:'u2'}]}
 function data(staff=true){return {staff,items,students:[{id:'s',displayName:'同學甲',studentNumber:'001'}],scores:[{studentId:'s',itemId:'a',score:0,publishedScore:0}],averages:[{studentId:'s',average:0}],itemAverages:[],classAverage:0,gradedStudentCount:1,finals:[],classAdjustment:0,canPublishFinal:staff}}
 function render(staff=true,course={}){api.mockImplementation(async path=>path.endsWith('/curriculum')?curriculum:data(staff));return mount(GradebookPanel,{props:{course:{id:'c',status:'active',...course}},global:{stubs:{RouterLink:{props:['to'],template:'<a :href="to"><slot /></a>'}}}})}
@@ -58,7 +58,7 @@ it('defaults staff to assessment rows and student columns, with all original man
  expect(table.get('thead th').text()).toBe('評量項目／滿分')
  expect(table.findAll('thead th')).toHaveLength(2)
  expect(table.findAll('thead th')[1].text()).toContain('同學甲')
- expect(table.findAll('tbody tr').map(row=>row.get('th').text()).join(' ')).toContain('PDF 報告')
+ expect(table.findAll('tbody tr').map(row=>row.get('th').text()).join(' ')).toContain('檔案繳交作業')
  expect(view.get('[data-testid="grade-overview"]').text()).toContain('0.00')
  expect(view.find('[data-testid="grade-details"]').exists()).toBe(false)
  expect(view.find('details.grade-management').exists()).toBe(true)
@@ -68,7 +68,7 @@ it('defaults staff to assessment rows and student columns, with all original man
  expect(view.get('[data-testid="grade-details"] thead').findAll('th').map(x=>x.text())).toEqual(['學號／姓名','單元','活動','類型','繳交狀態','滿分','得分','評分狀態'])
  expect(view.get('[data-testid="grade-details"]').text()).toContain('前往原評量查看')
  await view.get('select[aria-label="成績單元"]').setValue('u1')
- expect(view.get('[data-testid="grade-details"]').text()).toContain('PDF 報告')
+ expect(view.get('[data-testid="grade-details"]').text()).toContain('檔案繳交作業')
  expect(view.get('[data-testid="grade-details"]').text()).not.toContain('觀念測驗')
  view.unmount()
 })

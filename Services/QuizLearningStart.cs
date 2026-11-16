@@ -12,7 +12,7 @@ public sealed partial class AssignmentWorkflow
         if(Practice)Fail(403,"學生視角預覽無法開始測驗。");
         if(!a.IsQuiz)Fail(400,"此項目不是線上測驗。");
         var gate=await LearningTime.Gate(conn,id,actor,Practice,ct);
-        if(!gate.Met)Fail(409,"教材有效閱讀／觀看時間尚未達標，請先完成教材學習。");
+        if(!gate.Met)Fail(409,"教材學習門檻尚未達標，請先完成指定影片觀看或舊靜態教材點閱。");
         await using(var cmd=new NpgsqlCommand("INSERT INTO quiz_learning_starts(assignment_id,user_id,is_practice,started_at,evidence) VALUES($1,$2,$3,$4,$5::jsonb) ON CONFLICT DO NOTHING",conn))
         {Add(cmd,id);Add(cmd,actor);Add(cmd,Practice);Add(cmd,clock.GetUtcNow());Add(cmd,JsonSerializer.Serialize(gate.Requirements));var inserted=await cmd.ExecuteNonQueryAsync(ct);if(inserted>0)await Audit(conn,actor,id,"assignments","quiz.learning_started",ct);}
         await tx.CommitAsync(ct);

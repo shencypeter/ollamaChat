@@ -13,16 +13,17 @@ async function loadGroups(){
 onMounted(loadGroups)
 </script>
 <template>
+ <p class="field-hint">檔案繳交作業目前僅接受 PDF，單檔最多 20 MB；其他格式請先轉換為 PDF。</p>
  <label>繳交方式<select v-model="form.submissionMode"><option value="individual">個人作業</option><option value="group">小組作業</option></select></label>
- <label><input type="checkbox" v-model="form.allowLate">允許截止後補交</label>
+ <label class="choice-label"><input type="checkbox" v-model="form.allowLate"><span class="choice-text">允許截止後補交</span></label>
  <fieldset v-if="form.submissionMode==='group'" class="report-group-options">
   <legend>小組繳交設定</legend>
   <h4>指定課程小組</h4>
   <p v-if="loading" role="status">載入課程小組中…</p>
   <div v-else-if="error"><p role="alert" class="error-box">{{error}}</p><button type="button" class="button secondary" aria-label="重新載入課程小組" @click="loadGroups">重新載入</button></div>
-  <template v-else><label v-for="g in groups" :key="g.id"><input type="checkbox" v-model="form.groupIds" :value="g.id">{{g.name}}</label><p v-if="!groups.length">請先到課程分組建立小組。</p></template>
+  <template v-else><label class="choice-label" v-for="g in groups" :key="g.id"><input type="checkbox" v-model="form.groupIds" :value="g.id"><span class="choice-text">{{g.name}}</span></label><p v-if="!groups.length">請先到課程分組建立小組。</p></template>
   <p class="field-hint">選取的小組須有有效組長；發布後以繳交時的組員名單計分。</p>
-  <label><input type="checkbox" v-model="form.allowDelegate">允許組員代組長繳交</label>
+  <label class="choice-label"><input type="checkbox" v-model="form.allowDelegate"><span class="choice-text">允許組員代組長繳交</span></label>
   <h4>成績分配</h4>
   <p>先給小組基礎成績，所有組員預設同分。批改時可依個人貢獻做個別調整，並須填寫原因。</p>
   <h4>組員回饋蒐集</h4>

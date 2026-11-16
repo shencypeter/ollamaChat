@@ -1,5 +1,23 @@
 # 代理工作規則與目前交接
 
+## 2026-11-16 當學期依系統日期
+
+最終Vue188、後端266通過／35條件式略過；另21項學期DB測試於授權隔離schema通過且已清理；Chrome4流程與標準VS含Vue建置成功。7173已更新正常bin/Debug PID21464，/courses200、新bundle index-ozAiTLef.js，未登入calendar401；其他既有舊埠無listener。無Migration／正式資料寫入／提交推送，後續仍重查執行狀態。
+
+使用者已回答待確認項：改依系統當年日期，目的只是預設收起過往學期。現行`CurrentTerm=null`表示自動判定，取台灣UTC+8日期轉民國學年度，預設8月1日起上學期、2月1日起下學期（月份可設定）；暑修保留手動查詢，必要時仍可用明確CurrentTerm覆寫。這項取代11/13「未指定、不可依日期」的待辦。不改課程status、不刪舊課、不調整授權與歷史成績。若本學期無課但有歷年課，空狀態引導切換篩選，不誤稱未修課。
+
+## 2026-11-13 CSMU UI／UX 與學生帳號
+
+標準VS MSBuild（含Vue）已成功，唯一7173更新為正常bin/Debug PID31956，/courses200、CSMU title、新bundle與calendar／term API確認；5097／5107／5173／5180無listener。public完整36份Migration，最新036；後續仍重查執行狀態。
+
+完成學生管理標籤／誤導進度移除、單元統計精簡、原始附件檔名與下載、影片專屬後端計時、分享登入返回、明確當學期設定與學年／學期篩選、小組組長更換保留成員加入紀錄、檔案繳交作業命名與CSMU品牌。`AcademicCalendar:CurrentTerm` 目前 null，已詢問使用者但未獲指定，不可自行以日期或最新課程推算。既有靜態門檻採正式點閱確認，舊達標／開始依據保留。
+
+使用者續指示學生Email也改為csmu.edu.tw：public已交易更新19個可明確識別的純學生登入帳號，稽核0待改、再跑0更新；ID／密碼／角色／歷程保留，教師／TA／管理員不改。工具具衝突全交易拒絕、preview／apply／audit。新示範學生也採此網域。沒有新Migration，001–036隔離套用及30項DB整合通過，另Email衝突／密碼保留檢查通過；Vue187、Chrome9流程通過。交付與後續環境核對見 [本次交付](../docs/ux-corrections-2026-11-13.md)。保留本來未提交checkbox修正，未提交／推送Git，不延伸AI或個案功能。
+
+## 2026-11-13 全站選項控制項對齊
+
+統一12個Vue檔案、21處checkbox／radio宣告的choice-label＋choice-text，原生控制項固定18px、文字在右且多行首行對齊、整列可點、手機44px點擊列及鍵盤focus。修正全寬文字輸入CSS誤套checkbox（實測1034px）根因，移除互相衝突display:block；同分意願radio補原生同組name支援方向鍵。舊MVC思考開關同步樣板／CSS可存取性。Vue165/165、7個Chrome流程及.NET隔離build通過，既有7173提供新bundle，未新增埠／Migration／資料變更，未提交Git。
+
 ## 2026-11-13 展示評語呈現整理
 
 已按使用者要求清理 public 的固定 Codex／展示批改前後綴、PDF 檔名及互評／意願標籤，共 419 列（線上評語125、PDF72、互評216、意願6），只處理有原種子事件證據者。分數、公開值／時間、評分者、PDF bytes、不可變答案與原始稽核保留；既有交卷快照中的展示尾註未回寫。工具提供 preview／apply／audit，可重入且逐筆記錄修訂雜湊；未來種子已去固定文案。見 [維護方式](../docs/demo-presentation-maintenance.md)。後端234通過／28條件式略過，隔離schema保護測試通過；資料即時供7173讀取，不需Migration／重啟，未提交Git。

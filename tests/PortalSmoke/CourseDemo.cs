@@ -37,7 +37,7 @@ internal static class CourseDemo
         foreach(var key in people){
             var number=key.StartsWith("student")?"D115"+key[7..]:null;
             var name=key switch{"faculty1"=>"林示範教授","faculty2"=>"陳示範教授","ta"=>"周示範助教",_=>"示範學員 "+key[7..]};
-            var user=new PortalUser(Id(key),name,key+"@portal-demo.example.invalid",PortalRoles.Member);
+            var user=new PortalUser(Id(key),name,key+(number is not null?"@csmu.edu.tw":"@portal-demo.example.invalid"),PortalRoles.Member);
             await Sql("INSERT INTO app_users(id,display_name,email,student_number) VALUES($1,$2,$3,NULLIF($4,''))",user.Id,user.DisplayName,user.Email,number??"");
             await Sql("INSERT INTO portal_credentials(user_id,normalized_email,password_hash,platform_role,can_create_courses) VALUES($1,$2,$3,'Member',$4)",user.Id,user.Email.ToUpperInvariant(),hasher.HashPassword(user,password),key.StartsWith("faculty"));
         }

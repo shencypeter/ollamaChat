@@ -27,7 +27,7 @@ it.each(['teacher','ta'])('runs a local %s demonstration without session writes,
 })
 it('records formal sessions and keeps preview read-only',async()=>{
  for(const practice of [false,true]){
-  const player=await open(practice?'teacher':'student',practice);expect(wrapper.text()).not.toContain('計時僅供示範');expect(wrapper.text()).toContain('累積實際閱讀／觀看時間：2 分 0 秒');
+  const player=await open(practice?'teacher':'student',practice);expect(wrapper.text()).not.toContain('計時僅供示範');expect(wrapper.text()).toContain('累積實際觀看時間：2 分 0 秒');
   if(practice)expect(wrapper.text()).toContain('學生視角預覽不累積學習時間');
   state=1;player.vm.$emit('state',1);await flushPromises();expect(api.mock.calls.some(c=>c[0].endsWith('/sessions')&&c[1]?.method==='POST')).toBe(!practice);wrapper.unmount();api.mockReset();state=2;
  }
@@ -41,9 +41,19 @@ it('pauses the embedded player on visibility loss and waits for the user to resu
 
 it('records one static material view when the page opens',async()=>{
  api.mockImplementation(async (path,options)=>path.endsWith('/learning')?{title:'合成講義',fileName:'handout.pdf',mediaType:'application/pdf',canTrack:true,isPractice:false,accumulatedSeconds:0,contentSeconds:0}:path.endsWith('/content')?new Blob(['pdf']):path.endsWith('/views')&&options?.method==='POST'?null:{})
- wrapper=mount(LearningResourceView,{global:{stubs:{RouterLink:true,ShareResource:true,ResourceInteractions:true,MaterialSummary:true,ResourceTranscript:true,FilePreview:true}}});await flushPromises()
+ wrapper=mount(LearningResourceView,{global:{stubs:{RouterLink:true,ShareResource:true,ResourceInteractions:true,MaterialSummary:true,ResourceTranscript:true}}});await flushPromises()
  const writes=api.mock.calls.filter(call=>call[0]==='/courses/c/resources/r/views'&&call[1]?.method==='POST')
  expect(writes).toHaveLength(1);expect(writes[0][1].body.id).toMatch(/^[0-9a-f-]{36}$/)
+ expect(wrapper.text()).not.toContain('學習計時');expect(wrapper.text()).not.toContain('開始／繼續計時')
+ await vi.advanceTimersByTimeAsync(30000)
+ expect(api.mock.calls.some(call=>call[0].includes('/sessions'))).toBe(false)
+})
+
+it('opens unsupported attachments with a safe original name and an explicit download action',async()=>{
+ api.mockImplementation(async path=>{if(path.endsWith('/learning'))throw Object.assign(new Error('unsupported'),{status:415});if(path==='/courses/c/resources')return [{id:'r',title:'簡報',fileName:'C:\\fakepath\\原始簡報.pptx',unitId:'u'}];return {}})
+ wrapper=mount(LearningResourceView,{global:{stubs:{RouterLink:true,ShareResource:true,ResourceInteractions:true,MaterialSummary:true,ResourceTranscript:true}}});await flushPromises()
+ expect(wrapper.text()).toContain('原始檔名：原始簡報.pptx');expect(wrapper.text()).not.toContain('fakepath');expect(wrapper.text()).toContain('此格式不支援線上預覽，請下載原始檔案後開啟。')
+ expect(wrapper.findAll('button').some(button=>button.text()==='下載原始檔案')).toBe(true)
 })
 
 it('returns a directly opened material to its persisted unit',async()=>{

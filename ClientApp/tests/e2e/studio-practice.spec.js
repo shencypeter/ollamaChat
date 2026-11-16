@@ -13,7 +13,7 @@ test('staff can submit private practice quizzes and reports, grade in teaching m
  const submitted=await write(teacher,`/assignments/${quiz.id}/my-submission`,{expectedVersion:0,submit:true,answers:[{questionId:question.id,text:'本人的合成練習答案'}]},'POST',true);expect(submitted.status()).toBe(200);const own=await submitted.json();expect(own.status).toBe('submitted')
  expect((await(await read(teacher,`/assignments/${quiz.id}/submissions`)).json())).toHaveLength(0)
  expect((await write(teacher,`/assignments/${quiz.id}/my-submission`,{expectedVersion:own.version,submit:true,answers:[{questionId:question.id,text:'禁止覆寫'}]},'POST',true)).status()).toBe(409)
- const report=await(await write(teacher,base+'/reports',{title:'練習 PDF 作業',maxScore:100,weight:70})).json();await write(teacher,`/reports/${report.id}/publish`)
+ const report=await(await write(teacher,base+'/reports',{title:'練習 檔案繳交作業',maxScore:100,weight:70})).json();await write(teacher,`/reports/${report.id}/publish`)
  const pdf=Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF')
  expect((await write(teacher,`/reports/${report.id}/submit`,null,'POST',true,{multipart:{file:{name:'practice.pdf',mimeType:'application/pdf',buffer:pdf}}})).status()).toBe(204)
  expect((await(await read(teacher,`/reports/${report.id}/submissions`)).json())).toHaveLength(0)
@@ -39,10 +39,10 @@ test('staff can submit private practice quizzes and reports, grade in teaching m
  await expect(page.getByRole('heading',{name:'我的練習成績',exact:true})).toBeVisible();await expect(page.getByText('我的練習加權平均：71.00 分',{exact:true})).toBeVisible();expect(await page.getByRole('button',{name:'儲存練習成績',exact:true}).count()).toBe(0)
  // Submit through the actual quiz UI as the assistant, in a separate practice namespace.
  const tcontext=await browser.newContext({storageState:await ta.storageState()}),tp=await tcontext.newPage();await tp.goto(baseURL+'/courses');await tp.getByRole('button',{name:'切換學生視角',exact:true}).click();await tp.goto(baseURL+'/quizzes/'+quiz.id)
- await tp.getByRole('textbox').fill('助教自己的練習答案');tp.once('dialog',d=>d.accept());await tp.getByRole('button',{name:'提交給教師／助教',exact:true}).click();await expect(tp.getByText('練習作答已提交，不計入正式學生紀錄。',{exact:true})).toBeVisible()
+ await tp.getByRole('textbox').fill('助教自己的練習答案');tp.once('dialog',d=>d.accept());await tp.getByRole('button',{name:'提交給教師／助教',exact:true}).click();await expect(tp.getByText('練習作答已繳交，不計入正式學生紀錄。',{exact:true})).toBeVisible()
  expect((await(await read(teacher,`/assignments/${quiz.id}/submissions`)).json())).toHaveLength(0)
  const reportUI=await(await write(teacher,base+'/reports',{title:'UI 練習報告',maxScore:100,weight:1})).json();await write(teacher,`/reports/${reportUI.id}/publish`)
- await tp.goto(baseURL+'/reports/'+reportUI.id);await tp.getByLabel('PDF 報告（最多 20 MB）').setInputFiles({name:'ui-practice.pdf',mimeType:'application/pdf',buffer:pdf});tp.once('dialog',d=>d.accept());await tp.getByRole('button',{name:'繳交 PDF 報告',exact:true}).click();await expect(tp.getByText('PDF 報告已繳交。',{exact:true})).toBeVisible()
+ await tp.goto(baseURL+'/reports/'+reportUI.id);await tp.getByLabel('檔案繳交作業（最多 20 MB）').setInputFiles({name:'ui-practice.pdf',mimeType:'application/pdf',buffer:pdf});tp.once('dialog',d=>d.accept());await tp.getByRole('button',{name:'繳交 檔案繳交作業',exact:true}).click();await expect(tp.getByText('作業檔案已繳交。',{exact:true})).toBeVisible()
  expect((await(await read(teacher,`/reports/${reportUI.id}/submissions`)).json())).toHaveLength(0)
 
  const stages=['premorbid','illnessCourse','functionalAssessment','psychosocial'],caseInput={courseId:course.id,title:'合成練習案例',material:'合成資料，未含真實病例。',prompts:Object.fromEntries(stages.map(s=>[s,'依據合成案例分析。'])),referencePoints:Object.fromEntries(stages.map(s=>[s,'']))}

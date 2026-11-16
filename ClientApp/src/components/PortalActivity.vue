@@ -4,16 +4,17 @@ import {Bell,CalendarDays,RefreshCw} from '@lucide/vue'
 import {api} from '../api'
 import {formatDate} from '../utils/assignments'
 import PortalPanel from './PortalPanel.vue'
-const props=defineProps({teaching:Boolean,courses:{type:Array,default:()=>[]}})
+const props=defineProps({teaching:Boolean,courses:{type:Array,default:()=>[]},term:{type:String,default:''},year:{type:String,default:''},semester:{type:String,default:''}})
 const panelScope=computed(()=>props.teaching?'teaching':'student')
 const courseId=ref(''),page=ref(1),feed=ref([]),agenda=ref([]),hasMore=ref(false),agendaMore=ref(false),busy=ref(false),feedError=ref(''),agendaError=ref('')
 const feedSize=ref(5)
-const labels={announcement:'課程公告',material:'教材',assignment:'作業',quiz:'測驗',report:'PDF 作業',grade:'已公布成績',discussion:'討論更新',exam:'正式考試',midterm:'期中考',final:'期末考'}
+const labels={announcement:'課程公告',material:'教材',assignment:'作業',quiz:'測驗',report:'檔案繳交作業',grade:'已公布成績',discussion:'討論更新',exam:'正式考試',midterm:'期中考',final:'期末考'}
 function groupDays(items){const groups=new Map();for(const item of items){const date=new Date(item.dueAt||item.opensAt);const key=Number.isNaN(date.getTime())?'未定時間':date.toLocaleDateString('zh-TW',{year:'numeric',month:'long',day:'numeric',weekday:'short'});if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item)}return [...groups].map(([label,items])=>({label,items}))}
 let generation=0
 async function load({feedOnly=false}={}){
  const current=++generation;busy.value=true;feedError.value='';if(!feedOnly)agendaError.value=''
  const params=new URLSearchParams({view:props.teaching?'teaching':'student'});if(courseId.value)params.set('courseId',courseId.value)
+ if(props.term)params.set('term',props.term);if(props.year)params.set('year',props.year);if(props.semester)params.set('semester',props.semester)
  const results=await Promise.allSettled([api(`/portal-feed?${params}&page=${page.value}&pageSize=${feedSize.value}`),...(feedOnly?[]:[api(`/portal-feed/agenda?${params}`)])])
  if(current!==generation)return
  const [messages,events]=results
@@ -23,6 +24,7 @@ async function load({feedOnly=false}={}){
 }
 watch(()=>props.teaching,()=>{courseId.value='';page.value=1;feedSize.value=5;load()},{immediate:true})
 watch(courseId,()=>{page.value=1;load()})
+watch(()=>[props.term,props.year,props.semester],()=>{courseId.value='';page.value=1;load()})
 function changeFeed(paging){page.value=paging.page;feedSize.value=paging.pageSize;load({feedOnly:true})}
 onBeforeUnmount(()=>generation++)
 </script>

@@ -20,13 +20,16 @@ public sealed class PortalFeedController(NpgsqlDataSource source, LearnerExperie
           WHERE m.user_id=$1 AND m.status='active' AND u.status='active' AND c.status='active'
             AND ($2='all' OR $2='student' AND m.course_role='student' OR $2='teaching' AND m.course_role IN ('teacher','ta'))
             AND (NOT $3 OR m.course_role='student') AND ($4::uuid IS NULL OR c.id=$4)
+            AND ($5='' OR c.term_code=$5) AND ($6='' OR split_part(c.term_code,'-',1)=$6)
+            AND ($7='' OR split_part(c.term_code,'-',2)=$7)
         ), events AS (
         """;
-    private NpgsqlCommand Query(string sql, string view, Guid? courseId)
+    private NpgsqlCommand Query(string sql, string view, Guid? courseId,string? term,string? year,string? semester)
     {
         var cmd=source.CreateCommand(sql);cmd.Parameters.AddWithValue(Actor);cmd.Parameters.AddWithValue(view);
         cmd.Parameters.AddWithValue(experience.Requested);
         cmd.Parameters.Add(new NpgsqlParameter { NpgsqlDbType=NpgsqlDbType.Uuid,Value=(object?)courseId??DBNull.Value });
+        cmd.Parameters.AddWithValue(term??"");cmd.Parameters.AddWithValue(year??"");cmd.Parameters.AddWithValue(semester??"");
         return cmd;
     }
     private static string TargetUrl(string kind, Guid course, Guid id) => kind switch {
@@ -42,7 +45,7 @@ public sealed class PortalFeedController(NpgsqlDataSource source, LearnerExperie
     };
     [HttpGet]
     public async Task<IActionResult> Feed(CancellationToken ct, [FromQuery,Range(1,100000)] int page=1,
-        [FromQuery,Range(1,50)] int pageSize=20,[FromQuery] string view="all",[FromQuery] Guid? courseId=null)
+        [FromQuery,Range(1,50)] int pageSize=20,[FromQuery] string view="all",[FromQuery] Guid? courseId=null,[FromQuery] string? term=null,[FromQuery] string? year=null,[FromQuery] string? semester=null)
     {
         if(view is not ("all" or "student" or "teaching") || page<1 || page>100000 || pageSize<1 || pageSize>50) return BadRequest();
         await using var cmd=Query(Eligible + """
@@ -74,8 +77,8 @@ public sealed class PortalFeedController(NpgsqlDataSource source, LearnerExperie
               GREATEST(q.created_at,COALESCE(q.answered_at,q.created_at),COALESCE((SELECT max(r.created_at) FROM course_question_replies r WHERE r.question_id=q.id),q.created_at)),u.display_name
             FROM eligible c JOIN course_questions q ON q.course_id=c.id JOIN app_users u ON u.id=q.author_id WHERE c.course_role IN ('teacher','ta')
             ) SELECT id,kind,course_id,course_title,title,occurred_at,author_name FROM events
-            ORDER BY occurred_at DESC,course_id,kind,id LIMIT $5 OFFSET $6
-            """,view,courseId);
+            ORDER BY occurred_at DESC,course_id,kind,id LIMIT $8 OFFSET $9
+            """,view,courseId,term,year,semester);
         cmd.Parameters.AddWithValue(pageSize+1);cmd.Parameters.AddWithValue((page-1)*pageSize);
         var items=new List<object>();await using var r=await cmd.ExecuteReaderAsync(ct);
         while(await r.ReadAsync(ct))items.Add(new{id=r.GetGuid(0),kind=r.GetString(1),courseId=r.GetGuid(2),courseTitle=r.GetString(3),title=r.GetString(4),occurredAt=r.GetFieldValue<DateTimeOffset>(5),authorName=r.IsDBNull(6)?null:r.GetString(6),url=TargetUrl(r.GetString(1),r.GetGuid(2),r.GetGuid(0))});
@@ -83,7 +86,7 @@ public sealed class PortalFeedController(NpgsqlDataSource source, LearnerExperie
         return Ok(new{items,page,pageSize,hasMore});
     }
     [HttpGet("agenda")]
-    public async Task<IActionResult> Agenda(CancellationToken ct,[FromQuery] string view="all",[FromQuery] Guid? courseId=null)
+    public async Task<IActionResult> Agenda(CancellationToken ct,[FromQuery] string view="all",[FromQuery] Guid? courseId=null,[FromQuery] string? term=null,[FromQuery] string? year=null,[FromQuery] string? semester=null)
     {
         if(view is not ("all" or "student" or "teaching"))return BadRequest();
         await using var cmd=Query(Eligible + """
@@ -102,7 +105,7 @@ public sealed class PortalFeedController(NpgsqlDataSource source, LearnerExperie
             ) SELECT id,kind,course_id,course_title,title,due_at,opens_at FROM events
             WHERE COALESCE(due_at,opens_at) >= date_trunc('day',now() AT TIME ZONE 'Asia/Taipei') AT TIME ZONE 'Asia/Taipei'
             ORDER BY COALESCE(due_at,opens_at),course_id,kind,id LIMIT 101
-            """,view,courseId);
+            """,view,courseId,term,year,semester);
         var items=new List<object>();await using var r=await cmd.ExecuteReaderAsync(ct);
         while(await r.ReadAsync(ct))items.Add(new{id=r.GetGuid(0),kind=r.GetString(1),courseId=r.GetGuid(2),courseTitle=r.GetString(3),title=r.GetString(4),dueAt=r.IsDBNull(5)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(5),opensAt=r.IsDBNull(6)?(DateTimeOffset?)null:r.GetFieldValue<DateTimeOffset>(6),url=TargetUrl(r.GetString(1),r.GetGuid(2),r.GetGuid(0))});
         var hasMore=items.Count>100;if(hasMore)items.RemoveAt(items.Count-1);

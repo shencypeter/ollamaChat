@@ -15,3 +15,7 @@ export function materialFormat(item){
   const [label,icon]=types.find(t=>t[2].test(mime)) || types.find(t=>t[3].includes(ext)) || ['檔案',File]
   return item.resourceType==='youtube'?{label:'YouTube',icon:Video}:{label,icon}
 }
+// Render the uploaded basename as text; omit path fragments and invisible controls.
+export function safeMaterialFileName(name){
+  return String(name||'').split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]/g,'').trim()||'未命名檔案'
+}
