@@ -40,7 +40,7 @@ public class CourseUnitTests : IAsyncLifetime
         var values=method.GetParameters().Select(p=>p.Name switch{"course"=>course,"file"=>file,"title"=>title,"unitId"=>unit,"ct"=>default(CancellationToken),_=>p.HasDefaultValue?p.DefaultValue:null}).ToArray();
         return await (Task<IActionResult>)method.Invoke(controller,values)!;
     }
-    private static JsonElement Json(IActionResult result)=>JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(result).Value);
+    private static JsonElement Json(IActionResult result)=>JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(result).Value,new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
     [Fact]
     public async Task TeacherCanCreateReorderAndMoveWhileTaAndStudentCannotWrite()
@@ -119,7 +119,7 @@ public class CourseUnitTests : IAsyncLifetime
     public async Task CourseEditUsesVersionAndRelatedCourseMustArchiveInsteadOfDelete()
     {
         if(!Enabled)return;
-        var before=Json(await Courses(teacher).Get(course,default));var version=before.GetProperty("Version").GetInt32();
+        var before=Json(await Courses(teacher).Get(course,default));var version=before.GetProperty("version").GetInt32();
         var input=new UpdateCourseRequest{Code="UNIT-EDIT-"+course.ToString("N"),Title="單元課程已編輯",TermCode="115-2",ClassLabel="A班",ExpectedVersion=version};
         Assert.IsType<NoContentResult>(await Courses(teacher).Update(course,input,default));
         Assert.IsType<ConflictObjectResult>(await Courses(teacher).Update(course,input,default));

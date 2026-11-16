@@ -17,12 +17,18 @@ public sealed record AnalysisStageOption(
 
 public static class AnalysisStageCatalog
 {
+    public static string PhaseCode(AnalysisStage stage)=>stage switch
+    {
+        AnalysisStage.Premorbid=>"A", AnalysisStage.IllnessCourse=>"B",
+        AnalysisStage.FunctionalAssessment=>"C", AnalysisStage.Psychosocial=>"D",
+        _=>throw new ArgumentException("純聊天沒有分析階段代碼。",nameof(stage))
+    };
     public static IReadOnlyList<AnalysisStageOption> All { get; } =
     [
-        new(AnalysisStage.Premorbid, "premorbid", "病前功能", "請輸入個案病前功能分析…"),
-        new(AnalysisStage.IllnessCourse, "illnessCourse", "疾病病程", "請輸入個案疾病病程分析…"),
-        new(AnalysisStage.FunctionalAssessment, "functionalAssessment", "功能評估結果", "請輸入個案功能評估結果分析…"),
-        new(AnalysisStage.Psychosocial, "psychosocial", "心理社會條件", "請輸入個案心理社會條件分析…"),
+        new(AnalysisStage.Premorbid, "premorbid", "A 病前功能", "請輸入個案病前功能分析…"),
+        new(AnalysisStage.IllnessCourse, "illnessCourse", "B 疾病病程", "請輸入個案疾病病程分析…"),
+        new(AnalysisStage.FunctionalAssessment, "functionalAssessment", "C 功能評估結果", "請輸入個案功能評估結果分析…"),
+        new(AnalysisStage.Psychosocial, "psychosocial", "D 心理社會條件", "請輸入個案心理社會條件分析…"),
         new(AnalysisStage.GeneralChat, "generalChat", "一般對話", "想和 AI 聊些什麼？")
     ];
 

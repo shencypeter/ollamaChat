@@ -33,6 +33,10 @@ builder.Services.AddScoped<LearningTime>();
 builder.Services.AddScoped<StudioWorkflow>();
 builder.Services.AddScoped<LearnerExperience>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddOptions<CaseChatOptions>().Bind(builder.Configuration.GetSection(CaseChatOptions.SectionName)).ValidateDataAnnotations().ValidateOnStart();
+builder.Services.AddScoped<CaseAnalysisChat>();
+builder.Services.AddSingleton<RawChatSessions>();
+builder.Services.AddHostedService(services=>services.GetRequiredService<RawChatSessions>());
 builder.Services.AddOptions<AcademicCalendarOptions>().Bind(builder.Configuration.GetSection(AcademicCalendarOptions.SectionName)).ValidateDataAnnotations().ValidateOnStart();
 builder.Services.Configure<PasswordHasherOptions>(o=>o.IterationCount=210000);
 builder.Services.AddScoped<IPasswordHasher<PortalUser>,PasswordHasher<PortalUser>>();
@@ -64,6 +68,7 @@ builder.Services.AddRateLimiter(o=>
 {
     o.RejectionStatusCode=429;
     o.AddPolicy("login",context=>RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString()??"unknown",_=>new FixedWindowRateLimiterOptions{PermitLimit=15,Window=TimeSpan.FromMinutes(1),QueueLimit=0}));
+    o.AddPolicy("case-chat",context=>RateLimitPartition.GetFixedWindowLimiter(context.User.FindFirstValue(ClaimTypes.NameIdentifier)??"anonymous",_=>new FixedWindowRateLimiterOptions{PermitLimit=20,Window=TimeSpan.FromMinutes(1),QueueLimit=0}));
 });
 builder.Services.AddHttpContextAccessor();builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(o=>{o.Cookie.Name=".TeachingPortal.Session";o.Cookie.HttpOnly=true;o.Cookie.IsEssential=true;o.IdleTimeout=TimeSpan.FromHours(4);});

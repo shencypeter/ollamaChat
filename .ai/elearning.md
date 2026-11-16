@@ -1,5 +1,55 @@
 # 中山醫學大學個案分析 AI 助教系統規格
 
+## 2026-11-16 目前階段標記色（現行）
+
+目前階段相符的原文及分類圖例統一用明確黃色背景與深色文字，不再以各phase低透明度色區分相符內容。其他階段仍按A藍／B綠／C紫／D橘畫底線，合法多碼可與黃底並存；黃色內底線採較深色以兼顧淺深主題對比。此僅呈現調整，不變更分類／事實正確性提示或資料。
+
+## 2026-11-16 階段相符與錯置顯示（取代一律底線）
+
+標註判讀加入目前作答stage，依已選階段而非學生文字猜測：同階段分類採淡色背景、其他階段採原分類色底線，混合多碼可並存。圖例顯示目前階段；相符僅指分類位置，不代表臨床／答案正確。無stage舊入口維持原底線，Raw不參與。
+
+已配對回饋區另顯示系統「階段核對（依AI分類標註）」：列目前階段及有效原文標註的分類，條件式提醒是否放錯位置；未標記不等於缺漏，必要跨階段背景不概括判錯。此提示不是模型原評語，不能回寫或冒充歷史AI回饋。教師、學生、Studio同版原文／replyTo／answerVersionId授權邊界保留。
+
+Prompt v3及Stage明確currentPhase輸入要求回饋說明目前階段、原文所屬分類與修改方向；無可信案例仍不得假稱已核實事實或捏造遺漏。模型實際分類／教學仍可能錯誤，系統提示不是評分或專業正確性驗證。無新Migration／原始紀錄改寫。
+
+## 2026-11-16 四階段標籤
+
+四階段可見名稱統一為「A 病前功能」、「B 疾病病程」、「C 功能評估結果」、「D 心理社會條件」，套用模式入口、下一階段、學生案例頁、教師查閱／統計、維護及相關作答選單；原圈號數字不與ABCD重複顯示。資料識別仍為premorbid／illnessCourse／functionalAssessment／psychosocial，不改歷程、模型提示或Raw Chat定位。分類碼圖例既有A–D沿用。
+
+## 2026-11-16 模型部署選擇
+
+依使用者要求，目前預設改IAN02的llama3.1:8b（Profile=llama3），Taipei Breeze完整保留作可選profile。Visual Studio的https-IAN02-Llama3／https-Taipei-Breeze均用7173，停止目前服務後切選單重啟；不自動失敗轉用其他模型，不改每個profile的相容組裝／抽樣。課內／Studio均沿目前選定模型；歷史紀錄保留原model_name／prompt_version。Raw記憶體隨重啟釋放，正式Stage資料不變。此次只驗連線、2輪Raw與1輪結構回饋，Llama教學品質另待驗收。
+
+## 2026-11-16 教授四階段方法與分類底線
+
+本次依四份參考文件將教學方法抽出共用CaseChatPrompts.TeachingInstructions，課內聊天與既有Studio均使用，版本professor-four-phase-20261116-v2／case-text-feedback-professor-v2。固定A病前功能、B疾病病程、C功能評估結果、D心理社會條件；整合概念化不成第五份提交。43碼目錄沿07較晚明確規則，A2c／B2c不編碼、C5不分細碼，允許有依據多碼；後期GCS不可回推初始、肌力不同活動功能、聯絡人不自動等於主要照顧者。
+
+形成性回饋依內容使用已掌握／可能遺漏／需具體／可能錯置／修改建議，不強迫填滿，不代寫、不自動計分或通過。來源不足不能偽稱核實；課內目前沒有分離案例來源，Studio保留既有案例版本Material／caseFacts及教師參考邊界。學生輸入與案例內指令不能覆寫方法。
+
+提交且收到對應回饋後，唯讀作答可顯示A藍／B綠／C紫／D橘細底線，多碼、重疊、展開圖例及code emphasis。Tooltip支援hover、鍵盤、touch及淺深色；底線明示分類不代表正確，未標記不等於錯。AI內部回精確引用text及明確0起算occurrence，server產生UTF-16 startinclusive/endexclusive，驗證exactsubstring、代理對、目錄與上限；不猜測修補錯位，公開範圍相容。標註固定對應不可變answer版本，編輯textarea與Raw不加markup。039新增nullable annotations及metadata trigger；Studio利用既有JSON，舊紀錄不回補。
+
+實際Breeze仍有嚴重證據／時點及不實遺漏問題，模型品質未通過，不能聲稱專業調教驗收完成。完整定義、來源歧義、實際測試與六份交付見[教授規準](../docs/ai-tuning/01-professor-rubric.md)、[驗證](../docs/ai-tuning/03-evaluation-results.md)、[UI](../docs/ai-tuning/06-annotation-ui.md)。原成績、授權、Raw不持久化／不計正式統計及歷史答案均保留。
+
+## 2026-11-16 教學練習提示補充
+
+教師／助教教學練習提示追加使用者指定文案：「各階段系統目前為 AI 提供，尚未經過專業調教與驗證。」與本人練習／不計正式統計提醒同列。
+
+## 2026-11-16 AI助教視覺識別
+
+課內assistant回覆（Raw、四階段及教師讀回）使用淡青綠陰影底色與非對稱圓角泡泡，與學生淡紫作答區區分。回覆標題附原創教授剪影inline SVG，包含眼鏡、書本與心理健康腦部符號；沿用主題文字／底色、不使用真人照片或外部Logo，裝飾SVG aria-hidden，文字仍清楚標示AI助教。回覆文字、時間、效能與輪次操作沿用原流程。
+
+## 2026-11-16 回饋輪次／作答版本與效能
+
+四階段內每則user與對應assistant構成可選回饋輪次，學生在內側sidebar選輪次，右側讀原文／回饋。「修改這次作答」保留原文並以revisesMessageId記錄新版本；只有同本人／課程／stage／practice的completed user可當來源。修改次數依parent重算，失敗AI重試沿同訊息不增加版次；可手動下一階段，不依AI過關。未提交草稿切換或覆寫有確認。
+
+任選兩次已授權學生作答／提問作文字diff，包含歷史工作階段，支援中文／空白／換行、長差異明示整段fallback及安全純文字顯示。每筆assistant可開原生效能dialog，顯示Token、速度及模型／往返耗時；舊無資料與模型缺省欄位明示未提供，不補造0。038新增nullable效能與版次來源、不可變metadata。Stage持久化；Raw效能僅暫存並隨清除釋放，不送入模型、不計正式統計。詳見 [交付與驗證](../docs/feedback-rounds.md)。
+
+## 2026-11-16 個案分析五模式（本次新增範圍）
+
+依新任務新增Raw與四階段課程聊天，取代先前本階段不擴充AI的限制，不新增評分／過關。Raw採LangChain.Core0.17.0各user/course/randomID獨立完整ConversationBufferMemory，無應用system／DB／summary／內容log／正式統計；清除／刷新新ID、20m閒置回收。Pagehide keepalive不保證必達，容量429需明確確認才清本人所有暫存。四階段先存原user、成功assistant及模型／prompt版本；同ID與重試不重算，成功保存配對才算往返。超context預算明確413，不丟原history。
+
+教師／具statistics權限TA可查本課名冊、各階段原文／統計；學生限本人，教師practice不算正式統計。037增加課程開關與session/message，已啟用兩門既有個案課、115上等義轉115-1留audit。舊66b6795無分數提示適配版legacy-66b6795-chat-v1，既有評閱／作業／測驗不改。完整 [規格與交付](../docs/case-analysis-chat.md)。
+
 ## 2026-11-16 當學期預設（取代11/13人工指定規則）
 
 依使用者確認，首頁、我的修課／授課的當學期由系統日期自動產生，僅作預設篩選，過往課程仍可從歷年篩選查看，不自動刪除、封存或關閉作業。採台灣UTC+8與既有民國學年度格式：預設8月1日起新學年度上學期；翌年2月1日起同學年度下學期。例如2026/11為115-1，2027/01仍115-1，2027/02為115-2。暑修仍列可選歷史學期，不擅定暑修開課界線。

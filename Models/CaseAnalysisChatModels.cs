@@ -1,0 +1,29 @@
+using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
+
+namespace AiTeachingAssistant.Models;
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class CaseChatInput
+{
+    public Guid RequestId {get;set;}
+    public Guid? RevisesMessageId {get;set;}
+    [Required,StringLength(8000,MinimumLength=1)] public string Content {get;set;}="";
+}
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class RawChatInput
+{
+    [Required,StringLength(8000,MinimumLength=1)] public string Content {get;set;}="";
+}
+public sealed record CaseChatStatistics(int StudentMessages,int AssistantReplies,int RoundTrips,DateTimeOffset? LastActivityAt,int RevisionCount=0);
+public sealed record CaseChatMessage(Guid Id,string Role,string Content,int Sequence,string Status,Guid? ReplyTo,string? ModelName,string? PromptVersion,DateTimeOffset CreatedAt,RequestMetrics? Metrics=null,Guid? RevisesMessageId=null,IReadOnlyList<CaseTextAnnotation>? Annotations=null);
+public sealed record CaseTextAnnotation(string AnnotationId,int Start,int End,string Text,IReadOnlyList<string> Codes,string Explanation,string Status);
+public sealed record CaseChatSession(Guid Id,string Stage,string Status,IReadOnlyList<CaseChatMessage> Messages,CaseChatStatistics Statistics);
+public sealed record CaseStageHistory(IReadOnlyList<CaseChatSession> Sessions,Guid? ActiveSessionId);
+public sealed record CaseChatStageStatistics(string Stage,CaseChatStatistics Statistics);
+public sealed record CaseChatStudent(Guid Id,string DisplayName,string? StudentNumber,IReadOnlyList<CaseChatStageStatistics> Stages,CaseChatStatistics Statistics);
+public sealed record CaseChatAccess(string Role,string Status,bool Enabled,string[] Restrictions)
+{
+    public bool Practice=>Role is "teacher" or "ta";
+    public bool CanReview=>Practice&&!(Role=="ta"&&Restrictions.Contains("statistics"));
+}

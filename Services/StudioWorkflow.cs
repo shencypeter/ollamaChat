@@ -115,9 +115,10 @@ public sealed class StudioWorkflow(NpgsqlDataSource source,LearnerExperience exp
     }
     public async Task<StudioFeedback> Ask(Guid id,Guid actor,Guid answerId,IOllamaClient model,OllamaOptions options,CancellationToken ct)
     {
-        var run=Guid.NewGuid();IReadOnlyList<OllamaMessage> messages;int timeout;
+        var run=Guid.NewGuid();IReadOnlyList<OllamaMessage> messages;int timeout;string originalAnswer;
         await using(var conn=await source.OpenConnectionAsync(ct))await using(var tx=await conn.BeginTransactionAsync(ct)){
             var(c,a)=await Writable(conn,id,actor,ct);var answer=a.Answers.FirstOrDefault(x=>x.Id==answerId)??throw new AssignmentWorkflowException(409,"找不到已儲存答案版本。");
+            originalAnswer=answer.Text;
             if(a.Answers.First(x=>x.Stage==answer.Stage).Id!=answerId||string.IsNullOrWhiteSpace(answer.Text))Fail(409,"只能請求目前已儲存的非空白答案回饋。");
             int max;await using(var settings=new NpgsqlCommand("SELECT feedback_enabled,timeout_seconds,max_requests_per_revision FROM studio_settings WHERE id=true",conn)){
                 await using var r=await settings.ExecuteReaderAsync(ct);await r.ReadAsync(ct);if(!r.GetBoolean(0))Fail(409,"AI 回饋目前由管理者暫停；草稿仍可儲存或提交。");timeout=r.GetInt32(1);max=r.GetInt32(2);
@@ -132,7 +133,7 @@ public sealed class StudioWorkflow(NpgsqlDataSource source,LearnerExperience exp
         }
         StudioFeedbackContent? content=null;string? error=null;
         using(var time=CancellationTokenSource.CreateLinkedTokenSource(ct)){
-            time.CancelAfter(TimeSpan.FromSeconds(Math.Min(timeout,options.TimeoutSeconds)));try{var response=await model.FeedbackAsync(messages,time.Token);content=StudioFeedbackContract.Parse(response.Content);}catch(OperationCanceledException){error="timeout";}catch(Exception e)when(e is HttpRequestException or InvalidOperationException){error="unavailable";}
+            time.CancelAfter(TimeSpan.FromSeconds(Math.Min(timeout,options.TimeoutSeconds)));try{var response=await model.FeedbackAsync(messages,time.Token);content=StudioFeedbackContract.Parse(response.Content,originalAnswer);}catch(OperationCanceledException){error="timeout";}catch(Exception e)when(e is HttpRequestException or InvalidOperationException){error="unavailable";}
         }
         using var completion=new CancellationTokenSource(TimeSpan.FromSeconds(10));await using(var conn=await source.OpenConnectionAsync(completion.Token)){
             await using var cmd=new NpgsqlCommand("UPDATE studio_feedback_runs SET status=$2,findings=$3::jsonb,error_code=$4,completed_at=now() WHERE id=$1 RETURNING created_at,completed_at",conn);Add(cmd,run);Add(cmd,content==null?"failed":"completed");cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlDbType.Text,Value=content==null?DBNull.Value:JsonSerializer.Serialize(content,Json)});cmd.Parameters.Add(new(){NpgsqlDbType=NpgsqlDbType.Text,Value=(object?)error??DBNull.Value});await using var r=await cmd.ExecuteReaderAsync(completion.Token);await r.ReadAsync(completion.Token);return new(run,answerId,content==null?"failed":"completed",content,error,r.GetFieldValue<DateTimeOffset>(0),r.GetFieldValue<DateTimeOffset>(1));

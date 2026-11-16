@@ -1,3 +1,7 @@
+> 2026-11-16 預設模型已切回IAN02 `llama3.1:8b`，Taipei Breeze設定保留。Visual Studio啟動選單選`https-IAN02-Llama3`或`https-Taipei-Breeze`，停止後再F5，兩者均只用7173。詳見[模型切換](docs/ollama/README.md)；本次Llama連線／多輪／回饋格式成功，教學品質仍待驗收。
+
+> 2026-11-16 教授四階段方法已整合至課內聊天及既有案例學習，新增原文分類底線／圖例／tooltip；需套用039。六份[調教與驗證文件](docs/ai-tuning/01-professor-rubric.md)記錄來源、編碼差異、[實際模型未通過項目](docs/ai-tuning/03-evaluation-results.md)與[UI](docs/ai-tuning/06-annotation-ui.md)。Breeze尚未通過臨床教學品質驗收，程式測試通過不代表模型判讀可靠。
+
 > 2026-11-16 當學期依使用者確認改由系統日期產生，僅預設收起過往學期，不刪除或自動封存。`AcademicCalendar:CurrentTerm=null`採台灣日期、民國學年度，預設8月起上學期、2月起下學期（`FirstSemesterStartMonth`／`SecondSemesterStartMonth`可調整），例如2026/11為115-1；暑修仍可手動查詢。明確CurrentTerm仍可覆寫，舊課從學年／學期篩選查看。
 
 > 2026-11-13 現行校名為「中山醫學大學個案分析 AI 助教系統」（CSMU Learn）。學生課程、教材與分組 UI 修正、影片專屬計時及分享登入返回見 [交付與驗收](docs/ux-corrections-2026-11-13.md)。新示範學生使用 `@csmu.edu.tw`；既有學生更名工具保留原密碼與資料。以下較早紀錄的文件計時說明已由本次規格取代。
@@ -9,6 +13,10 @@
 > 2026-11-13 登入後使用個人儀表板，整合跨課待辦、教師批改入口與我的學習歷程；右上帳號選單可返回 Portal。成績總覽／明細與小組評分介面已整合，11/15 操作及限制見 [UX 驗收紀錄](docs/ux-sweep-2026-11-13.md)。
 
 > 2026-11-13 會議後續已補課程公告、跨課訊息／考試行程、紙本期中期末全班登分與發布、小組 PDF 選組批改及課程首頁進度。需套用 036，操作與設計假設見 [會議後續及 Demo 驗收](docs/meeting-followup-2026-11-13.md)。
+
+> 2026-11-16 個案分析課程已整合五模式：Raw使用LangChain完整暫存記憶、無應用System Prompt／DB／正式統計；四階段保存原文、模型／Prompt版本、失敗重試及可重算往返，教師可查本課紀錄。037已套用並啟用兩門既有個案課，不新增AI分數。操作、驗證與服務端隱私限制見 [個案分析交付](docs/case-analysis-chat.md)。
+
+> 2026-11-16 AI助教新增回饋輪次側欄、保留原文的修改與任兩版比較，以及逐筆Token／耗時效能彈窗。038已套用；舊效能未提供時不補造，新修訂保留來源與次數。操作與測試見 [回饋輪次與效能](docs/feedback-rounds.md)。
 
 ## 師生入口、示範登入與啟動步驟
 

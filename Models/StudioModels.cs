@@ -33,7 +33,10 @@ public sealed class StudioSettingsInput {
     [Range(1,10)]public int MaxRequestsPerRevision{get;set;}=3;
     public int ExpectedVersion{get;set;}
 }
-public sealed record StudioCase(Guid Id,Guid CourseId,string CourseTitle,Guid VersionId,int VersionNo,string Title,string Material,Dictionary<string,string> Prompts,Dictionary<string,string>? ReferencePoints,bool Published,Guid? DraftVersionId);
+public sealed record StudioCase(Guid Id,Guid CourseId,string CourseTitle,Guid VersionId,int VersionNo,string Title,string Material,Dictionary<string,string> Prompts,Dictionary<string,string>? ReferencePoints,bool Published,Guid? DraftVersionId)
+{
+    public IReadOnlyList<AiTeachingAssistant.Services.CaseCodingDefinition> Classifications {get;init;}=AiTeachingAssistant.Services.CaseCodingCatalog.All;
+}
 public sealed record StudioAnswer(Guid Id,string Stage,int RevisionNo,string Text,DateTimeOffset CreatedAt);
 public sealed record StudioFeedback(Guid Id,Guid AnswerVersionId,string Status,StudioFeedbackContent? Content,string? ErrorCode,DateTimeOffset CreatedAt,DateTimeOffset? CompletedAt);
 public sealed record StudioAttempt(Guid Id,int Version,DateTimeOffset? SubmittedAt,bool IsPractice,IReadOnlyList<StudioAnswer> Answers,IReadOnlyList<StudioFeedback> Feedback);
@@ -42,4 +45,4 @@ public sealed record StudioEvidence(string Point,string Evidence);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record StudioImprovement(string Point,string Evidence,string Suggestion);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record StudioFeedbackContent(string Summary,IReadOnlyList<StudioEvidence> SupportedPoints,IReadOnlyList<StudioImprovement> Improvements,IReadOnlyList<string> NextSteps);
+public sealed record StudioFeedbackContent(string Summary,IReadOnlyList<StudioEvidence> SupportedPoints,IReadOnlyList<StudioImprovement> Improvements,IReadOnlyList<string> NextSteps,IReadOnlyList<CaseTextAnnotation>? Annotations=null);

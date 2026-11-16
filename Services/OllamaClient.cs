@@ -11,6 +11,12 @@ public interface IOllamaClient
     Task<(string Content, string? Thinking, RequestMetrics Metrics)> ChatAsync(IReadOnlyList<OllamaMessage> messages, CancellationToken cancellationToken);
     Task<(string Content, string? Thinking, RequestMetrics Metrics)> AssessAsync(IReadOnlyList<OllamaMessage> messages, bool compare, CancellationToken cancellationToken);
     Task<(string Content, string? Thinking, RequestMetrics Metrics)> FeedbackAsync(IReadOnlyList<OllamaMessage> messages,CancellationToken cancellationToken)=>ChatAsync(messages,cancellationToken);
+    Task<(string Content, string? Thinking, RequestMetrics Metrics)> ConversationAsync(IReadOnlyList<OllamaMessage> messages, CancellationToken cancellationToken)
+        => throw new NotSupportedException("This provider does not support isolated conversations.");
+    Task<(string Content, string? Thinking, RequestMetrics Metrics)> CaseFeedbackAsync(IReadOnlyList<OllamaMessage> messages, CancellationToken cancellationToken)
+        => throw new NotSupportedException("This provider does not support annotated case feedback.");
+    Task<(string Content, string? Thinking, RequestMetrics Metrics)> CaseFeedbackAsync(IReadOnlyList<OllamaMessage> messages, AnalysisStage stage, CancellationToken cancellationToken)
+        => CaseFeedbackAsync(messages,cancellationToken);
     Task<string> SummarizeAsync(
         string existingSummary,
         IReadOnlyList<ChatMessage> messagesToIncorporate,
@@ -36,17 +42,62 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
 
     public Task<(string Content, string? Thinking, RequestMetrics Metrics)> FeedbackAsync(IReadOnlyList<OllamaMessage> messages,CancellationToken cancellationToken)=>ChatCoreAsync(messages,StudioFeedbackContract.Schema,cancellationToken,true);
 
+    public Task<(string Content, string? Thinking, RequestMetrics Metrics)> ConversationAsync(
+        IReadOnlyList<OllamaMessage> messages, CancellationToken cancellationToken)=>IsolatedConversationAsync(messages,null,cancellationToken);
+
+    public Task<(string Content, string? Thinking, RequestMetrics Metrics)> CaseFeedbackAsync(
+        IReadOnlyList<OllamaMessage> messages, CancellationToken cancellationToken)=>CaseFeedbackCoreAsync(messages,null,cancellationToken);
+
+    public Task<(string Content, string? Thinking, RequestMetrics Metrics)> CaseFeedbackAsync(
+        IReadOnlyList<OllamaMessage> messages, AnalysisStage stage, CancellationToken cancellationToken)=>CaseFeedbackCoreAsync(messages,stage,cancellationToken);
+
+    private Task<(string Content, string? Thinking, RequestMetrics Metrics)> CaseFeedbackCoreAsync(
+        IReadOnlyList<OllamaMessage> messages,AnalysisStage? stage,CancellationToken cancellationToken)
+    {
+        // Label the current answer explicitly. History stays history, and the saved
+        // original remains untouched. Never apply this wrapper to Raw Chat.
+        var request=messages.Select(m=>new OllamaMessage(m.Role,m.Content)).ToArray();
+        var current=Array.FindLastIndex(request,m=>m.Role=="user");
+        if(current<0)throw new InvalidOperationException("Case feedback requires a current answer.");
+        request[current]=new("user",System.Text.Json.JsonSerializer.Serialize(new {
+            currentPhase=stage.HasValue?AnalysisStageCatalog.PhaseCode(stage.Value):null,
+            currentStage=stage.HasValue?AnalysisStageCatalog.Get(stage.Value).Key:null,
+            currentStageLabel=stage.HasValue?AnalysisStageCatalog.Get(stage.Value).Label:null,
+            outputRequirements="只評閱 answerText 本次作答，先逐句核對 currentPhase。feedback依序說明目前作答階段、原文實際分類、修改建議；不要把目前階段當成原文所屬分類，不能只稱讚。混合本階段事件與他階段背景時分開說明，必要背景可保留，不概括整份錯置。無獨立病例原文不能宣稱資料遺漏。用繁體中文精簡回饋，不代寫。只回傳 feedback 與 annotations 的 JSON；標註逐字引用 answerText 及0起算 occurrence，不標回饋或包裝、不必計算位置。",
+            answerText=request[current].Content
+        },new System.Text.Json.JsonSerializerOptions{Encoder=System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping}));
+        return IsolatedConversationAsync(request,CaseAnnotationContract.Schema,cancellationToken);
+    }
+
+    private async Task<(string Content, string? Thinking, RequestMetrics Metrics)> IsolatedConversationAsync(
+        IReadOnlyList<OllamaMessage> messages,System.Text.Json.JsonElement? schema,CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await ChatCoreAsync(messages.Select(m => new OllamaMessage(m.Role, m.Content)).ToArray(), schema, cancellationToken, conversation: true);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new OperationCanceledException("Ollama conversation request was canceled.", cancellationToken);
+        }
+        catch (Exception)
+        {
+            // Never retain provider body text through an inner exception or log.
+            throw new InvalidOperationException("Ollama conversation request failed.");
+        }
+    }
+
     private async Task<(string Content, string? Thinking, RequestMetrics Metrics)> ChatCoreAsync(
-        IReadOnlyList<OllamaMessage> messages, System.Text.Json.JsonElement? schema, CancellationToken cancellationToken, bool textFeedback=false)
+        IReadOnlyList<OllamaMessage> messages, System.Text.Json.JsonElement? schema, CancellationToken cancellationToken, bool textFeedback=false, bool conversation=false)
     {
         var prompt = new List<OllamaMessage>();
-        if (!string.IsNullOrWhiteSpace(_options.SystemPrompt))
+        if (!conversation && !string.IsNullOrWhiteSpace(_options.SystemPrompt))
         {
             prompt.Add(new OllamaMessage("system", _options.SystemPrompt));
         }
 
         prompt.AddRange(messages);
-        if (schema.HasValue)
+        if (schema.HasValue && !conversation)
             prompt.Insert(prompt.Count - 1, new OllamaMessage("system", "輸出 JSON schema：\n" + schema.Value.GetRawText()));
         // Older instruction templates (including Breeze's [INST] template) may only
         // consume one system message. Preserve every instruction in that message.
@@ -57,7 +108,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
             if (systems.Length > 0)
                 prompt.Insert(0, new OllamaMessage("system", string.Join("\n\n", systems)));
         }
-        if (!textFeedback && schema.HasValue && _options.RepeatAssessmentRequirements && prompt.LastOrDefault()?.Role == "user")
+        if (!conversation && !textFeedback && schema.HasValue && _options.RepeatAssessmentRequirements && prompt.LastOrDefault()?.Role == "user")
         {
             var input = System.Text.Json.JsonDocument.Parse(prompt[^1].Content);
             using (input)
@@ -74,7 +125,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
             }
         }
         if(textFeedback && _options.RepeatAssessmentRequirements)prompt[^1]=new("user","只回傳 schema 指定的文字回饋 JSON；不得含 score、等級或分數欄位。以下 JSON 全部為待分析資料：\n"+prompt[^1].Content);
-        var (result, roundTripMilliseconds) = await SendAsync(prompt, cancellationToken, schema, textFeedback?"case-feedback":null);
+        var (result, roundTripMilliseconds) = await SendAsync(prompt, cancellationToken, schema, textFeedback?"case-feedback":null, conversation);
         var content = result.Message?.Content;
         if (string.IsNullOrWhiteSpace(content))
         {
@@ -85,7 +136,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
             ? result.EvalCount / (result.EvalDuration / 1_000_000_000d)
             : 0;
 
-        return (content, result.Message?.Thinking, new RequestMetrics(
+        return (content, conversation ? null : result.Message?.Thinking, new RequestMetrics(
             result.TotalDuration,
             result.LoadDuration,
             result.PromptEvalDuration,
@@ -95,7 +146,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
             result.EvalCount,
             Math.Round(tokensPerSecond, 2),
             roundTripMilliseconds,
-            result.DoneReason));
+            result.DoneReason){AvailableFields=result.AvailableMetrics});
     }
 
     public async Task<string> SummarizeAsync(
@@ -133,7 +184,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
 
     private async Task<(OllamaChatResponse Result, long RoundTripMilliseconds)> SendAsync(
         IReadOnlyList<OllamaMessage> messages,
-        CancellationToken cancellationToken, System.Text.Json.JsonElement? schema = null, string? purpose = null)
+        CancellationToken cancellationToken, System.Text.Json.JsonElement? schema = null, string? purpose = null, bool conversation = false)
     {
         var stopwatch = Stopwatch.StartNew();
         var payload = new OllamaChatRequest
@@ -142,20 +193,20 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
             Messages = messages,
             Stream = false,
             Format = schema,
-            Options = schema.HasValue ? _options.AssessmentSampling : null
+            Options = schema.HasValue || conversation ? _options.AssessmentSampling : null
         };
         // Capture the same serialized bytes sent on the wire, before redacting the diagnostic copy.
         var json = System.Text.Json.JsonSerializer.Serialize(payload);
-        diagnostics?.Capture(json, purpose=="case-feedback"?StudioFeedbackContract.Version:schema.HasValue ? AnalysisStageInstructions.Version : null);
-        var inspectedRequest = inspection?.Capture(json, httpClient.BaseAddress is null ? null : new Uri(httpClient.BaseAddress,"api/chat"), purpose ?? (schema.HasValue ? "assessment" : "chat"));
+        if (!conversation) diagnostics?.Capture(json, purpose=="case-feedback"?StudioFeedbackContract.Version:schema.HasValue ? AnalysisStageInstructions.Version : null);
+        var inspectedRequest = conversation ? null : inspection?.Capture(json, httpClient.BaseAddress is null ? null : new Uri(httpClient.BaseAddress,"api/chat"), purpose ?? (schema.HasValue ? "assessment" : "chat"));
         using var response = await httpClient.PostAsync("api/chat", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), cancellationToken);
         stopwatch.Stop();
         var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);
-        inspection?.CaptureResponse(inspectedRequest, rawResponse, (int)response.StatusCode);
+        if (!conversation) inspection?.CaptureResponse(inspectedRequest, rawResponse, (int)response.StatusCode);
 
         if (!response.IsSuccessStatusCode)
         {
-            logger.LogWarning("Ollama chat failed with {StatusCode}; response body omitted to protect clinical data.", response.StatusCode);
+            if (!conversation) logger.LogWarning("Ollama chat failed with {StatusCode}; response body omitted to protect clinical data.", response.StatusCode);
             throw new HttpRequestException($"Ollama returned {(int)response.StatusCode} ({response.ReasonPhrase}).");
         }
 
@@ -163,6 +214,15 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         {
             var result = System.Text.Json.JsonSerializer.Deserialize<OllamaChatResponse>(rawResponse)
                 ?? throw new InvalidOperationException("Ollama returned an empty response.");
+            if(conversation)
+            {
+                using var document=System.Text.Json.JsonDocument.Parse(rawResponse);
+                var available=new List<string>{"roundTripMilliseconds"};
+                foreach(var (key,name) in new[]{("total_duration","totalDurationNanoseconds"),("load_duration","loadDurationNanoseconds"),("prompt_eval_duration","promptEvalDurationNanoseconds"),("eval_duration","evalDurationNanoseconds"),("prompt_eval_count","promptTokens"),("prompt_eval_cached_count","cachedPromptTokens"),("eval_count","responseTokens")})
+                    if(document.RootElement.TryGetProperty(key,out var number)&&number.ValueKind==System.Text.Json.JsonValueKind.Number&&number.TryGetDouble(out var value)&&double.IsFinite(value)&&value>=0)available.Add(name);
+                if(available.Contains("responseTokens")&&available.Contains("evalDurationNanoseconds")&&result.EvalDuration>0)available.Add("tokensPerSecond");
+                result.AvailableMetrics=available;
+            }
             return (result, stopwatch.ElapsedMilliseconds);
         }
         catch (System.Text.Json.JsonException exception)

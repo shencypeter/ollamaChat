@@ -1,5 +1,35 @@
 # Ollama 模型設定與有效負載保存
 
+## 2026-11-16 選定階段明確傳入
+
+CaseChatPrompts現在professor-four-phase-20261116-v3，最前顯示目前ABCD；CaseFeedbackAsync的stage-aware overload由課程workflow傳入伺服器stage，在現有answerText包裝追加currentStage／currentPhase／currentStageLabel。無病例僅限制事實核實，不影響判讀明確分類錯置；必要背景與合法多碼不能一律判錯。Studio同理從saved answer.stage加入phase，原schema維持，版本case-text-feedback-phase-v3。原二參數provider方法保持相容，Raw與三profile／抽樣不改。
+
+實際IAN02三個合成情境最終2/3有效格式回覆，仍有錯列分類、不實時序及混合背景判斷問題；不是教學品質通過。UI因此獨立標明系統依有效annotation列階段核對，不重寫AI原文。[03最新結果](../ai-tuning/03-evaluation-results.md)記錄首輪及最終限制。
+
+## 2026-11-16 切回 IAN02 並保留雙設定
+
+依使用者要求，預設Profile改為llama3：`http://IAN02:11434`／`llama3.1:8b`。Taipei Breeze仍完整保留於`Configuration/Ollama/breeze.json`，沒有把其單system／重申相容性覆寫成Llama規則；qwen亦保留。基礎appsettings移除重複的Breeze端點／模型，只設定預設Profile，端點與模型由對應profile提供。
+
+Visual Studio啟動選單新增`https-IAN02-Llama3`與`https-Taipei-Breeze`，兩者均只綁https://localhost:7173，停止目前執行後選另一個再F5即可。原`https`也只綁7173、沿用預設llama3；未新增平行埠。命令列亦可選`dotnet run --launch-profile https-IAN02-Llama3`或`dotnet run --launch-profile https-Taipei-Breeze`。切換會重啟服務，Raw記憶體對話隨之清除，Stage的DB原始歷程保留；建議新開階段對話，避免混用模型回覆。
+
+切換驗證：IAN02 Ollama0.40.16、llama3.1:8b存在；三profile封包9/9、標準VS建置通過，實際合成2Raw＋1Stage回饋及量測成功，不寫DB。沒有改動三份profile、其他模型的相容設定或自動降級策略。此為連線／格式驗證，未宣稱Llama已通過完整教學品質驗收；較早Breeze測試保留作該模型歷史結果。
+
+## 2026-11-16 教授規則及原文標註
+
+CaseChatPrompts更新為professor-four-phase-20261116-v2，Studio沿用TeachingInstructions及原caseFacts/schema。新CaseFeedbackAsync共用原傳輸與抽樣，無隱含全域system／capture，Stage最新user封裝decoded answerText及格式提醒；原DB原文不變，Raw維持完全透明無schema。AI以精確text＋occurrence提議標註，由server嚴格轉UTF-16，公開content維持純回饋文字。三個profile配置均未改，原Assess／Feedback的相容組裝保留。
+
+已實際呼叫公司Breeze，多輪調整移除JSON示例複誦及不可靠索引；最終12次格式成功，9筆引用接受／22筆拒絕，仍有錯誤初始GCS、不實遺漏及修訂判斷問題。這些是模型行為失敗，不是通過教學驗收；[逐項結果](../ai-tuning/03-evaluation-results.md)。只用合成資料、無DB歷程，其他模型即時品質未驗證。模型內建system及主機／代理可能留存資料的原限制不變。
+
+## 2026-11-16 回覆效能欄位
+
+課內ConversationAsync現在依實際response欄位產生AvailableFields，只保留已知量測名，不保留raw JSON。缺省數值與真實0分開顯示；衍生tok/s須有生成數及有效生成耗時。Stopwatch往返為應用程式到模型服務，不含完整瀏覽器／DB流程。Stage逐回覆持久化，Raw僅暫存且不進模型歷史／正式統計。此次未改任何profile／System Prompt／outbound payload；[回饋輪次交付](../feedback-rounds.md)記錄038與驗證。
+
+## 2026-11-16 個案分析透明對話路徑
+
+新增`ConversationAsync`共用原HTTP transport，Raw與Stage採同模型／AssessmentSampling，但不自加全域SystemPrompt／schema／評閱重申、摘要或diagnostics／inspection；不回傳thinking，敏感例外不帶body／inner。Stage明確提供legacy-66b6795-chat-v1教學system，Raw只user／assistant。既有Chat／Assess／Feedback與三profile相容設定不變。LangChain.Core維持0.17.0，Raw專用完整ConversationBufferMemory，不使用舊40則SessionStore或summary。
+
+目前服務唯讀實查Ollama0.40.11、Breeze模型有System且template引用System；「應用不注入」不等於模型無預設／所有基礎設施無日誌。未取得主機／代理設定，不能確認OLLAMA_DEBUG／APM／body logging。已用合成2輪Raw＋1輪Stage驗證同Provider傳輸，無DB、內容未輸出；模型教學品質未驗收。完整 [五模式交付](../case-analysis-chat.md)。本段為新課內對話路徑，下方原評閱路徑仍有效。
+
 更新：2026-10-22。目的：切換模型時保留各自的訊息組裝方式、抽樣參數與已知限制，不再覆寫上一個模型的經驗。
 
 ## 選擇模型
@@ -11,7 +41,7 @@ $env:Ollama__Profile = 'llama3' # 或 qwen、breeze
 dotnet run --launch-profile http
 ```
 
-發布版本亦使用同一環境變數啟動 DLL。未指定時使用 `breeze`，不會在失敗時自動改用其他模型。啟動時依序套用基礎設定、所選 profile、`appsettings.Local.json`、環境變數；本地檔及環境中的 BaseUrl／Model 會覆寫 profile，切換前應檢查是否存在舊覆寫。Profile 的選擇在讀取本地檔前完成，請用環境變數 `Ollama__Profile` 選擇，不要只寫進本地檔。
+發布版本亦使用同一環境變數啟動 DLL。專案預設現為 `llama3`（2026-11-16使用者要求），不會在失敗時自動改用其他模型。啟動時依序套用基礎設定、所選 profile、`appsettings.Local.json`、環境變數；本地檔及環境中的 BaseUrl／Model 會覆寫 profile，切換前應檢查是否存在舊覆寫。Profile 的選擇在讀取本地檔前完成，請用啟動選單、基礎appsettings或環境變數 `Ollama__Profile` 選擇，不要只寫進本地檔。
 
 設定保存在 `Configuration/Ollama/`，會隨建置及發布複製。切換設定不會更動資料庫、學生資料或全域臨床評分規準；請在新的對話中驗收，避免沿用舊模型一般對話內容。
 

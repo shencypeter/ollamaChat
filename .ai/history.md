@@ -1,5 +1,85 @@
 # 開發歷程與決策紀錄
 
+## 2026-11-16 相符分類改黃色
+
+使用者反映淡色標註與作答容器混淆，要求目前階段統一黃色。PhaseAnnotatedAnswer改不透明#ffe066背景、#332a00深色字，legend目前phase同色；篩選淡化採不透明淡黃，避免深色模式失去字色對比。跨phase底線不變，黃色內混合碼使用深版底線顏色。更新既有樣式斷言與四個瀏覽器顏色檢查，沒有新增鏡像測試或更動業務。
+
+初次從repo根執行Vitest未載入Vue設定、無測試執行；改回ClientApp後相關10/10通過，Vite及Chrome1440／390淺深色4/4通過，已檢視手機深色混合標註。僅前端，不重啟既有7173，/courses200提供index-DSmCZuoZ.js；無後端、Migration、模型或正式資料操作。UI規格與合成截圖同步，未提交推送。
+
+## 2026-11-16 B內A錯置回饋及相符背景色
+
+使用者以B階段提交病前內容，AI辨識A卻只稱讚，要求錯置底線、目前B背景色。追查發現元件未接目前stage，只能按碼一律畫線；Prompt無病例用unverified的指示又可能掩蓋獨立的階段錯置。先寫失敗Provider三參數／UI測試，再加明確stage-aware相容overload（舊Provider二參數保留），workflow由已授權stage傳currentStage/currentPhase/label。Studio由saved answer.stage提供同資訊，四階段方法v3置前目前階段、要求主要錯置要說明且必要背景可留；未改模型profile／抽樣、Raw或正式業務流程。
+
+共享UI依目前stage將相符碼做淡色背景、他phase細底線，合法多碼可兼具；tooltip保留事實未核實與unsupported／misplaced。另在AI回饋區加明確系統來源PhaseAlignmentNotice，只依exact原文通過的annotations及當前stage列核對，不改舊AI文字，不把無B標註推成無B內容；未標記不算缺漏，背景引用不一概判錯。相同版次、教師查閱、Raw隱私及安全文字渲染保留。
+
+最終Vue265/265、一般後端312通過／50條件略過、隔離DB完整362/362（含stage實傳、授權／immutable／舊升級）、Chrome17/17及標準VS含Vue成功，獨立review無程式／授權blocker。已檢視1440淺色及390深色，合成截圖更新docs/ai-tuning/screens；沒有Migration或public資料寫入，測試schema清除。
+
+IAN02 llama3.1:8b實際全合成三例，原始使用者畫面內容未複製到測試／日誌。首輪3/3格式成功但混合背景仍過度判錯；補強措辭後最終2/3有效回覆，能提目前B與A分類，但仍錯列未寫子類／不實時間問題，混合例失敗。詳03最新段落，不能以程式通過宣稱模型教學品質合格，不改用硬編造臨床回覆。所有檢查均不寫正式學生聊天或成績。
+
+核對並替換原本專案7173程序後，正常bin/Debug PID42896、僅7173，/courses200與index-CQCWQczi.js確認，維持IAN02。02／03／06及agents／elearning同步；保留既有dirty工作，未提交推送，本次止於階段核對與顯示改善。
+
+## 2026-11-16 四階段顯示ABCD
+
+使用者要求依教授文件在階段名稱前標ABCD。修改後端共用AnalysisStageCatalog.Label與前端questionStages.Label；自動涵蓋課內聊天tab／下一階段／教師查閱、既有案例學習／維護與其他分析選單。StudentCaseView移除①–④避免雙重編號。既有聊天測試fixture也改成正式完整標籤，確認下一階段及師生閱讀仍正常；不新增鏡像測試，不改stage keys／Prompt／DB／授權／模型設定。
+
+Vue256/256、相關後端24/24、Chrome聊天／註記13/13與標準Visual Studio含Vue建置通過。唯一7173由核對後的本專案PID31760更新正常bin/Debug PID44276，維持IAN02 llama3；/courses200、新bundle index-B6vVQs2p.js，5097／5107／5173／5180無listener。合成UI截圖同步更新；無Migration、資料寫入或模型呼叫，文件同步、既有dirty工作保留，未提交推送。
+
+## 2026-11-16 由Taipei切回IAN02，保留雙設定
+
+使用者回報Taipei服務不可用，要求切回IAN02 llama3，隨後指定保留兩份config方便切換。先讀持久文件／Git、Ollama組裝與全部profile；Local沒有Ollama覆寫，Process/User/Machine相關Profile／BaseUrl／Model三鍵無覆寫。IAN02服務實查0.40.16及llama3.1:8b存在，未嘗試更名／下載模型或覆寫Breeze相容規則。
+
+appsettings只設預設Profile=llama3，移除基礎層重複Breeze端點及模型，實值由獨立profile載入。Properties/launchSettings新增https-IAN02-Llama3及https-Taipei-Breeze，均為https://localhost:7173；既有https去除額外5084綁定。既有三份Configuration/Ollama無差異。VS切換需停止再選另一profileF5，CLI亦可--launch-profile指定。README、Ollama、agents／elearning同步操作及限制。
+
+9項三profile封包回歸全過，隔離工具build與標準Visual Studio MSBuild含Vue成功。實際IAN02以合成資料完成2Raw＋1Stage，確認多輪與逐筆效能／回饋JSON；內容未輸出、不建立DB歷程。未重跑完整教學品質／教授評估，不將先前Breeze實測判定當成Llama表現。沒有Migration、作答／成績資料寫入或模型profile payload修改。核對原7173為本專案PID33528後更新正常bin/Debug PID31760，/courses200，未另開埠。Raw暫存隨重啟清除，Stage歷史保留，新模型應新開對話。保留所有既有未提交工作，未提交推送。
+
+## 2026-11-16 教授四階段對齊與互動分類標註
+
+使用者授權兩份任務、提供四份DOCX；先核對dirty main及持久文件、三模型profile與現有CourseChat／Studio。參考文本含表格段落、07流程20則註解且無圖片；不將原病例全文放進通用prompt／tracked文件。採較晚明確編碼定義，保留參考演進差異：A2c／B2c no coding、C5不分細碼、B4歷史／C1目前、實際照顧與聯絡角色。43碼共用catalog，四階段方法與五種按需回饋，保留不代寫／無成績／證據限制。文件01–06記錄規準、變更、實測、疑義、下一輪及UI，流程註解的最終版／採納率等未擅自擴充。
+
+課內CaseFeedbackAsync透過既有Ollama傳輸及抽樣提供內部JSON envelope，最新user包成decoded answerText＋格式提示，DB原文不改；Raw不包裝、不帶schema或system。Stage公開content仍純文字，另保存annotations；Studio維持原四欄並追加optional annotations，使用既有caseFacts和精確answer.Text。共享Vue標註元件依原版及replyTo／answerVersionId顯示，union範圍不重複文字；純文字插值、四色細線、無color-only語意、hover／focus／touch、Escape及圖例強調。教師讀回、手機深色／長文及原編輯流程保留。
+
+TDD先重現缺少contract／UI、quoteanchor與舊prompt失敗，實作後Vue256/256、一般後端310通過／49條件略過；授權group_test schema完整359/359、036→037→038→039含既有成績／聊天指紋及重跑通過，schema已刪。Public039已交易套用，僅nullable annotations與不可變trigger，沒有改歷史答案／成績或編造舊標註。Chrome20/20合成API流程（13聊天／標註＋7師生／成績）及標準VS含Vue成功，已檢視1440淺色／390深色，截圖為合成fixture。完整歷史E2E／實機螢幕閱讀器／其他模型即時品質未跑。
+
+實際公司Breeze多次合成測試揭露JSON示例複誦、英文及不可靠數字索引；移除具體示例、明確目前answerText，最後AI改逐字引用text＋0起算occurrence，由server嚴格轉UTF-16，不修補無效offset／混用表示。最終實際12次格式成功，9筆引用採用／22筆拒絕、往返0.863–6.175秒。逐筆開發者檢視仍見錯誤GCS、虛構時間、不實遺漏及修訂問題，**模型教學品質未通過**；程式成功不代表專業驗證，不擅自換模型／profile或硬編造正確回覆。無教授病例／學生答案送外站或寫測試日誌，合成測試無DB歷程。
+
+完成時唯一7173更新正常bin/Debug PID33528，/courses200及index-m5Icu7gl.js、匿名課內AI401，5097／5107／5173／5180無listener。兩次獨立review未見程式／授權blocker。README、Ollama及agents／elearning同步；後續仍重查環境，保留所有既有dirty工作、無提交推送，不再延伸新AI模組。教授需審閱實際輸出、指定可信來源與少數編碼歧義；詳03／04／05。
+
+## 2026-11-16 補充教師練習提示
+
+依使用者指定，在教師／助教本人練習／不計正式統計說明後追加「各階段系統目前為 AI 提供，尚未經過專業調教與驗證。」只改CaseAnalysisChat顯示文案，規格與交接同步；Vite成功，7173 /courses200提供index-BddY0QGk.js。無後端／Migration變更，未為單純文案新增測試。
+
+## 2026-11-16 AI回覆泡泡與心理健康教授剪影
+
+依使用者視覺要求，CaseAnalysisChat新增message-author標題列，僅assistant顯示TutorAvatar原創inline SVG（眼鏡／書本／腦部徽記）。AI回覆改12%青綠混合主題surface底、柔和邊框與18px不對稱圓角，行高1.9；Raw／正式／教師讀回共用，不改學生泡泡。SVG依主題accent／surface著色，42／48px響應尺寸，裝飾aria-hidden，不假稱真人或更動提示詞。
+
+Vue60檔241/241、Chrome8個聊天流程與Vite成功，已檢視手機泡泡／頭像，效能與diff／修訂仍正常。既有7173 /courses200提供index-DFncjnAJ.js，不重啟後端、不增Migration或新埠。文件同步記錄視覺規則，保留所有既有未提交變更，未提交推送。
+
+## 2026-11-16 AI回饋輪次、作答diff與效能dialog
+
+依使用者截圖與補充，確認「任兩版prompt」是學生作答／提問。沿既有五模式新增四階段feedback sidebar、user/replyTo配對閱讀、從選中原文修訂、新requestId與明確parent、修改次數及手動下一階段。老師查看維持唯讀；沒有Prompt編輯／自動評分／過關。原文與metadata不可變，retry沿同user不重複；所有既有未提交變更保留。
+
+原生dialog顯示每筆AI的Token、tok/s、模型及往返耗時（ns／ms正確換秒）；舊無資料保留NULL。新Conversation回覆解析逐項AvailableFields，避免缺少快取Token等欄位時把default0當實測。只存白名單數值／結束碼。Stage持久化與assistant原子保存，Raw只在原LangChain entry暫存，不入DB／模型context／正式往返統計，清除或expiry同時釋放。三profile／outbound payload不改。
+
+Student diff採prefix/suffix＋250k cell有界LCS，Unicode codepoint／空白可完整重建，過大明示整段刪增fallback，純文字防XSS、不送LLM。任選同學生／課程／stage歷史兩版，切換學生／階段會清除對話框。Review找到覆寫／切換會丟未提交草稿，補confirm與取消還原後無blocker。
+
+038已交易套用public。036→037→038含既有user/assistant、名冊及已發布成績升級／重跑指紋不變，舊metrics與parent為NULL，所有隔離schema已刪。後端一般283通過／47條件略過，另DB完整330/330；Vue60檔241、Chrome15流程（其中8個聊天，含1440／390 native dialog／diff／草稿鍵盤）及標準VS含Vue成功。同Provider合成2Raw+1Stage成功，逐筆效能可用性確認且未輸出內容／種DB聊天。測試先紅後綠，無待修失敗。
+
+核對舊7173 PID27380執行檔後更新，新正常bin/Debug PID26108僅綁7173；/courses200與index-s9KPMSBt.js確認，5097／5107／5173／5180無listener。README、五模式與Ollama文件、agents／elearning及[本次交付](../docs/feedback-rounds.md)同步。未提交推送；完整歷史E2E、獨立TS檢查（未設定）及教學品質未測，原基礎設施隱私限制保持。
+
+## 2026-11-16 五模式個案分析聊天整合
+
+使用者提供附件與Raw LangChain修正，要求直接實作。先盤點clean main 7234dc5及codex/pre-vue-ollama 66b67953e070e2c45244b7c176566703c444f1fd，重用LangChain.Core0.17.0 ChatMessageHistory／ConversationBufferMemory與四階段舊無分數提示；舊Buffer受40則截斷、Summary自加system、Session缺課程scope，未直接沿用。新CaseChatPrompts適配校名、多輪與無通過判定，版本legacy-66b6795-chat-v1。現有有分數評閱、三profile、作業測驗流程保留，沒有新AI自動分數或解鎖。
+
+Raw每user/course/randomID獨立暫存成功完整pair，無DB／summary／browser storage／HTTP Session／內容log／正式統計。新ConversationAsync共用Ollama transport，同模型／sampling且無隱含system／schema／diagnostics／thinking。20m閒置、每人3／全站200；清除／expiry取消inflight，重整與BFcache新ID。Pagehide DELETE為best effort，遺失舊ID429時需明確確認才清本人所有暫存，不自動干擾其他分頁。
+
+四階段DB先存原user，再無交易推論，成功保存assistant才算往返；requestId／replyTo唯一、租約與attempt守衛防並行／重試重算及舊回覆覆寫。錯誤僅存通用code。原文字含空白保留，超context413保留history，不偷偷摘要／截斷。學生限本人，教師／statistics能力TA查本課正式名冊、階段／全課次數與完整歷程；教師practice另存且不進正式統計。課程擁有者設定開關。
+
+037已交易套用public，既有課預設opt-in。沿用現有個案分析課程A／B兩門啟用，115上等義轉115-1留audit，IDs／名冊／教材／作答／成績保留。工具preview2、apply2、audit0、再跑0，不建平行課、不種假聊天。隔離036舊課與已發布83分升級037／重跑指紋不變，demo啟用保留成員成績。
+
+最終Vue57檔208通過、後端一般280／45條件式略過，另完整隔離DB325/325無略過；Chrome12流程（五個新聊天＋七個既有課程／批改）與標準VS MSBuild含Vite通過。真實同Provider合成兩輪Raw（4則memory）＋一輪Stage收到回覆，無DB內容寫入／輸出。全DB回歸揭露兩個舊CourseUnitTests JSON大小寫fixture錯誤，改Web options後通過；舊資料fixture補必填weight。審查另重現並修正Raw中途撤權、刷新孤兒context、空白retry與課程設定並行40P01死鎖；新增lease過期／晚回覆測試。各次隔離group_test schema均刪除。
+
+唯讀實查目前Ollama0.40.11／Breeze有模型System、template與parameters；無主機／代理管理權限，不能保證遠端日誌／APM／swap等不留內容。正式案例、規準、PHI治理及模型教學品質仍待確認。唯一7173更新正常bin/Debug PID27380、/courses200、新bundle index-nrJjhDuj.js、11組case-analysis API與匿名401確認，其他舊埠無listener；未提交推送。README、Ollama、elearning／agents與[交付](../docs/case-analysis-chat.md)同步，設計／執行文件在docs/superpowers，後續仍核對執行狀態。
+
 ## 2026-11-16 當學期依系統日期預設收起歷年課
 
 使用者回答11/13學期待確認問題：依系統當年日期即可，功能只為預設收起已結束學期。AcademicCalendarOptions新增共用判定，Controller沿用既有TimeProvider／授權回傳當學期；null／空白自動，明確值仍相容覆寫。採台灣UTC+8、既有民國學年度，預設8月1日上學期、2月1日下學期，兩月份可設定且驗證先後範圍；暑修保留手動查詢。此為可調整產品預設，非宣稱校方正式上課日。2026/11對應115-1，跨年1月仍同學年度。只改預設篩選，不更動課程status、成績或授權，舊課仍可歷年篩選。

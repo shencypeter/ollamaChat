@@ -5,6 +5,13 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using AiTeachingAssistant.Services;
 var root=Path.GetFullPath(args[0]);var file=Path.Combine(root,".codex-build","portal-smoke.json");
+if(args.Contains("--case-phase-alignment-live-check")){await CasePhaseAlignmentLiveCheck.Run(root);return;}
+if(args.Contains("--professor-alignment-live-check")){await ProfessorAlignmentLiveCheck.Run(root);return;}
+if(args.Contains("--case-chat-live-check")){await CaseChatLiveCheck.Run(root);return;}
+if(args.Contains("--case-chat-upgrade-check")){await CaseChatUpgrade.Run(root);return;}
+if(args.Contains("--case-chat-demo")||args.Contains("--case-chat-demo-preview")||args.Contains("--case-chat-demo-audit")){
+    await CaseAnalysisDemo.Run(args.Contains("--case-chat-demo-preview"),args.Contains("--case-chat-demo-audit"));return;
+}
 if(args.Contains("--csmu-student-emails-check")){await CsmuStudentEmailVerification.Run();return;}
 if(args.Contains("--csmu-student-emails-preview")||args.Contains("--csmu-student-emails")||args.Contains("--csmu-student-emails-audit")){
     await CsmuStudentEmails.Run(args.Contains("--csmu-student-emails-preview"),args.Contains("--csmu-student-emails-audit"));return;
