@@ -1,5 +1,73 @@
 # 代理工作規則與目前交接
 
+## 2026-11-17 使用者確認切回Llama3（現行）
+
+使用者已選「切回Llama3，保留Breeze比較」。appsettings預設Profile現llama3，三份profile及兩個VS7173選項不改；四種Breeze實驗均未上線。切換前一度IAN02短名稱解析失敗，DNS／本機名稱查詢解析ian02.local且IPv4可達後，原BaseUrl的version／tags與合成2Raw＋1Stage皆成功，未改成固定IP或調整模型設定。
+
+標準VS含Vue建置通過；唯一7173正常bin/Debug PID36892，命令列明確profile=llama3、部署設定同值，/courses200／匿名AI401、舊埠無listener。Raw暫存因重啟清除，Stage歷史保留；建議新開階段對話，分類仍需教師核對。無DB／Migration，文件同步、保留dirty工作，未提交推送。後續仍重查實際環境。
+
+## 2026-11-17 Breeze分類不穩定（待模型選擇）
+
+已重現Breeze複述規則、引用不是學生原文及錯選分類；實際請求有完整43碼／目前phase／schema，前端沒有漏送。合成3例原版＋4種暫時包裝共15次，均不足以採用，沒有改正式提示或放寬驗證。Llama3後續HTTP比較3例可解析，純B較佳但混合例仍過度分類；兩者皆未通過教學品質驗收。完整證據見docs/ai-tuning/03-evaluation-results.md。
+
+本輪僅診斷及文件，未改正式程式／設定／DB或重啟；目前仍Breeze PID17972。已詢問使用者是否切回Llama3並保留Breeze比較，未收到指示前維持現況。所有試驗資料合成、只留本機忽略結果，沒有讀取真實學生答案。保留先前dirty工作，未提交推送。
+
+## 2026-11-17 Taipei恢復後切回Breeze
+
+依使用者要求先確認服務才切換：Taipei192.168.1.195:11434的version／tags成功（Ollama0.40.11、Breeze模型存在），既有Provider合成2輪Raw＋1輪結構化Stage均成功（首次合計約4.3秒）。切換後另以明確current-stage overload再驗3筆成功；無DB寫入／真實作答，僅傳輸與格式驗證，不是臨床品質驗收。Local／Process／User／Machine無相關三鍵覆寫。
+
+appsettings預設Profile現breeze；Configuration/Ollama三份profile與VS兩個7173選項完全保留，沒有自動failover。相關封包13項及標準VS含Vue通過；唯一7173正常bin/Debug PID17972，命令列明確profile=breeze，/courses200、匿名AI401、舊埠無listener。重啟清Raw暫存，Stage DB歷程保留；建議切模型後新開階段對話。測試helper改用明確stage overload。文件同步、dirty工作保留，未提交推送；後續仍重查現況。
+
+## 2026-11-17 C2雙語顯示名稱
+
+C2共用Label改「Muscle Power（肌力與相關動作檢查）」，圖例／tooltip／徽章說明沿API目錄自動更新，code仍C2。為維持既有prompt長度預算，目錄新增JsonIgnore的選用PromptLabel，C2模型用既有精簡名稱、規則及payload文字保持；不改三profile／v3。相關後端19及標準VS含Vue通過，已查建置DLL確有新Label。唯一7173正常bin/Debug PID39792、/courses200，舊埠無listener。重啟清Raw暫存，正式歷史不改；無DB／Migration，保留dirty工作，未提交推送。
+
+## 2026-11-17 底線／編碼徽章切換
+
+使用者澄清邊界是B1／B2等同色編碼，非標點，並確認兩模式可切換。共享PhaseAnnotatedAnswer預設底線；不同相鄰codes交界各縮3px，形成6px間隙，相同codes仍連續。徽章模式在有效片段末端顯示綠底白字code（多碼同徽章），無底線，支援hover／鍵盤／touch說明與Escape。課內聊天／教師查閱及Studio沿用元件；本頁切輪次／版本保留模式，無storage或DB。原文／分類metadata／授權不變。
+
+Vue280/280、Chrome26/26及Vite通過，已檢視1440淺色與390深色合成畫面。7173無重啟，/courses200供index-DD-5sG5c.js；無後端／Migration／模型變更，原Raw記憶不清除。UI／規格／歷程及合成截圖同步，保留dirty工作，未提交推送。
+
+## 2026-11-17 原文統一分類底線（現行）
+
+使用者確認移除原文黃底／黃字；全部phase（含目前階段）統一分類色底線，多分類疊線，文字繼承原色。只有分類標題保留目前階段強調；已辨識碼色底白字、選取細外框、tooltip不變，階段核對文案同步。相關Vue56、桌面／手機淺深色Chrome8與Vite通過，已檢視390深色。既有7173無重啟，/courses200供index-CGkt_bT-.js；無後端／DB／模型變更，保留dirty工作，未提交推送。
+
+## 2026-11-17 深色模式相符分類黃字
+
+依使用者要求，深色模式目前階段相符原文與分類標題改#ffe066黃字、透明底；淺色保持黃底深字。跨phase底線恢復繼承深色亮色，已辨識分類按鈕仍分類深色底白字。相關Vue12、桌面／手機淺深色Chrome8及Vite通過，已檢視390深色。7173供index-BsBZnsWa.js、/courses200，無重啟／後端／DB／模型變更；保留dirty工作，未提交推送。
+
+## 2026-11-17 回饋輪次最新優先
+
+回饋sidebar改為新到舊，原輪次編號與內部時間序保留；預設仍選最新，教師查閱同規則。Vue40、桌面／手機Chrome2及Vite通過；7173頁面200供index-CDgavGfJ.js，無重啟／後端／DB變更。既有dirty工作保留，未提交推送。
+
+## 2026-11-17 AI回覆等待泡泡
+
+課內Raw／四階段send與retry等待時，在右側回覆區以既有教授SVG及assistant泡泡顯示轉圈與「AI 助教正在回覆…」，不再同時顯示尚無訊息。成功／失敗／模式切換依busy清除，不加入messages／DB／模型context；role=status及減少動態偏好停用旋轉。Vue相關40、Chrome桌面Raw／390深色Stage兩項與Vite通過；7173頁面200供index-DY5UQN2s.js，無重啟／後端修改。保留既有dirty工作，未提交推送。
+
+## 2026-11-17 階段獨立作答與請求入口
+
+四階段每輪只傳目前phase system＋本次user，歷史留DB供查閱／diff／統計；workflow與provider均排除舊user／assistant，Raw LangChain多輪不變。Prompt v3、三profile與抽樣未改，失敗原文仍可重試。Stage 413提示縮短本次作答，不建議靠重開清歷史增加容量。
+
+教師／TA本人新回覆旁「查看 Ollama 請求」直接開實際payload，效能入口保留；學生／預覽／他人紀錄不提供，舊回覆／刷新後不重建。隔離DB375/375（含8輪長歷史與失敗retry）、Vue275、Chrome22＋更新fixture後請求4及標準VS含Vue通過，schema已刪。唯一7173正常bin/Debug PID12164、/courses200、index-CDZEaQS1.js，舊埠無listener。無Migration／public寫入／實際LLM推論；重啟清Raw暫存，保留dirty工作，未提交推送。後續仍重查現況。
+
+## 2026-11-17 分類圖例簡化
+
+移除作答下方重複的「分類圖例／A–D」總列與外層收合，直接顯示四個可獨立展開／收合的分類。保留已辨識分類底色白字、目前階段黃色、原文強調與提示。相關Vue12、Chrome22（桌面／手機、淺深色）及Vite通過，已檢視390深色畫面。7173回應200並供應index-B7VvPu6H.js；僅更新前端，未重啟／改模型／DB，保留既有未提交工作。
+
+## 2026-11-17 已提及分類圖例底色
+
+依使用者要求，作答有效標註中已辨識的分類按鈕用該phase深色底＋白字，淺深主題一致；未提及維持中性，黃色原文／目前phase圖例不變。子碼會連同父類顯示（A2a→A2），父類點選可強調已標註子碼，不能由父碼反推未標註細項。以有效exact-text標註為依據，不讀字面關鍵字假造分類或宣稱答對。
+
+相關Vue12、Chrome1440／390淺深色4及Vite通過，已檢視桌面；7173只更新前端bundle index-KY1YZEZ9.js，無重啟／後端／DB／模型修改。保留既有未提交工作。
+
+## 2026-11-17 效能dialog實際Ollama請求
+
+使用者要求不只讀程式，直接在統計dialog看建構請求。已新增統計／Ollama請求分頁，顯示實際transport payload、可讀訊息／format／options及複製單次HTTP body；多次明示payload陣列。僅有效課程teacher／TA本人新send/retry/Raw有選用requestInspection，完成後重查角色；平台教授在該課僅學生也無權，學生視角／學生／查閱他人紀錄不提供。舊紀錄無擷取，不依目前設定重建。
+
+擷取只在HTTP scope＋Vue頁面map，Stage按replyTo／requestId、Raw按session＋assistant位置綁定；模式／帳號／權限／Raw清除／失效／離開清掉。無DB／storage／log／diagnostics，Raw仍無appsystem／持久化／統計；不含conversation response body／thinking／URL憑證／headers。沒有Migration或profile變更。
+
+後端318＋53條件略過，授權隔離DB完整371/371、Vue273、Chrome22、標準VS含Vue成功，獨立review無程式／安全問題；schema已刪。本輪模型用HTTP mock，未實呼叫LLM、不作教學品質聲明。唯一7173正常bin/Debug PID43760、/courses200、bundle index-CFfvnS5W.js，匿名AI401，舊埠無listener。完整docs/ollama/request-dialog.md；保留工作未提交推送，後續仍核對環境。
+
 ## 2026-11-16 目前階段黃色標示
 
 依使用者要求，目前階段相符原文與圖例統一明確黃色#ffe066＋深色字#332a00，取代各phase低透明度底色；篩選淡化仍用不透明淡黃，深色模式同樣可讀。其他phase底線保留，混合碼在黃色上改用較深底線以維持對比。相關Vue10、Chrome桌面／手機淺深色4與Vite通過，已檢視390深色；既有7173無重啟、/courses200供index-DSmCZuoZ.js。無後端／模型／DB變更，既有dirty工作保留。

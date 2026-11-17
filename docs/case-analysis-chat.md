@@ -38,7 +38,7 @@
 
 原始Conversation History與當次LLM Context分開看待。預設單則8,000字、回覆16,000字，context12,000 UTF-8 bytes＋role開銷，並扣除既有模型輸出token預算。這是**保守估計，不是精確tokenizer／模型容量保證**。
 
-超限明確413，原history保留，不偷偷window、摘要或截斷。Raw可清除另聊；Stage可開始新session，舊原文仍可查。保留原文不表示任何長度都可一次送入模型。不新增向量DB或長期記憶。
+超限明確413，原history保留，不偷偷window、摘要或截斷。Raw可清除另聊。2026-11-17依使用者修正：Stage每輪僅送目前階段system與本次作答；歷次學生／AI原文仍完整保存DB供輪次、diff、查閱及統計，不再送入模型。Stage context檢查只計本次輸入，超限需縮短作答，另開session不增加容量。Raw LangChain仍送本次聊天完整多輪。保留原文不表示任何長度都可一次送入模型，不新增向量DB或長期記憶。
 
 ## 5. 資料庫與統計
 

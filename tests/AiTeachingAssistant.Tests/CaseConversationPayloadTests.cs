@@ -14,6 +14,21 @@ namespace AiTeachingAssistant.Tests;
 
 public sealed class CaseConversationPayloadTests
 {
+    [Theory][InlineData("breeze")][InlineData("llama3")][InlineData("qwen")]
+    public async Task StagePayloadContainsOnlyCurrentSystemAndAnswerEvenWhenCallerSuppliesDraftHistory(string profile)
+    {
+        using var file=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"Configuration","Ollama",profile+".json")));
+        var settings=file.RootElement.GetProperty("Ollama").Deserialize<OllamaOptions>(new JsonSerializerOptions{PropertyNameCaseInsensitive=true})!;
+        var transport=new Capture();var client=new OllamaClient(new HttpClient(transport){BaseAddress=new Uri("http://localhost:11434/")},Microsoft.Extensions.Options.Options.Create(settings),new CaptureLogger());
+        var prompt=CaseChatPrompts.Get(AnalysisStage.IllnessCourse);
+        await client.CaseFeedbackAsync([new("system",prompt),new("user","prior draft must stay in DB"),new("assistant","prior feedback must stay in DB"),new("user","current answer")],AnalysisStage.IllnessCourse,default);
+        using var payload=JsonDocument.Parse(transport.Body!);var messages=payload.RootElement.GetProperty("messages");
+        Assert.Equal(2,messages.GetArrayLength());Assert.Equal(prompt,messages[0].GetProperty("content").GetString());
+        Assert.Equal("user",messages[1].GetProperty("role").GetString());
+        using var current=JsonDocument.Parse(messages[1].GetProperty("content").GetString()!);
+        Assert.Equal("current answer",current.RootElement.GetProperty("answerText").GetString());
+        Assert.DoesNotContain("must stay in DB",transport.Body!);
+    }
     [Fact] public async Task CurrentStageIsExplicitEvenWhenAnswerContainsOnlyAnotherPhase()
     {
         var transport=new Capture();var client=new OllamaClient(new HttpClient(transport){BaseAddress=new Uri("http://localhost:11434/")},Microsoft.Extensions.Options.Options.Create(new OllamaOptions()),new CaptureLogger());

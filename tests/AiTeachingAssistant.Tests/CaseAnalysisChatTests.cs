@@ -13,6 +13,81 @@ namespace AiTeachingAssistant.Tests;
 
 public class CaseAnalysisChatTests
 {
+    [FormativeDatabaseFact] public async Task OnlyCurrentCourseStaffReceiveOwnActualRequestsAndHistoryNeverContainsThem()
+    {
+        await using var f=await Fixture.Create();
+        foreach(var (actor,role) in new[]{(f.Teacher,"teacher"),(f.Ta,"ta"),(f.Student,"student")})
+        {
+            using var h=new InspectionHarness(f,actor,role);
+            var request=new CaseChatInput{RequestId=Guid.NewGuid(),Content="合成階段作答"};
+            var sent=CaseJson(await h.Controller.Send(f.Course,"illnessCourse",request,default));
+            Assert.Equal(role!="student",sent.TryGetProperty("requestInspection",out var inspection));
+            if(role!="student")
+            {
+                var captured=Assert.Single(inspection.GetProperty("requests").EnumerateArray());
+                using var actual=JsonDocument.Parse(h.Transport.Body!);Assert.Equal(actual.RootElement.GetRawText(),captured.GetProperty("payload").GetRawText());
+                using var answer=JsonDocument.Parse(captured.GetProperty("payload").GetProperty("messages")[1].GetProperty("content").GetString()!);
+                Assert.Equal("B",answer.RootElement.GetProperty("currentPhase").GetString());Assert.Equal(JsonValueKind.Null,captured.GetProperty("rawResponse").ValueKind);
+            }
+            Assert.False(CaseJson(await h.Controller.History(f.Course,"illnessCourse",default)).TryGetProperty("requestInspection",out _));
+            var replay=CaseJson(await h.Controller.Send(f.Course,"illnessCourse",request,default));
+            Assert.False(replay.TryGetProperty("requestInspection",out _));Assert.Equal(1,h.Transport.Calls);
+            var rawId=h.Raw.Create(f.Course,actor);
+            var raw=CaseJson(await h.Controller.SendRaw(f.Course,rawId,new(){Content="合成Raw作答"},default));
+            Assert.Equal(role!="student",raw.TryGetProperty("requestInspection",out inspection));
+            if(role!="student")
+            {
+                var payload=inspection.GetProperty("requests")[0].GetProperty("payload");
+                Assert.Single(payload.GetProperty("messages").EnumerateArray());Assert.False(payload.TryGetProperty("format",out _));
+            }
+            await h.Raw.ClearAll(actor,default);
+            var stored=await f.Sql("SELECT string_agg(content,'') FROM case_analysis_messages WHERE session_id IN (SELECT id FROM case_analysis_sessions WHERE course_id=$1 AND student_id=$2)",f.Course,actor);
+            Assert.DoesNotContain("currentPhase",stored!.ToString());Assert.DoesNotContain("outputRequirements",stored.ToString());
+        }
+    }
+    [FormativeDatabaseFact] public async Task StudentPreviewReceivesNoInspectionAndDoesNotCallTheModel()
+    {
+        await using var f=await Fixture.Create();using var h=new InspectionHarness(f,f.Teacher,"teacher",true);
+        Assert.False(CaseJson(await h.Controller.Configuration(f.Course,default)).GetProperty("canInspectRequests").GetBoolean());
+        var result=Assert.IsAssignableFrom<ObjectResult>(await h.Controller.Send(f.Course,"premorbid",new(){RequestId=Guid.NewGuid(),Content="不得送出"},default));
+        Assert.Equal(403,result.StatusCode);Assert.Equal(0,h.Transport.Calls);Assert.Null(h.Inspection.Current);
+    }
+    [FormativeDatabaseFact] public async Task CourseRoleDemotionAfterInferencePreventsReturningCapturedRequest()
+    {
+        await using var f=await Fixture.Create();using var h=new InspectionHarness(f,f.Teacher,"teacher");
+        h.Transport.BeforeReply=async()=>{await f.Sql("UPDATE course_members SET course_role='student' WHERE course_id=$1 AND user_id=$2",f.Course,f.Teacher);};
+        var result=CaseJson(await h.Controller.Send(f.Course,"premorbid",new(){RequestId=Guid.NewGuid(),Content="合成變更權限情境"},default));
+        Assert.False(result.TryGetProperty("requestInspection",out _));Assert.Null(h.Inspection.Current);
+    }
+    private static JsonElement CaseJson(IActionResult result)=>JsonSerializer.SerializeToElement(Assert.IsAssignableFrom<ObjectResult>(result).Value,new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    private sealed class InspectionHarness:IDisposable
+    {
+        public InspectionTransport Transport=new();public RawChatSessions Raw;public OllamaRequestInspection Inspection;public CaseAnalysisChatController Controller;private HttpClient http;
+        public InspectionHarness(Fixture fixture,Guid actor,string courseRole,bool preview=false)
+        {
+            // A platform Professor enrolled only as a student must not receive a snapshot;
+            // a course TA with ordinary platform membership may inspect their own practice.
+            var platformStaff=courseRole=="student"||preview;
+            var context=new DefaultHttpContext{User=new ClaimsPrincipal(new ClaimsIdentity(new[]{new Claim(ClaimTypes.NameIdentifier,actor.ToString()),new Claim(ClaimTypes.Role,platformStaff?"Professor":"Member"),new Claim("can_teach",platformStaff.ToString())},"test"))};
+            if(preview)context.Request.Headers[LearnerExperience.Header]="student";
+            var accessor=new HttpContextAccessor{HttpContext=context};var experience=new LearnerExperience(accessor){CourseRole=courseRole};Inspection=new(accessor,experience);
+            var model=Microsoft.Extensions.Options.Options.Create(new OllamaOptions{Model="mock-model"});var options=Microsoft.Extensions.Options.Options.Create(new CaseChatOptions());
+            http=new(Transport){BaseAddress=new Uri("http://localhost:11434/")};
+            var provider=new OllamaClient(http,model,Microsoft.Extensions.Logging.Abstractions.NullLogger<OllamaClient>.Instance,inspection:Inspection);
+            var workflow=new CaseAnalysisChat(fixture.Db,provider,model,options,TimeProvider.System);Raw=new(TimeProvider.System,options,model);
+            Controller=new(workflow,Raw,provider,model,options,experience,Inspection){ControllerContext=new(){HttpContext=context}};
+        }
+        public void Dispose(){Raw.Dispose();http.Dispose();}
+    }
+    private sealed class InspectionTransport:HttpMessageHandler
+    {
+        public string? Body;public int Calls;public Func<Task>? BeforeReply;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct)
+        {
+            Body=await request.Content!.ReadAsStringAsync(ct);Calls++;if(BeforeReply is {} action)await action();
+            return new(System.Net.HttpStatusCode.OK){Content=new StringContent(JsonSerializer.Serialize(new{message=new{role="assistant",content="{\"feedback\":\"合成回饋\",\"annotations\":[]}",thinking="private thinking must not be returned"},done_reason="stop",eval_count=3,eval_duration=100000000}))};
+        }
+    }
     [FormativeDatabaseFact] public async Task SelectedStageReachesProviderDespiteAnotherPhaseInTheAnswer()
     {
         await using var f=await Fixture.Create();
@@ -88,7 +163,8 @@ public class CaseAnalysisChatTests
         await f.Workflow.Send(f.Course,f.Student,"premorbid",request,default);
         Assert.Single(f.Provider.Requests);
         await f.Workflow.Send(f.Course,f.Student,"premorbid",new(){RequestId=Guid.NewGuid(),Content="第二輪沿用先前分析"},default);
-        Assert.Equal(new[]{"system","user","assistant","user"},f.Provider.Requests.Last().Select(m=>m.Role));
+        Assert.Equal(new[]{"system","user"},f.Provider.Requests.Last().Select(m=>m.Role));
+        Assert.DoesNotContain("合成案例第一輪",string.Join("",f.Provider.Requests.Last().Select(m=>m.Content)));
         await f.Workflow.Send(f.Course,f.Student,"illnessCourse",new(){RequestId=Guid.NewGuid(),Content="另一階段"},default);
         Assert.Equal(2,f.Provider.Requests.Last().Count);Assert.Contains("疾病病程",f.Provider.Requests.Last()[0].Content);
         Assert.DoesNotContain("合成案例第一輪",string.Join("",f.Provider.Requests.Last().Select(m=>m.Content)));
@@ -156,12 +232,27 @@ public class CaseAnalysisChatTests
         Assert.Equal(0,(await f.Workflow.Records(f.Course,f.Teacher,default)).Single(row=>row.Id==f.Student).Statistics.RoundTrips);
     }
 
+    [FormativeDatabaseFact] public async Task LongStageHistoryStaysInDatabaseWithoutConsumingLaterRoundContext()
+    {
+        await using var f=await Fixture.Create();
+        for(var i=0;i<8;i++)
+        {
+            var answer=$"round-{i}:"+new string('x',2000);
+            await f.Workflow.Send(f.Course,f.Student,"illnessCourse",new(){RequestId=Guid.NewGuid(),Content=answer},default);
+            var request=f.Provider.Requests.Last();Assert.Equal(new[]{"system","user"},request.Select(m=>m.Role));Assert.Equal(answer,request.Last().Content);
+        }
+        var history=(await f.Workflow.History(f.Course,f.Student,"illnessCourse",default)).Sessions.Single();
+        Assert.Equal(16,history.Messages.Count);Assert.Equal(8,history.Statistics.RoundTrips);
+    }
     [FormativeDatabaseFact] public async Task ContextRejectionRetainsOriginalQuestionWithoutCallingTheModel()
     {
         await using var f=await Fixture.Create();
         var limited=new CaseAnalysisChat(f.Db,f.Provider,Microsoft.Extensions.Options.Options.Create(new OllamaOptions{Model="mock-model"}),Microsoft.Extensions.Options.Options.Create(new CaseChatOptions{MaxContextBytes=512}),TimeProvider.System);
         Assert.Equal(413,(await Assert.ThrowsAsync<CaseChatException>(()=>limited.Send(f.Course,f.Student,"illnessCourse",new(){RequestId=Guid.NewGuid(),Content="保留這份原始提問"},default))).StatusCode);
         Assert.Empty(f.Provider.Requests);var record=Assert.Single((await limited.History(f.Course,f.Student,"illnessCourse",default)).Sessions.Single().Messages);Assert.Equal("保留這份原始提問",record.Content);Assert.Equal("failed",record.Status);
+        var retried=await f.Workflow.Retry(f.Course,f.Student,"illnessCourse",record.Id,default);
+        Assert.Equal(new[]{"system","user"},f.Provider.Requests.Single().Select(m=>m.Role));Assert.Equal(record.Content,f.Provider.Requests.Single().Last().Content);
+        Assert.Equal(1,retried.Sessions.Single().Statistics.RoundTrips);
     }
 
     [FormativeDatabaseFact] public async Task RawControllerNeverCreatesDatabaseHistoryOrCountsAndCannotLeakIntoStageContext()

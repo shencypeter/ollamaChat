@@ -54,11 +54,12 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
     private Task<(string Content, string? Thinking, RequestMetrics Metrics)> CaseFeedbackCoreAsync(
         IReadOnlyList<OllamaMessage> messages,AnalysisStage? stage,CancellationToken cancellationToken)
     {
-        // Label the current answer explicitly. History stays history, and the saved
-        // original remains untouched. Never apply this wrapper to Raw Chat.
-        var request=messages.Select(m=>new OllamaMessage(m.Role,m.Content)).ToArray();
-        var current=Array.FindLastIndex(request,m=>m.Role=="user");
-        if(current<0)throw new InvalidOperationException("Case feedback requires a current answer.");
+        // Formal feedback never re-ingests prior drafts or assistant replies.
+        // Keep only the supplied system instructions and the current answer.
+        // Raw Chat uses ConversationAsync and retains its independent memory.
+        var answer=messages.LastOrDefault(m=>m.Role=="user")??throw new InvalidOperationException("Case feedback requires a current answer.");
+        var request=messages.Where(m=>m.Role=="system").Select(m=>new OllamaMessage(m.Role,m.Content)).Append(new OllamaMessage("user",answer.Content)).ToArray();
+        var current=request.Length-1;
         request[current]=new("user",System.Text.Json.JsonSerializer.Serialize(new {
             currentPhase=stage.HasValue?AnalysisStageCatalog.PhaseCode(stage.Value):null,
             currentStage=stage.HasValue?AnalysisStageCatalog.Get(stage.Value).Key:null,
@@ -198,7 +199,10 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         // Capture the same serialized bytes sent on the wire, before redacting the diagnostic copy.
         var json = System.Text.Json.JsonSerializer.Serialize(payload);
         if (!conversation) diagnostics?.Capture(json, purpose=="case-feedback"?StudioFeedbackContract.Version:schema.HasValue ? AnalysisStageInstructions.Version : null);
-        var inspectedRequest = conversation ? null : inspection?.Capture(json, httpClient.BaseAddress is null ? null : new Uri(httpClient.BaseAddress,"api/chat"), purpose ?? (schema.HasValue ? "assessment" : "chat"));
+        var endpoint=httpClient.BaseAddress is null?null:new Uri(httpClient.BaseAddress,"api/chat");
+        var inspectedRequest = conversation
+            ?inspection?.CaptureConversation(json,endpoint,schema.HasValue?"case-analysis":"raw-chat")
+            :inspection?.Capture(json,endpoint,purpose ?? (schema.HasValue ? "assessment" : "chat"));
         using var response = await httpClient.PostAsync("api/chat", new StringContent(json, System.Text.Encoding.UTF8, "application/json"), cancellationToken);
         stopwatch.Stop();
         var rawResponse = await response.Content.ReadAsStringAsync(cancellationToken);

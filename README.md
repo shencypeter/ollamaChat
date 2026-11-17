@@ -1,4 +1,6 @@
-> 2026-11-16 預設模型已切回IAN02 `llama3.1:8b`，Taipei Breeze設定保留。Visual Studio啟動選單選`https-IAN02-Llama3`或`https-Taipei-Breeze`，停止後再F5，兩者均只用7173。詳見[模型切換](docs/ollama/README.md)；本次Llama連線／多輪／回饋格式成功，教學品質仍待驗收。
+> 2026-11-17 教師／TA本人新回覆的效能彈窗新增「Ollama請求」，可看實際訊息、phase包裝、schema及options並複製payload。僅頁面暫存、無DB／log，學生及他人歷程不提供，舊回覆不重建。見[操作與驗證](docs/ollama/request-dialog.md)。
+
+> 2026-11-17 實測Breeze分類不穩定後，依使用者確認將預設切回 IAN02 `llama3.1:8b`，Taipei Breeze設定完整保留供比較。Visual Studio可選`https-IAN02-Llama3`或`https-Taipei-Breeze`，停止後再F5，兩者均只用7173。詳見[模型切換](docs/ollama/README.md)；Llama多輪及階段JSON回饋已驗證，分類仍需教師核對。
 
 > 2026-11-16 教授四階段方法已整合至課內聊天及既有案例學習，新增原文分類底線／圖例／tooltip；需套用039。六份[調教與驗證文件](docs/ai-tuning/01-professor-rubric.md)記錄來源、編碼差異、[實際模型未通過項目](docs/ai-tuning/03-evaluation-results.md)與[UI](docs/ai-tuning/06-annotation-ui.md)。Breeze尚未通過臨床教學品質驗收，程式測試通過不代表模型判讀可靠。
 

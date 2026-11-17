@@ -6,6 +6,36 @@ import ChatPerformanceDialog from './ChatPerformanceDialog.vue'
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks() })
 const row = (wrapper, label) => wrapper.findAll('dl > div').find(r => r.find('dt').text() === label)?.find('dd').text()
 describe('chat performance dialog', () => {
+  it('opens directly on the request tab when requested by course staff',async()=>{
+    const wrapper=mount(ChatPerformanceDialog,{attachTo:document.body,props:{open:true,canInspectRequests:true,initialTab:'request'}});await nextTick();await nextTick()
+    expect(wrapper.get('[data-tab="request"]').attributes('aria-selected')).toBe('true')
+    await wrapper.setProps({canInspectRequests:false});expect(wrapper.get('dialog').exists()).toBe(true)
+    expect(wrapper.find('[data-tab="request"]').exists()).toBe(false);wrapper.unmount()
+  })
+  it('shows only authorized captured requests as escaped readable messages and complete copyable JSON', async () => {
+    const inspection={promptVersion:'actual-v3',requests:[{purpose:'case_feedback',url:'http://model.test/api/chat',payload:{model:'actual-model',messages:[{role:'system',content:'目前階段 B\n<script>alert(1)</script>'},{role:'user',content:'原文與歷史'}],format:{type:'object'},options:{temperature:0.2},stream:false}}]}
+    const copy=vi.fn().mockResolvedValue();Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:copy}})
+    const wrapper=mount(ChatPerformanceDialog,{attachTo:document.body,props:{open:true,canInspectRequests:true,requestInspection:inspection}});await nextTick()
+    await wrapper.get('[role="tab"][data-tab="request"]').trigger('click')
+    expect(wrapper.text()).toContain('目前階段 B');expect(wrapper.text()).toContain('actual-model');expect(wrapper.find('script').exists()).toBe(false)
+    expect(JSON.parse(wrapper.get('[data-request-json]').text())).toEqual(inspection.requests[0].payload)
+    await wrapper.get('[data-action="copy-request"]').trigger('click');expect(copy).toHaveBeenCalledWith(JSON.stringify(inspection.requests[0].payload,null,2))
+    await wrapper.setProps({canInspectRequests:false});expect(wrapper.find('[data-tab="request"]').exists()).toBe(false);expect(wrapper.text()).not.toContain('目前階段 B')
+    wrapper.unmount()
+  })
+  it('labels multiple outgoing bodies as a payload array without copying capture metadata',async()=>{
+    const payloads=[{model:'one',messages:[]},{model:'two',messages:[]}]
+    const wrapper=mount(ChatPerformanceDialog,{props:{open:true,canInspectRequests:true,requestInspection:{promptVersion:'v3',requests:payloads.map(payload=>({url:'http://model.test/api/chat',purpose:'feedback',payload}))}}});await nextTick();await wrapper.get('[data-tab="request"]').trigger('click')
+    expect(wrapper.text()).toContain('各請求 payload JSON 陣列');expect(JSON.parse(wrapper.get('[data-request-json]').text())).toEqual(payloads);expect(wrapper.get('[data-action="copy-request"]').text()).toBe('複製 payload 陣列')
+    wrapper.unmount()
+  })
+  it('explains missing historical capture and cycles keyboard focus through request controls',async()=>{
+    const wrapper=mount(ChatPerformanceDialog,{attachTo:document.body,props:{open:true,canInspectRequests:true}});await nextTick()
+    await wrapper.get('[data-tab="request"]').trigger('click');expect(wrapper.text()).toContain('未擷取此回覆的 Ollama 請求');expect(wrapper.text()).toContain('重新整理')
+    const request=wrapper.get('[data-tab="request"]');request.element.focus();await request.trigger('keydown',{key:'Tab'});expect(document.activeElement).toBe(wrapper.get('[aria-label="關閉效能資訊"]').element)
+    await wrapper.get('[aria-label="關閉效能資訊"]').trigger('keydown',{key:'Tab',shiftKey:true});expect(document.activeElement).toBe(request.element)
+    wrapper.unmount()
+  })
   it('uses actual values, preserves zero and converts duration units', async () => {
     const wrapper = mount(ChatPerformanceDialog, { attachTo: document.body, props: { open: true, modelName: 'test-model', promptVersion: 'v1', metrics: {
       promptTokens: 120, cachedPromptTokens: 0, responseTokens: 32, tokensPerSecond: 8,

@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 namespace AiTeachingAssistant.Controllers;
 
 [ApiController,Authorize,Route("api/courses/{course:guid}/case-analysis")]
-public sealed class CaseAnalysisChatController(CaseAnalysisChat workflow,RawChatSessions raw,IOllamaClient provider,IOptions<OllamaOptions> model,IOptions<CaseChatOptions> options,LearnerExperience experience):ControllerBase
+public sealed class CaseAnalysisChatController(CaseAnalysisChat workflow,RawChatSessions raw,IOllamaClient provider,IOptions<OllamaOptions> model,IOptions<CaseChatOptions> options,LearnerExperience experience,OllamaRequestInspection? inspection=null):ControllerBase
 {
     private Guid Actor=>Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private async Task<IActionResult> Run(Func<Task<object>> action)
@@ -18,12 +18,26 @@ public sealed class CaseAnalysisChatController(CaseAnalysisChat workflow,RawChat
         try{return Ok(await action());}catch(CaseChatException error){return StatusCode(error.StatusCode,new{error=error.Message});}
     }
     private void WritableView(){if(experience.IsPractice)throw new CaseChatException(403,"學生視角預覽為唯讀，請返回教師模式試聊。");}
+    private async Task PrepareInspection(Guid course,string version,CancellationToken ct)
+    {
+        if(inspection is not null)inspection.EnableConversationCapture(await workflow.Access(course,Actor,true,ct),version);
+    }
+    private async Task<OllamaInspection?> AuthorizedInspection(Guid course,CancellationToken ct)
+    {
+        if(inspection?.Current is not {} captured)return null;
+        if(experience.IsPractice||!(await workflow.Access(course,Actor,false,ct)).Practice){inspection.DisableConversationCapture();return null;}
+        return captured;
+    }
+    private async Task<object> WithInspection(Guid course,CaseStageHistory result,CancellationToken ct)
+        =>await AuthorizedInspection(course,ct) is {} captured?new{result.Sessions,result.ActiveSessionId,requestInspection=captured}:result;
+    private async Task<object> WithInspection(Guid course,RawChatReply result,CancellationToken ct)
+        =>await AuthorizedInspection(course,ct) is {} captured?new{result.SessionId,result.Messages,result.ModelName,requestInspection=captured}:result;
 
     [HttpGet]
     public Task<IActionResult> Configuration(Guid course,CancellationToken ct)=>Run(async()=>{
         var access=await workflow.Access(course,Actor,false,ct,false);
         return new{enabled=access.Enabled,canChat=access.Enabled&&access.Status=="active"&&!experience.IsPractice,canReview=access.Enabled&&access.CanReview&&!experience.IsPractice,modelName=model.Value.Model,
-            stages=AnalysisStageCatalog.All.Where(s=>s.Stage!=AnalysisStage.GeneralChat).Select(s=>new{s.Key,s.Label}),classifications=CaseCodingCatalog.All,maximumMessageCharacters=options.Value.MaxMessageCharacters,isPractice=access.Practice};
+            stages=AnalysisStageCatalog.All.Where(s=>s.Stage!=AnalysisStage.GeneralChat).Select(s=>new{s.Key,s.Label}),classifications=CaseCodingCatalog.All,maximumMessageCharacters=options.Value.MaxMessageCharacters,isPractice=access.Practice,canInspectRequests=access.Practice&&!experience.IsPractice};
     });
     public sealed class SettingsInput{public bool Enabled{get;set;}}
     [HttpPut("settings")]
@@ -32,16 +46,16 @@ public sealed class CaseAnalysisChatController(CaseAnalysisChat workflow,RawChat
     [HttpGet("stages/{stage}")]
     public Task<IActionResult> History(Guid course,string stage,CancellationToken ct)=>Run(async()=>await workflow.History(course,Actor,stage,ct));
     [EnableRateLimiting("case-chat"),HttpPost("stages/{stage}/messages"),RequestSizeLimit(64*1024)]
-    public Task<IActionResult> Send(Guid course,string stage,CaseChatInput input,CancellationToken ct)=>Run(async()=>{WritableView();return await workflow.Send(course,Actor,stage,input,ct);});
+    public Task<IActionResult> Send(Guid course,string stage,CaseChatInput input,CancellationToken ct)=>Run(async()=>{WritableView();await PrepareInspection(course,CaseChatPrompts.Version,ct);return await WithInspection(course,await workflow.Send(course,Actor,stage,input,ct),ct);});
     [EnableRateLimiting("case-chat"),HttpPost("stages/{stage}/messages/{message:guid}/retry")]
-    public Task<IActionResult> Retry(Guid course,string stage,Guid message,CancellationToken ct)=>Run(async()=>{WritableView();return await workflow.Retry(course,Actor,stage,message,ct);});
+    public Task<IActionResult> Retry(Guid course,string stage,Guid message,CancellationToken ct)=>Run(async()=>{WritableView();await PrepareInspection(course,CaseChatPrompts.Version,ct);return await WithInspection(course,await workflow.Retry(course,Actor,stage,message,ct),ct);});
     [HttpPost("stages/{stage}/restart")]
     public Task<IActionResult> Restart(Guid course,string stage,CancellationToken ct)=>Run(async()=>{WritableView();return await workflow.Restart(course,Actor,stage,ct);});
 
     [EnableRateLimiting("case-chat"),HttpPost("raw/sessions")]
     public Task<IActionResult> CreateRaw(Guid course,CancellationToken ct)=>Run(async()=>{WritableView();await workflow.Access(course,Actor,true,ct);return new{id=raw.Create(course,Actor)};});
     [EnableRateLimiting("case-chat"),HttpPost("raw/sessions/{session:guid}/messages"),RequestSizeLimit(64*1024)]
-    public Task<IActionResult> SendRaw(Guid course,Guid session,RawChatInput input,CancellationToken ct)=>Run(async()=>{WritableView();await workflow.Access(course,Actor,true,ct);return await raw.Send(course,Actor,session,input.Content,provider,ct,async token=>{await workflow.Access(course,Actor,true,token);});});
+    public Task<IActionResult> SendRaw(Guid course,Guid session,RawChatInput input,CancellationToken ct)=>Run(async()=>{WritableView();await workflow.Access(course,Actor,true,ct);await PrepareInspection(course,"raw-chat-no-system",ct);return await WithInspection(course,await raw.Send(course,Actor,session,input.Content,provider,ct,async token=>{await workflow.Access(course,Actor,true,token);}),ct);});
     // Deletion is bound to the authenticated owner even after withdrawal. It never
     // exposes content and must remain possible when course access was revoked.
     [HttpDelete("raw/sessions/{session:guid}")]

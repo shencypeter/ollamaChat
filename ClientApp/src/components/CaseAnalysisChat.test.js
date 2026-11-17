@@ -2,6 +2,9 @@ import {mount,flushPromises} from '@vue/test-utils'
 import {beforeEach,afterEach,it,expect,vi} from 'vitest'
 import CaseAnalysisChat from './CaseAnalysisChat.vue'
 import PhaseAnnotatedAnswer from './PhaseAnnotatedAnswer.vue'
+import ChatPerformanceDialog from './ChatPerformanceDialog.vue'
+import {auth} from '../composables/auth'
+import {experience} from '../composables/experience'
 import {api} from '../api'
 import {onBeforeRouteLeave,onBeforeRouteUpdate} from 'vue-router'
 vi.mock('../api',()=>({api:vi.fn()}))
@@ -13,6 +16,7 @@ function view(){const v=mount(CaseAnalysisChat,{props:{course:{id:'c',courseRole
 async function mode(v,key){await v.get(`[data-mode="${key}"]`).trigger('click');await flushPromises()}
 async function send(v,text){await v.get('textarea').setValue(text);await v.get('form').trigger('submit');await flushPromises()}
 beforeEach(()=>{
+ auth.user=null;experience.student=false
  rawId=0;rawMessages=[];history=empty();config={enabled:true,canChat:true,canReview:false,isPractice:false,modelName:'test-model',maximumMessageCharacters:8000,stages}
  vi.spyOn(window,'confirm').mockReturnValue(true)
  api.mockReset().mockImplementation(async(p,o)=>{
@@ -24,6 +28,58 @@ beforeEach(()=>{
   if(p===base+'/records')return {students:[]}
   throw new Error('Unexpected '+p)
  })
+})
+const capture=text=>({promptVersion:'captured-v3',requests:[{purpose:'feedback',url:'http://model.test/api/chat',payload:{model:'captured-model',messages:[{role:'system',content:'實際系統提示'},{role:'user',content:text}],format:{type:'object'},options:{temperature:0.2}}}]})
+it.each(['raw','premorbid'])('shows a reply placeholder while %s inference is pending and clears it on success or failure',async(key)=>{
+ const v=view();await flushPromises();if(key!=='raw')await mode(v,key)
+ let finish;api.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve}))
+ await v.get('textarea').setValue('pending answer');await v.get('form').trigger('submit')
+ expect(v.get('[data-reply-loading]').attributes('role')).toBe('status');expect(v.get('[data-reply-loading]').text()).toContain('AI 助教正在回覆');expect(v.text()).not.toContain('尚無訊息。')
+ const reply={id:'a',role:'assistant',replyTo:'u',content:'completed response'}
+ finish(key==='raw'?{sessionId:'raw-1',messages:[reply]}:{activeSessionId:'s',sessions:[{id:'s',status:'active',messages:[{id:'u',role:'user',status:'completed',content:'pending answer'},reply]}]});await flushPromises()
+ expect(v.find('[data-reply-loading]').exists()).toBe(false);expect(v.text()).toContain('completed response')
+ let fail;api.mockImplementationOnce(()=>new Promise((_,reject)=>{fail=reject}))
+ await v.get('textarea').setValue('retained on failure');await v.get('form').trigger('submit');expect(v.find('[data-reply-loading]').exists()).toBe(true)
+ fail(new Error('模型暫時無法回覆'));await flushPromises();expect(v.find('[data-reply-loading]').exists()).toBe(false);expect(v.get('textarea').element.value).toBe('retained on failure')
+})
+it('binds each live stage capture to its exact request reply and preserves prior captures across full-history sends',async()=>{
+ config.canReview=true;config.canInspectRequests=true;history=savedRounds();const original=api.getMockImplementation()
+ api.mockImplementation(async(p,o)=>{
+  if(p.endsWith('/premorbid/messages')&&o?.method==='POST'){
+   const id=o.body.requestId;history.sessions[0].messages.push({id,role:'user',content:o.body.content,status:'completed'},{id:'a-'+id,role:'assistant',replyTo:id,content:'新回饋'});return {...structuredClone(history),requestInspection:capture(o.body.content)}
+  }return original(p,o)
+ })
+ const storage=vi.spyOn(Storage.prototype,'setItem'),v=view();await flushPromises();await mode(v,'premorbid');await send(v,'第一個擷取');const first=v.findAll('[data-round]').at(0).attributes('data-round');await send(v,'第二個擷取')
+ await v.get('[data-action="performance"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toEqual(capture('第二個擷取'))
+ await v.get('[data-action="request-inspection"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('initialTab')).toBe('request');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toEqual(capture('第二個擷取'))
+ await v.get(`[data-round="${first}"]`).trigger('click');await v.get('[data-action="performance"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toEqual(capture('第一個擷取'))
+ await v.get('[data-round="u3"]').trigger('click');await v.get('[data-action="performance"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toBeNull()
+ expect(v.get('textarea').element.value).toBe('');expect(storage).not.toHaveBeenCalled();expect(api.mock.calls.filter(([,o])=>o?.body).every(([,o])=>!JSON.stringify(o.body).includes('實際系統提示'))).toBe(true)
+ await mode(v,'illnessCourse');await mode(v,'premorbid');await v.get(`[data-round="${first}"]`).trigger('click');await v.get('[data-action="performance"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toBeNull()
+})
+it('captures successful retry only for the retried persisted user',async()=>{
+ config.canReview=true;config.canInspectRequests=true;history={activeSessionId:'s',sessions:[{id:'s',status:'active',messages:[{id:'retry-user',role:'user',content:'retry',status:'failed'}]}]};const v=view();await flushPromises();await mode(v,'premorbid')
+ api.mockImplementationOnce(async()=>({activeSessionId:'s',sessions:[{id:'s',status:'active',messages:[{id:'retry-user',role:'user',content:'retry',status:'completed'},{id:'retry-a',role:'assistant',replyTo:'retry-user',content:'retry success'}]}],requestInspection:capture('retry')}))
+ await v.get('[data-action="retry-message"]').trigger('click');await flushPromises();await v.get('[data-action="performance"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toEqual(capture('retry'))
+})
+it('keeps Raw captures by session and reply position and clears them on expiry, clear and pagehide',async()=>{
+ config.canReview=true;config.canInspectRequests=true;const original=api.getMockImplementation();api.mockImplementation(async(p,o)=>{const data=await original(p,o);return p.includes('/raw/')&&p.endsWith('/messages')?{...data,requestInspection:capture(o.body.content)}:data})
+ const v=view();await flushPromises();await send(v,'raw first');await send(v,'raw second');await v.findAll('[data-action="performance"]')[0].trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toEqual(capture('raw first'))
+ api.mockImplementationOnce(async()=>{throw Object.assign(new Error('expired'),{status:404})});await send(v,'expired');await v.findAll('[data-action="performance"]')[0].trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toBeNull()
+ await v.get('[data-action="clear-raw"]').trigger('click');await flushPromises();await send(v,'fresh');await v.get('[data-action="performance"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toEqual(capture('fresh'))
+ window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}));await flushPromises();expect(v.getComponent(ChatPerformanceDialog).props('open')).toBe(false);expect(v.findAll('[data-action="performance"]')).toHaveLength(0)
+})
+it('disables inspection for students even if a payload is accidentally returned and never exposes it in teacher review',async()=>{
+ config.canInspectRequests=true;const original=api.getMockImplementation();api.mockImplementation(async(p,o)=>{const data=await original(p,o);return p.includes('/raw/')&&p.endsWith('/messages')?{...data,requestInspection:capture('secret')}:data})
+ const v=view();await flushPromises();await send(v,'student');await v.get('[data-action="performance"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('canInspectRequests')).toBe(false);expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toBeNull()
+ expect(v.find('[data-action="request-inspection"]').exists()).toBe(false)
+ v.unmount();config.canReview=true;const staff=view();await flushPromises();await send(staff,'staff');await staff.get('[data-action="performance"]').trigger('click');expect(staff.getComponent(ChatPerformanceDialog).props('canInspectRequests')).toBe(true)
+ await staff.get('[data-action="review"]').trigger('click');await flushPromises();expect(staff.getComponent(ChatPerformanceDialog).props('canInspectRequests')).toBe(false);expect(staff.getComponent(ChatPerformanceDialog).props('requestInspection')).toBeNull()
+})
+it('drops captures synchronously on account or student-experience changes and ignores late responses',async()=>{
+ config.canReview=true;config.canInspectRequests=true;const v=view();await flushPromises();let finish;api.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve}));await v.get('textarea').setValue('pending');await v.get('form').trigger('submit')
+ experience.student=true;await v.vm.$nextTick();finish({sessionId:'raw-1',messages:[{role:'assistant',content:'late'}],requestInspection:capture('late')});await flushPromises();expect(v.text()).not.toContain('late');expect(v.getComponent(ChatPerformanceDialog).props('canInspectRequests')).toBe(false)
+ experience.student=false;auth.user={id:'new-user'};await v.vm.$nextTick();expect(v.getComponent(ChatPerformanceDialog).props('open')).toBe(false)
 })
 afterEach(()=>{wrappers.forEach(v=>v.unmount());wrappers=[];vi.restoreAllMocks()})
 it('checks only the paired original against the active B stage inside the feedback bubble without rewriting AI praise',async()=>{
@@ -104,6 +160,11 @@ it('retains raw context on 413 and offers a fresh session after expiry',async()=
  api.mockImplementationOnce(async()=>{throw Object.assign(new Error('expired'),{status:404})})
  await send(v,'draft retained');expect(v.get('[data-action="clear-raw"]').text()).toContain('對話已逾時');expect(v.get('textarea').attributes('disabled')).toBeDefined()
  await v.get('[data-action="clear-raw"]').trigger('click');await flushPromises();expect(rawId).toBe(2);expect(v.findAll('.chat-message')).toHaveLength(0)
+})
+it('explains a stage input limit without suggesting that clearing database history increases context',async()=>{
+ const v=view();await flushPromises();await mode(v,'premorbid')
+ api.mockImplementationOnce(async()=>{throw Object.assign(new Error('too long'),{status:413})})
+ await send(v,'stage draft retained');expect(v.text()).toContain('請縮短本次作答');expect(v.text()).toContain('重新開始對話不會增加本次容量');expect(v.get('textarea').element.value).toBe('stage draft retained')
 })
 it('fetches saved stages again after remount and makes closed histories read-only',async()=>{
  history={activeSessionId:'active',sessions:[{id:'closed',status:'closed',messages:[{id:'u',role:'user',content:'old saved conversation'}]},{id:'active',status:'active',messages:[]}]}
@@ -209,9 +270,20 @@ function savedRounds(){return {activeSessionId:'s',sessions:[{id:'s',status:'act
  {id:'u2',role:'user',content:'第二份獨立作答',status:'completed',revisesMessageId:null},{id:'a2',role:'assistant',content:'第二輪回饋',replyTo:'u2',metrics:{promptTokens:20,responseTokens:10}},
  {id:'u3',role:'user',content:'第三份修改作答',status:'completed',revisesMessageId:'u1'},{id:'a3',role:'assistant',content:'第三輪回饋',replyTo:'u3',modelName:'saved-response-model',promptVersion:'saved-v1',metrics:{promptTokens:30,responseTokens:15}}
  ]}]}}
+it('retains the annotation display choice when selecting another response round without storing it',async()=>{
+ config.classifications=[{code:'A1a',label:'年齡',phase:'A'}];history=savedRounds()
+ const messages=history.sessions[0].messages
+ for(const reply of messages.filter(m=>m.role==='assistant')){const answer=messages.find(m=>m.id===reply.replyTo);reply.annotations=[{annotationId:reply.id,start:0,end:answer.content.length,text:answer.content,codes:['A1a'],status:'unverified'}]}
+ const storage=vi.spyOn(Storage.prototype,'setItem'),v=view();await flushPromises();await mode(v,'premorbid')
+ await v.get('[data-annotation-mode="badges"]').trigger('click');await v.get('[data-round="u1"]').trigger('click')
+ expect(v.get('[data-annotation-mode="badges"]').attributes('aria-pressed')).toBe('true');expect(v.getComponent(PhaseAnnotatedAnswer).props('displayMode')).toBe('badges');expect(v.find('[data-annotation-reference]').exists()).toBe(true)
+ expect(v.get('.from-assistant [data-phase-alignment]').text()).toContain('編碼徽章');expect(storage).not.toHaveBeenCalled()
+})
 it('selects one feedback pair without changing the draft and labels explicit revisions only',async()=>{
  history=savedRounds();const v=view();await flushPromises();await mode(v,'premorbid')
  expect(v.findAll('[data-round]')).toHaveLength(3);expect(v.get('.chat-log').text()).toContain('第三輪回饋');expect(v.get('.chat-log').text()).not.toContain('第一輪回饋')
+ expect(v.findAll('[data-round]').map(item=>item.attributes('data-round'))).toEqual(['u3','u2','u1'])
+ expect(v.findAll('[data-round]').map(item=>item.get('strong').text())).toEqual(['第 3 輪 · 修改 1 次','第 2 輪 · 原始作答','第 1 輪 · 原始作答'])
  await v.get('textarea').setValue('尚未提交的內容');await v.get('[data-round="u1"]').trigger('click')
  expect(v.get('.chat-log').text()).toContain('第一輪回饋');expect(v.get('.chat-log').text()).not.toContain('第三輪回饋');expect(v.get('textarea').element.value).toBe('尚未提交的內容')
  expect(v.get('[data-round="u2"]').text()).toContain('原始作答');expect(v.get('[data-round="u3"]').text()).toContain('修改 1 次')

@@ -10,6 +10,39 @@ using Microsoft.Extensions.Options;
 namespace AiTeachingAssistant.Tests;
 public class OllamaRequestInspectionTests
 {
+    [Theory][InlineData("teacher")][InlineData("ta")]
+    public async Task ExplicitCourseStaffCaptureContainsActualStageAndRawRequestsWithoutResponseOrPersistentDiagnostics(string courseRole)
+    {
+        var accessor=Context("Student");var experience=new LearnerExperience(accessor){CourseRole=courseRole};
+        var inspection=new OllamaRequestInspection(accessor,experience);var transport=new Capture();
+        var client=new OllamaClient(new HttpClient(transport){BaseAddress=new Uri("http://localhost:11434/")},Microsoft.Extensions.Options.Options.Create(new OllamaOptions{Model="test-model"}),NullLogger<OllamaClient>.Instance,inspection:inspection);
+        inspection.EnableConversationCapture(new(courseRole,"active",true,[]),CaseChatPrompts.Version);
+        await client.CaseFeedbackAsync([new("system",CaseChatPrompts.Get(AnalysisStage.IllnessCourse)),new("user","合成目前作答")],AnalysisStage.IllnessCourse,default);
+        var captured=Assert.Single(inspection.Current!.Requests);using var actual=JsonDocument.Parse(transport.Body!);
+        Assert.Equal(actual.RootElement.GetRawText(),captured.Payload.GetRawText());Assert.Equal(CaseChatPrompts.Version,inspection.Current.PromptVersion);
+        using var input=JsonDocument.Parse(captured.Payload.GetProperty("messages")[1].GetProperty("content").GetString()!);
+        Assert.Equal("B",input.RootElement.GetProperty("currentPhase").GetString());Assert.Null(captured.RawResponse);
+        inspection.EnableConversationCapture(new(courseRole,"active",true,[]),"raw-chat");
+        await client.ConversationAsync([new("user","合成原始聊天")],default);
+        captured=Assert.Single(inspection.Current!.Requests);Assert.Single(captured.Payload.GetProperty("messages").EnumerateArray());Assert.False(captured.Payload.TryGetProperty("format",out _));Assert.Null(captured.RawResponse);
+    }
+    [Theory][InlineData("Student","student",false)][InlineData("Professor","student",false)][InlineData("Professor","teacher",true)]
+    public void StudentOrPreviewCannotEnableConversationCaptureEvenWithPlatformStaffRole(string platformRole,string courseRole,bool preview)
+    {
+        var accessor=Context(platformRole);var experience=new LearnerExperience(accessor){CourseRole=courseRole};
+        if(preview)accessor.HttpContext!.Request.Headers[LearnerExperience.Header]="student";
+        var inspection=new OllamaRequestInspection(accessor,experience);
+        inspection.EnableConversationCapture(new(courseRole,"active",true,[]),CaseChatPrompts.Version);
+        inspection.CaptureConversation("not parsed for unauthorized users",null,"stage");Assert.Null(inspection.Current);
+    }
+    [Fact] public void ConversationCaptureIsBoundToCurrentAuthenticatedActorAndRequestScope()
+    {
+        var accessor=Context("Professor");var first=new OllamaRequestInspection(accessor);var second=new OllamaRequestInspection(accessor);
+        first.EnableConversationCapture(new("teacher","active",true,[]),CaseChatPrompts.Version);
+        first.CaptureConversation("""{"messages":[],"thinking":"private"}""",new Uri("http://user:pass@localhost:11434/api/chat?token=secret"),"stage");
+        var request=Assert.Single(first.Current!.Requests);Assert.DoesNotContain("private",request.Payload.GetRawText());Assert.DoesNotContain("pass",request.Url);Assert.DoesNotContain("token",request.Url);Assert.Null(second.Current);
+        accessor.HttpContext!.User=Context("Professor").HttpContext!.User;Assert.Null(first.Current);
+    }
     [Fact] public void StaffStudentExperienceDoesNotExposeStaffDiagnostics()
     {
         var accessor=Context("Professor");accessor.HttpContext!.Request.Headers[LearnerExperience.Header]="student";

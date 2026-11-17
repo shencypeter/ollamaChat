@@ -1,6 +1,7 @@
 namespace AiTeachingAssistant.Services;
 
-public sealed record CaseCodingDefinition(string Code, string Label, string Phase);
+public sealed record CaseCodingDefinition(string Code, string Label, string Phase,
+    [property:System.Text.Json.Serialization.JsonIgnore] string? PromptLabel = null);
 
 /// <summary>Reusable classification vocabulary; recognition never certifies clinical correctness.</summary>
 public static class CaseCodingCatalog
@@ -24,7 +25,7 @@ public static class CaseCodingCatalog
         new("B5", "手術資訊", "B"), new("B6", "診斷", "B"),
         new("B7", "治療計畫", "B"), new("B7a", "醫療治療", "B"),
         new("B7b", "復健計畫", "B"), new("B7c", "出院準備服務", "B"),
-        new("C1", "意識狀態與心智功能", "C"), new("C2", "Muscle Power", "C"),
+        new("C1", "意識狀態與心智功能", "C"), new("C2", "Muscle Power（肌力與相關動作檢查）", "C", "Muscle Power"),
         new("C3", "吞嚥與構音功能", "C"), new("C4", "知覺系統", "C"),
         new("C5", "日常生活活動", "C"), new("C6", "神經與生理功能", "C"),
         new("D1", "婚姻狀態", "D"), new("D2", "住家條件", "D"),

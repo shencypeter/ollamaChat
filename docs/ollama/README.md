@@ -1,5 +1,35 @@
 # Ollama 模型設定與有效負載保存
 
+## 2026-11-17 使用者確認切回Llama3（現行設定）
+
+在Breeze分類診斷後，使用者選「切回Llama3，保留Breeze供比較」。appsettings預設Profile現為llama3，IAN02的llama3.1:8b；Breeze／Qwen的各自設定及兩個VS7173選項完全保留，沒有自動fallback，也未部署四種Breeze實驗提示。切換前原IAN02名稱短暫解析失敗，重新解析／連線成功後，version／tags及合成2Raw＋1Stage均成功；沒有改用固定IP。
+
+唯一7173已重啟且核對profile=llama3、頁面200／匿名AI401，標準VS含Vue建置成功。Raw暫存隨重啟清除、Stage歷史保留，建議切模型後新開階段對話。Llama3仍有混合內容過度分類，切回不代表已通過教學品質驗收。
+
+## 2026-11-17 分類遵循診斷：格式成功不代表分類通過
+
+Breeze已收到完整分類表及目前階段，但合成測試仍有複述規則、引用非原文被拒絕及錯選碼。只在本機測4種替代包裝（共12次，加原版3次），未找到足以採用的方案；精簡版雖較易產生有效引用，仍錯碼、回英文且刪掉原教學方法，沒有套用到正式Provider或profile。分類schema能約束合法碼與結構，不能保證選對語意。
+
+Llama3當下HTTP比較亦有混合內容過度分類，不能當專業正確性保證。兩份模型設定均保留不改，不因模型不遵循而放寬原文驗證或補造標註，沒有自動fallback。完整[合成診斷表](../ai-tuning/03-evaluation-results.md)。診斷後使用者已確認切回Llama3，詳上方現行設定。
+
+## 2026-11-17 Taipei恢復、預設切回Breeze（現行）
+
+依使用者要求先實測：Taipei的version／tags成功，Ollama0.40.11及ycchen/breeze-7b-instruct-v1_0存在。既有Provider合成2輪Raw＋1輪結構化Stage成功（首次約4.3秒），之後以網站明確current-stage overload再驗3筆成功；不寫DB或輸出對話內容。只證實當下連線、推論及JSON格式，不代表臨床教學品質。
+
+appsettings預設Profile由llama3切回breeze。三份Configuration/Ollama及VS的https-IAN02-Llama3／https-Taipei-Breeze保留原樣；兩者都只用7173，沒有自動failover。選原https即沿目前預設breeze；若要IAN02則明確選https-IAN02-Llama3。切換需重啟，Raw暫存清除，Stage歷程及原模型metadata保留。相關封包13項及標準VS含Vue成功，唯一7173已核對profile=breeze，頁面200／匿名AI401。
+
+## 2026-11-17 C2顯示名稱與精簡Prompt名稱
+
+共享分類C2的可見名稱更新為「Muscle Power（肌力與相關動作檢查）」。CaseCodingDefinition選用PromptLabel以JsonIgnore排除於API目錄，模型catalog渲染採PromptLabel或原Label；C2仍送既有精簡「Muscle Power」，不增加原prompt bytes或更動既有詳細規則、payload文字、v3及三個profile。避免單純UI標籤修改擠壓既有context預算。相關後端19項及標準VS含Vue通過，未呼叫實際LLM。
+
+## 2026-11-17 四階段本輪輸入與直接請求入口
+
+四階段send／retry僅有目前phase system與本次user（原有answerText／phase包裝），歷史留DB供輪次／diff／統計；workflow與CaseFeedbackCore排除舊user／assistant。Raw仍保留LangChain多輪，三profile／prompt v3／schema／抽樣不改。本人課程teacher／TA新回覆旁「查看 Ollama 請求」直接開實際payload；效能入口保留。預檢413尚無送出封包，歷史不重建。[操作與限制](request-dialog.md)。隔離DB375、Vue275、Chrome22＋更新fixture後4及標準VS含Vue通過；本輪無實際LLM推論。
+
+## 2026-11-17 效能彈窗的實際請求
+
+課內本人教師／TA新回覆可從效能dialog切至Ollama請求，查看真正序列化送出的messages／phase／format／options及複製payload。明確課程授權才啟用request-scoped conversation capture，完成後重查角色；學生／預覽／他人歷程不提供，舊回覆不重建。只在HTTP scope與頁面暫存，不入DB／storage／log／診斷，不擷取conversation response body或thinking，Raw仍無system／持久化／正式統計。此為先前全面排除conversation inspection的明確staff自用例外，非開啟全站內容紀錄。[操作、生命週期與驗證](request-dialog.md)。
+
 ## 2026-11-16 選定階段明確傳入
 
 CaseChatPrompts現在professor-four-phase-20261116-v3，最前顯示目前ABCD；CaseFeedbackAsync的stage-aware overload由課程workflow傳入伺服器stage，在現有answerText包裝追加currentStage／currentPhase／currentStageLabel。無病例僅限制事實核實，不影響判讀明確分類錯置；必要背景與合法多碼不能一律判錯。Studio同理從saved answer.stage加入phase，原schema維持，版本case-text-feedback-phase-v3。原二參數provider方法保持相容，Raw與三profile／抽樣不改。
@@ -41,7 +71,7 @@ $env:Ollama__Profile = 'llama3' # 或 qwen、breeze
 dotnet run --launch-profile http
 ```
 
-發布版本亦使用同一環境變數啟動 DLL。專案預設現為 `llama3`（2026-11-16使用者要求），不會在失敗時自動改用其他模型。啟動時依序套用基礎設定、所選 profile、`appsettings.Local.json`、環境變數；本地檔及環境中的 BaseUrl／Model 會覆寫 profile，切換前應檢查是否存在舊覆寫。Profile 的選擇在讀取本地檔前完成，請用啟動選單、基礎appsettings或環境變數 `Ollama__Profile` 選擇，不要只寫進本地檔。
+發布版本亦使用同一環境變數啟動 DLL。專案預設現為 `llama3`（2026-11-17使用者確認切回，Breeze保留供比較），不會在失敗時自動改用其他模型。啟動時依序套用基礎設定、所選 profile、`appsettings.Local.json`、環境變數；本地檔及環境中的 BaseUrl／Model 會覆寫 profile，切換前應檢查是否存在舊覆寫。Profile 的選擇在讀取本地檔前完成，請用啟動選單、基礎appsettings或環境變數 `Ollama__Profile` 選擇，不要只寫進本地檔。
 
 設定保存在 `Configuration/Ollama/`，會隨建置及發布複製。切換設定不會更動資料庫、學生資料或全域臨床評分規準；請在新的對話中驗收，避免沿用舊模型一般對話內容。
 

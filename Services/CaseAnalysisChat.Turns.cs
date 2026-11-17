@@ -76,8 +76,9 @@ public sealed partial class CaseAnalysisChat
             Add(insert,requestId,active.Value,content!,sequence,modelOptions.Value.Model,CaseChatPrompts.Version,attempt,lease,clock.GetUtcNow());insert.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Uuid,Value=(object?)revisesMessageId??DBNull.Value});await insert.ExecuteNonQueryAsync(ct);
         }
         await using(var update=new NpgsqlCommand("UPDATE case_analysis_sessions SET last_activity_at=$2 WHERE id=$1",conn)){Add(update,active.Value,clock.GetUtcNow());await update.ExecuteNonQueryAsync(ct);}
-        var messages=new List<OllamaMessage>{new("system",CaseChatPrompts.Get(Stage(stage)))};
-        await using(var select=new NpgsqlCommand("SELECT role,content FROM case_analysis_messages WHERE session_id=$1 ORDER BY sequence_number",conn)){Add(select,active.Value);await using var r=await select.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))messages.Add(new(r.GetString(0),r.GetString(1)));}
+        // Revisions and feedback remain in the database for review/diff/statistics.
+        // Each formal round is assessed independently, including a retry.
+        var messages=new List<OllamaMessage>{new("system",CaseChatPrompts.Get(Stage(stage))),new("user",content!)};
         await tx.CommitAsync(ct);
         return new(course,actor,stage,active.Value,requestId,attempt,messages);
     }

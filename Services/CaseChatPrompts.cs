@@ -64,7 +64,7 @@ public static class CaseChatPrompts
             _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null)
         };
 
-        var catalog = string.Join("\n", CaseCodingCatalog.All.Select(item => $"{item.Code} {item.Label}"));
+        var catalog = string.Join("\n", CaseCodingCatalog.All.Select(item => $"{item.Code} {item.PromptLabel ?? item.Label}"));
         return "本次作答階段："+AnalysisStageCatalog.Get(stage).Label+"\n"+TeachingAssistantPrompt + "\n\n通用分類代碼表（只表示分類，不表示事實正確）：\n" + catalog + "\n\n" + phaseInstructions;
     }
 
