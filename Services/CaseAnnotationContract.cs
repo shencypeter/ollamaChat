@@ -16,16 +16,26 @@ public static class CaseAnnotationContract
         }
     });
     public static JsonElement Schema=>SchemaFor(false);
-    public static JsonElement SchemaFor(bool compact)=>JsonSerializer.SerializeToElement(new {
+    public static JsonElement SchemaFor(bool compact,bool annotationsFirst=false)
+    {
+        if(annotationsFirst)
+        {
+            var standard=SchemaFor(compact).GetProperty("properties");
+            // Let the model select evidence/code spans before composing feedback.
+            // Field names and validation stay compatible with existing responses.
+            return JsonSerializer.SerializeToElement(new{type="object",additionalProperties=false,required=new[]{"annotations","feedback"},properties=new{annotations=standard.GetProperty("annotations"),feedback=standard.GetProperty("feedback")}});
+        }
+        return JsonSerializer.SerializeToElement(new {
         type="object",additionalProperties=false,required=new[]{"feedback","annotations"},properties=new {
             feedback=new{type="string",minLength=1,maxLength=compact?600:12000},
             annotations=new{type="array",maxItems=compact?8:MaximumAnnotations,items=AnnotationSchemaFor(compact)}
         }
-    });
+        });
+    }
     public static void EnsureComplete(string? doneReason)
     {
         if(string.Equals(doneReason,"length",StringComparison.OrdinalIgnoreCase))
-            throw new CaseChatException(502,"模型回覆達到輸出上限而未完成，原作答已保留，請重試回覆。");
+            throw new CaseChatException(502,"模型回覆達到輸出上限而未完成，原作答已保留，請重試回覆。",new("output_limit","Ollama 回報 done_reason=length；生成碰到輸出上限，系統未接受不完整的正式回饋。"));
     }
     public sealed record FeedbackResult(string Feedback,IReadOnlyList<CaseTextAnnotation> Annotations);
     public static FeedbackResult Parse(string body,string original)
@@ -39,9 +49,9 @@ public static class CaseAnnotationContract
                 ||!root.TryGetProperty("annotations",out var annotations)||annotations.ValueKind!=JsonValueKind.Array)throw Invalid();
             return new(feedback.GetString()!,Validate(original,annotations));
         }
-        catch(JsonException){throw Invalid();}
+        catch(JsonException){throw new CaseChatException(502,"AI 回饋格式不完整，原作答已保留，請重試。",new("feedback_json","模型已回傳文字，但文字不是合法的回饋 JSON；屬系統格式驗證失敗，未確認模型拒答。"));}
     }
-    private static CaseChatException Invalid()=>new(502,"AI 回饋格式不完整，原作答已保留，請重試。");
+    private static CaseChatException Invalid()=>new(502,"AI 回饋格式不完整，原作答已保留，請重試。",new("feedback_format","回饋超過安全長度、缺少 feedback／annotations 必要欄位、欄位型別不符，或 feedback 為空／過長；系統未接受這份回饋。"));
 
     public static IReadOnlyList<CaseTextAnnotation> Validate(string original,JsonElement entries)
     {

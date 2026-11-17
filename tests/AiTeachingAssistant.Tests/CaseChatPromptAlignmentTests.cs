@@ -42,8 +42,10 @@ public sealed class CaseChatPromptAlignmentTests
         Assert.DoesNotContain("9/30", prompt);
         Assert.DoesNotContain("\"feedback\":\"繁體中文教學回饋\"", prompt);
         Assert.DoesNotContain("\"text\":\"精確原文\"", prompt);
-        Assert.True(Encoding.UTF8.GetByteCount(prompt) <= 6500, "Stage prompt must leave room in the existing 12KB conversation budget.");
+        Assert.True(Encoding.UTF8.GetByteCount(prompt) <= (stage==AnalysisStage.IllnessCourse?8500:6500), "Stage prompt must leave room in the existing 12KB conversation budget.");
         Assert.DoesNotContain("annotations", CaseChatPrompts.TeachingInstructions(stage));
+        if(stage==AnalysisStage.IllnessCourse)
+            CaseChatBudget.EnsureFits([new("system",prompt),new("user",new string('測',755))],new AiTeachingAssistant.Options.CaseChatOptions(),new AiTeachingAssistant.Options.OllamaOptions());
     }
 
     [Fact]

@@ -1,5 +1,35 @@
 # 代理工作規則與目前交接
 
+## 2026-11-17 聊天頁籤／教師失敗診斷／2125字容量修正（現行）
+
+聊天模式與教師紀錄改tablist/tab/tabpanel，選取底線、桌面平列／手機橫向捲動，左右/Home/End只移焦點、Enter／Space啟用，保留Raw／未存草稿確認。教師／TA本人當次錯誤可看固定診斷碼／說明／HTTP狀態及失敗實際請求dialog；完成後重查課程角色，學生POV／僅修課教授／降權不提供。任意上游本文、inner exception、thinking不傳送／存DB／log；未知明說未知，舊失敗不重建原因。
+
+2125中文被擋根因是UTF8 bytes與token預算混用。CaseChatBudget分離兩限；只有Omni profile bytecap24000、基本CJK估2tokens／字、傳輸預留512，其他profile預設3／16保持原行為及12KB。仍扣輸出、保留8k字限制、不裁字、不加歷史；是估算非精確tokenizer。合成五段2125字預檢／真正Provider通過、原文完整2messages、prompt4031／response567／stop；Chrome也驗前端確實送AJAX。無真實病例進測試。
+
+Vue288、Chrome30、完整隔離DB394與036→039指紋升級通過、schema清除，靜態審查無可行動問題；標準VS含Vue成功。唯一7173正常bin/Debug PID36752／qwen25-omni，部署24k／2／512及bundle index-5twnEPzG.js核對、/courses200／匿名AI401、舊埠無listener。無Migration，重啟清Raw，正式歷史保留。NU1900／chunk提示非失敗，未提交推送。
+
+使用者另回報真實長文重複評語；僅查metadata：prompt4015／response1762／stop、feedback600字／有效ann5，非16K硬上限錯誤，合法JSON不表示品質通過。沒有讀出／重送其原文或存到測試文件。B細碼／混合時點及重複仍有問題，未擅自新增分段分析或自動品質判定，後續應另以合成長短文對照驗證。
+
+## 2026-11-17 正式B回饋v4已部署（品質仍有限制）
+
+依使用者要求開始修正，保留完整教授規則，只在正式B追加ABCD／子碼與時點對照，B提醒有問題才修改，schema先annotations後feedback，仍一次api/chat。A/C/D與Studio原規則／v3、Raw及四profile不變。B用professor-four-phase-20261117-b-v4，workflow持久化／retry及本人請求capture版本一致；舊歷史不重寫，舊B失敗不可用新版冒稱重試，需重新開始B自行提交。
+
+真正Provider最終7原例＋4新例均完整JSON，但細碼、舊手術／本次混碼、無據職災及status仍錯，不是教學品質通過。system7704 bytes，原12KB guard不放寬，755中文字可容納；詳docs/ai-tuning/03-evaluation-results.md。禁止把格式測試當語意正確或程式猜碼修評語。
+
+隔離DB385/385、036→039指紋升級通過且schema刪；Chrome請求／標註11/11、標準VS含Vue通過。靜態審查無需修正事項。初受限testhost逾時，已在允許執行環境重跑成功；NU1900弱點來源與原chunk提示非失敗。唯一7173正常bin/Debug PID27984／qwen25-omni，部署Bv4／Av3反射核對，/courses200／匿名AI401、舊埠無listener，bundle index-BOZ0N_8q.js。重啟清Raw，正式歷史保留。無Migration／正式資料修改，文件同步，保留dirty工作，未提交推送。
+
+## 2026-11-17 B分類／回饋診斷（未調校）
+
+使用者觀察B較困難。現行Omni真正Provider＋教授v3合成7短例均完整JSON／stop，輸入2138–2148，仍有B1當另一階段、B3否認已寫病灶、B7b未來目標誤C5、混合A/B概括錯置及重複回饋。細碼與status不可靠，不能視為教學驗收或都歸因截斷，詳docs/ai-tuning/03-evaluation-results.md新紀錄。
+
+本輪診斷／文件，無正式Prompt／profile／payload／版本／DB／Migration修改、無重啟，未使用真實作答。探針成功建置（NU1900弱點來源網路警告）；無程式改動，未重跑全量產品測試。保留dirty工作，未提交推送。
+
+## 2026-11-17 編碼徽章依ABCD配色
+
+依使用者要求，共用PhaseAnnotatedAnswer的行內編碼改用A藍／B綠／C紫／D橘的分類底色白字；同片段跨phase多碼各自著色，保留共同tooltip觸發與原文。沿既有category palette，淺色與底線色相同，深色用同色系深底維持白字對比（底線仍較亮）。底線切換／分類metadata不變。
+
+先擴充既有測試確認缺少逐碼phase、2項失敗，再修正；相關Vue49/49、Chrome桌面／390淺深色6/6與Vite通過，已檢視390深色合成截圖。只前端，未重啟7173／改模型／DB；現供index-BOZ0N_8q.js。文件同步，原chunk警告保留，未提交推送。
+
 ## 2026-11-17 輸入容量診斷（未改設定）
 
 使用者懷疑Taipei截斷Prompt。11次直接合成容量探針＋1次現行Provider合成Stage：Omni在請求16384下實收10079 prompt tokens並找回首／中／尾key；超量時Taipei兩模型及IAN02 Llama3皆回報約8192並丟失前文key，非Taipei獨有固定4096上限。現行Stage合成2375輸入tokens／stop仍有錯碼，分類失準不能全歸因容量。不同tokenizer不可按相同bytes直接比較；未取得host log，不宣稱已定位runner根因。詳docs/ollama/context-size-check.md。

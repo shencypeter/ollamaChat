@@ -13,6 +13,38 @@ namespace AiTeachingAssistant.Tests;
 
 public class CaseAnalysisChatTests
 {
+    [FormativeDatabaseFact] public async Task OnlyCurrentCourseStaffReceiveSafeFailureDetailsAndTheirFailedRequest()
+    {
+        await using var f=await Fixture.Create();
+        foreach(var (actor,role) in new[]{(f.Teacher,"teacher"),(f.Ta,"ta"),(f.Student,"student")}){
+            using var h=new InspectionHarness(f,actor,role);h.Transport.Status=503;
+            var action=Assert.IsAssignableFrom<ObjectResult>(await h.Controller.Send(f.Course,"illnessCourse",new(){RequestId=Guid.NewGuid(),Content="合成失敗診斷作答"},default));Assert.Equal(502,action.StatusCode);
+            var result=CaseJson(action);Assert.DoesNotContain("SENSITIVE",result.ToString());
+            Assert.Equal(role!="student",result.TryGetProperty("diagnostic",out var diagnostic));Assert.Equal(role!="student",result.TryGetProperty("requestInspection",out var capture));
+            if(role!="student"){Assert.Equal("provider_http",diagnostic.GetProperty("code").GetString());Assert.Equal(503,diagnostic.GetProperty("upstreamStatus").GetInt32());Assert.Single(capture.GetProperty("requests").EnumerateArray());}
+            var rawId=h.Raw.Create(f.Course,actor);var rawError=CaseJson(await h.Controller.SendRaw(f.Course,rawId,new(){Content="合成Raw失敗診斷"},default));
+            Assert.Equal(role!="student",rawError.TryGetProperty("diagnostic",out _));Assert.Equal(role!="student",rawError.TryGetProperty("requestInspection",out _));
+            await h.Raw.ClearAll(actor,default);
+            var stored=await f.Sql("SELECT string_agg(content,'') FROM case_analysis_messages WHERE session_id IN (SELECT id FROM case_analysis_sessions WHERE course_id=$1 AND student_id=$2)",f.Course,actor);Assert.DoesNotContain("SENSITIVE",stored!.ToString());Assert.DoesNotContain("provider_http",stored.ToString());
+        }
+        using var revoked=new InspectionHarness(f,f.Teacher,"teacher");revoked.Transport.Status=503;revoked.Transport.BeforeReply=async()=>{await f.Sql("UPDATE course_members SET course_role='student' WHERE course_id=$1 AND user_id=$2",f.Course,f.Teacher);};
+        var downgraded=CaseJson(await revoked.Controller.Send(f.Course,"premorbid",new(){RequestId=Guid.NewGuid(),Content="合成降權失敗診斷"},default));Assert.False(downgraded.TryGetProperty("diagnostic",out _));Assert.False(downgraded.TryGetProperty("requestInspection",out _));
+    }
+    [FormativeDatabaseFact] public async Task IllnessPromptVersionIsRecordedWithoutRewritingLegacyMessagesOrRetryingThemUnderNewRules()
+    {
+        await using var f=await Fixture.Create();var first=Guid.NewGuid();
+        var history=await f.Workflow.Send(f.Course,f.Student,"illnessCourse",new(){RequestId=first,Content="合成B階段作答"},default);
+        Assert.All(history.Sessions.Single().Messages,m=>Assert.Equal(CaseChatPrompts.VersionFor(AnalysisStage.IllnessCourse),m.PromptVersion));
+        // Seed a legacy record; immutable historical metadata must never be rewritten.
+        var failed=Guid.NewGuid();var session=history.ActiveSessionId!.Value;
+        var sequence=await f.Sql("UPDATE case_analysis_sessions SET next_sequence=next_sequence+1 WHERE id=$1 RETURNING next_sequence-1",session);
+        await f.Sql("INSERT INTO case_analysis_messages(id,session_id,role,content,sequence_number,response_status,model_name,prompt_version,created_at,failure_code) VALUES($1,$2,'user','合成舊版失敗作答',$3,'failed','mock-model',$4,$5,'provider_failed')",failed,session,sequence!,CaseChatPrompts.Version,DateTimeOffset.UtcNow);
+        var calls=f.Provider.Requests.Count;
+        Assert.Equal(409,(await Assert.ThrowsAsync<CaseChatException>(()=>f.Workflow.Retry(f.Course,f.Student,"illnessCourse",failed,default))).StatusCode);Assert.Equal(calls,f.Provider.Requests.Count);
+        var retained=await f.Workflow.History(f.Course,f.Student,"illnessCourse",default);Assert.Equal("合成舊版失敗作答",retained.Sessions.Single().Messages.Last().Content);
+        Assert.All(retained.Sessions.Single().Messages.Take(2),m=>Assert.Equal(CaseChatPrompts.VersionFor(AnalysisStage.IllnessCourse),m.PromptVersion));
+        Assert.Equal(CaseChatPrompts.Version,retained.Sessions.Single().Messages.Last().PromptVersion);
+    }
     [FormativeDatabaseFact] public async Task OnlyCurrentCourseStaffReceiveOwnActualRequestsAndHistoryNeverContainsThem()
     {
         await using var f=await Fixture.Create();
@@ -24,6 +56,7 @@ public class CaseAnalysisChatTests
             Assert.Equal(role!="student",sent.TryGetProperty("requestInspection",out var inspection));
             if(role!="student")
             {
+                Assert.Equal(CaseChatPrompts.VersionFor(AnalysisStage.IllnessCourse),inspection.GetProperty("promptVersion").GetString());
                 var captured=Assert.Single(inspection.GetProperty("requests").EnumerateArray());
                 using var actual=JsonDocument.Parse(h.Transport.Body!);Assert.Equal(actual.RootElement.GetRawText(),captured.GetProperty("payload").GetRawText());
                 using var answer=JsonDocument.Parse(captured.GetProperty("payload").GetProperty("messages")[1].GetProperty("content").GetString()!);
@@ -81,10 +114,11 @@ public class CaseAnalysisChatTests
     }
     private sealed class InspectionTransport:HttpMessageHandler
     {
-        public string? Body;public int Calls;public Func<Task>? BeforeReply;
+        public string? Body;public int Calls;public int Status=200;public Func<Task>? BeforeReply;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct)
         {
             Body=await request.Content!.ReadAsStringAsync(ct);Calls++;if(BeforeReply is {} action)await action();
+            if(Status!=200)return new((System.Net.HttpStatusCode)Status){Content=new StringContent("{\"error\":\"SENSITIVE_UPSTREAM_BODY\"}")};
             return new(System.Net.HttpStatusCode.OK){Content=new StringContent(JsonSerializer.Serialize(new{message=new{role="assistant",content="{\"feedback\":\"合成回饋\",\"annotations\":[]}",thinking="private thinking must not be returned"},done_reason="stop",eval_count=3,eval_duration=100000000}))};
         }
     }

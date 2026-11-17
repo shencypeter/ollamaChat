@@ -64,10 +64,10 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
             currentPhase=stage.HasValue?AnalysisStageCatalog.PhaseCode(stage.Value):null,
             currentStage=stage.HasValue?AnalysisStageCatalog.Get(stage.Value).Key:null,
             currentStageLabel=stage.HasValue?AnalysisStageCatalog.Get(stage.Value).Label:null,
-            outputRequirements="只評閱 answerText 本次作答，先逐句核對 currentPhase。feedback依序說明目前作答階段、原文實際分類、修改建議；不要把目前階段當成原文所屬分類，不能只稱讚。混合本階段事件與他階段背景時分開說明，必要背景可保留，不概括整份錯置。無獨立病例原文不能宣稱資料遺漏。用繁體中文精簡回饋，不代寫。只回傳 feedback 與 annotations 的 JSON；標註逐字引用 answerText 及0起算 occurrence，不標回饋或包裝、不必計算位置。",
+            outputRequirements=CaseChatPrompts.FeedbackRequirements(stage),
             answerText=request[current].Content
         },new System.Text.Json.JsonSerializerOptions{Encoder=System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping}));
-        return IsolatedConversationAsync(request,CaseAnnotationContract.SchemaFor(_options.CompactCaseFeedback),cancellationToken,_options.CaseFeedbackMaxTokens);
+        return IsolatedConversationAsync(request,CaseAnnotationContract.SchemaFor(_options.CompactCaseFeedback,annotationsFirst:stage==AnalysisStage.IllnessCourse),cancellationToken,_options.CaseFeedbackMaxTokens);
     }
 
     private async Task<(string Content, string? Thinking, RequestMetrics Metrics)> IsolatedConversationAsync(
@@ -77,11 +77,19 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         {
             return await ChatCoreAsync(messages.Select(m => new OllamaMessage(m.Role, m.Content)).ToArray(), schema, cancellationToken, conversation: true,maxOutputTokens:maxOutputTokens);
         }
+        catch (OperationCanceledException) when(!cancellationToken.IsCancellationRequested)
+        {
+            throw new CaseChatException(502,"模型暫時無法回覆，請稍後重試。",new("provider_timeout","等候模型服務超時；沒有取得完整回覆，並非確認模型拒答。"));
+        }
         catch (OperationCanceledException)
         {
             throw new OperationCanceledException("Ollama conversation request was canceled.", cancellationToken);
         }
         catch (CaseChatException){throw;}
+        catch(HttpRequestException)
+        {
+            throw new CaseChatException(502,"模型暫時無法回覆，請稍後重試。",new("provider_unreachable","無法連線至模型服務，或連線在回覆完成前中斷。"));
+        }
         catch (Exception)
         {
             // Never retain provider body text through an inner exception or log.
@@ -132,6 +140,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         var content = result.Message?.Content;
         if (string.IsNullOrWhiteSpace(content))
         {
+            if(conversation)throw new CaseChatException(502,"模型暫時無法回覆，請稍後重試。",new("empty_reply","模型服務回傳成功狀態，但沒有非空白的 assistant 回覆。"));
             throw new InvalidOperationException("Ollama returned no assistant message.");
         }
 
@@ -213,6 +222,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
 
         if (!response.IsSuccessStatusCode)
         {
+            if(conversation)throw new CaseChatException(502,"模型暫時無法回覆，請稍後重試。",CaseChatFailure.FromHttp((int)response.StatusCode,rawResponse));
             if (!conversation) logger.LogWarning("Ollama chat failed with {StatusCode}; response body omitted to protect clinical data.", response.StatusCode);
             throw new HttpRequestException($"Ollama returned {(int)response.StatusCode} ({response.ReasonPhrase}).");
         }
@@ -234,6 +244,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         }
         catch (System.Text.Json.JsonException exception)
         {
+            if(conversation)throw new CaseChatException(502,"模型暫時無法回覆，請稍後重試。",new("provider_json","模型服務回傳的 HTTP 本文不是可解析的 Ollama JSON 回應。"));
             throw new InvalidOperationException("Ollama returned an invalid JSON response.", exception);
         }
     }

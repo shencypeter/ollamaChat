@@ -14,6 +14,44 @@ namespace AiTeachingAssistant.Tests;
 
 public sealed class CaseConversationPayloadTests
 {
+    [Theory]
+    [InlineData("model SENSITIVE_MODEL not found","model_missing")]
+    [InlineData("SENSITIVE out of memory","provider_memory")]
+    [InlineData("SENSITIVE context length exceeded","provider_context")]
+    public void KnownUpstreamReasonsAreClassifiedWithoutEchoingTheError(string upstream,string code)
+    {
+        var result=CaseChatFailure.FromHttp(500,JsonSerializer.Serialize(new{error=upstream}));
+        Assert.Equal(code,result.Code);Assert.DoesNotContain("SENSITIVE",JsonSerializer.Serialize(result));
+    }
+    [Theory]
+    [InlineData(404,"provider_http")][InlineData(503,"provider_http")]
+    public async Task ConversationErrorsKeepSafeStatusDiagnosticsWithoutUpstreamBody(int status,string code)
+    {
+        var capture=new Capture{Status=(HttpStatusCode)status,Response="{\"error\":\"SENSITIVE_UPSTREAM_BODY\"}"};
+        var client=new OllamaClient(new HttpClient(capture){BaseAddress=new Uri("http://localhost:11434/")},Microsoft.Extensions.Options.Options.Create(new OllamaOptions()),new CaptureLogger());
+        var failure=await Assert.ThrowsAsync<CaseChatException>(()=>client.ConversationAsync([new("user","SENSITIVE_INPUT")],default));
+        Assert.Equal(code,failure.Diagnostic!.Code);Assert.Equal(status,failure.Diagnostic.UpstreamStatus);
+        Assert.DoesNotContain("SENSITIVE",JsonSerializer.Serialize(failure.Diagnostic));Assert.DoesNotContain("SENSITIVE",failure.ToString());
+    }
+    [Fact] public async Task IllnessFeedbackDistinguishesPhaseFromSubcodesWithoutForcingACorrectionOrChangingOtherStages()
+    {
+        var capture=new Capture();var client=new OllamaClient(new HttpClient(capture){BaseAddress=new Uri("http://localhost:11434/")},Microsoft.Extensions.Options.Options.Create(new OllamaOptions()),new CaptureLogger());
+        const string original="  合成原文😀\n";
+        await client.CaseFeedbackAsync([new("system",CaseChatPrompts.Get(AnalysisStage.IllnessCourse)),new("user",original)],AnalysisStage.IllnessCourse,default);
+        using var request=JsonDocument.Parse(capture.Body!);var messages=request.RootElement.GetProperty("messages");
+        Assert.Equal("annotations",request.RootElement.GetProperty("format").GetProperty("properties").EnumerateObject().First().Name);
+        Assert.Contains("B階段不等於B4",messages[0].GetProperty("content").GetString());
+        using var answer=JsonDocument.Parse(messages[1].GetProperty("content").GetString()!);
+        Assert.Equal(original,answer.RootElement.GetProperty("answerText").GetString());
+        Assert.Contains("有實際問題才建議修改",answer.RootElement.GetProperty("outputRequirements").GetString());
+        Assert.DoesNotContain("不能只稱讚",answer.RootElement.GetProperty("outputRequirements").GetString());
+        foreach(var stage in new[]{AnalysisStage.Premorbid,AnalysisStage.FunctionalAssessment,AnalysisStage.Psychosocial}){
+            Assert.DoesNotContain("B階段不等於B4",CaseChatPrompts.Get(stage));
+            Assert.Equal(CaseChatPrompts.Version,CaseChatPrompts.VersionFor(stage));
+        }
+        Assert.NotEqual(CaseChatPrompts.Version,CaseChatPrompts.VersionFor(AnalysisStage.IllnessCourse));
+        Assert.DoesNotContain("層級對照",CaseChatPrompts.TeachingInstructions(AnalysisStage.IllnessCourse));
+    }
     [Fact] public async Task CompactCaseBudgetKeepsRawShortAndReturnsBoundedFormalSchemaWithoutMutatingSampling()
     {
         var settings=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{["Model"]="test-omni",["AssessmentSampling:NumPredict"]="512",["CaseFeedbackMaxTokens"]="4096",["CompactCaseFeedback"]="true"}).Build().Get<OllamaOptions>()!;

@@ -1,5 +1,19 @@
 # Ollama 模型設定與有效負載保存
 
+## 2026-11-17 中文預檢與教師錯誤診斷
+
+修正將UTF8bytes當token而擋下2125中文字的問題：獨立bytecap與token估計，只有Omni profile採24000bytes、CjkContextTokensPerCharacter=2及ContextTokenOverhead=512；其他三份不改，預設3／16保留原行為，仍預留實際輸出。這不是精確tokenizer，原文不裁字、Stage不加歷史。真正Provider合成五段2125字完整送達、2messages、prompt4031／response567／stop。Bv4及模型／抽樣未改；本節取代下方較早Omni預檢仍12KB的現行效力。
+
+本人課程teacher／TA當次失敗可看固定原因／HTTP狀態並開實際失敗請求；控制器完成後重新授權，學生POV／學生／降權不提供。任意服務本文、內層例外及thinking不回傳；已知模型未安裝／記憶體／context／逾時只映射固定文字，未知明說未知。資料只留頁面，不寫DB／log／storage，舊失敗不重建。[請求dialog](request-dialog.md)及[五模式說明](../case-analysis-chat.md)。
+
+另有使用者長文回報重複，僅讀metadata prompt4015／response1762／stop、feedback600字／有效ann5：不是容量錯誤，合法JSON不代表可靠，未擅自調模型／分段或讀出病例。Vue288、Chrome30、隔離DB394與正常VS含Vue通過，7173已更新。
+
+## 2026-11-17 B提示v4與生成順序
+
+課內正式B保留完整教授system，再加層級／時點對照，user提醒取消強迫修改；format.properties及required先annotations後feedback，仍單次api/chat。四份profile、抽樣、Raw及其他階段不改，未採用實驗的ChatML／generate／兩次呼叫。B的請求彈窗及DB版本為professor-four-phase-20261117-b-v4，A/C/D仍v3，Studio不變。舊B失敗訊息須另開本階段再自行提交，不將新提示冒稱舊版重試。
+
+system7704 UTF-8 bytes，預檢仍12KB，未增加context或截斷學生文字。385項隔離DB回歸及升級指紋通過；11次最終合成請求完整JSON，不等於11次正確分類。細碼及混合時點仍有錯，詳[模型評估](../ai-tuning/03-evaluation-results.md)。
+
 ## 2026-11-17 輸入長度實測
 
 已比較Taipei Omni／Breeze與IAN02 Llama3的實際載入容量、prompt token量及首／中／尾合成標記。Omni可在16384設定讀10079 tokens，沒有固定卡4096；刻意溢位時兩台均有前文截斷跡象。正式Stage合成2375輸入tokens仍有錯碼，不能把分類失準全部歸因截斷。未改設定／Prompt／模板或重啟，詳[容量診斷與限制](context-size-check.md)。

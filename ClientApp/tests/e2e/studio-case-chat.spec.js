@@ -3,6 +3,22 @@ import {readFileSync} from 'node:fs'
 import {resolve,basename} from 'node:path'
 import {fileURLToPath} from 'node:url'
 
+for(const width of [1440,390])for(const staff of [true,false])test(`chat tabs and safe failure diagnostics ${width}px staff=${staff}`,async({page})=>{
+ await page.setViewportSize({width,height:1000});await fixture(page,staff);let receivedLength=0
+ await page.route('**/api/courses/chat-course/case-analysis/stages/illnessCourse/messages',async route=>{
+  const content=route.request().postDataJSON().content;receivedLength=content.length
+  await route.fulfill({status:502,json:{error:'模型回覆未完成，原作答已保留。',diagnostic:{code:'output_limit',reason:'Ollama 回報 done_reason=length；輸出達上限，系統未接受不完整回饋。'},requestInspection:requestCapture([{role:'user',content}],'illnessCourse')}})
+ })
+ await page.goto('/courses/chat-course?section=case-analysis');if(width===390)await page.getByRole('button',{name:'切換深色模式',exact:true}).click()
+ const list=page.getByRole('tablist',{name:'聊天模式'}),raw=list.getByRole('tab',{name:'純 AI 聊天（無教學提示詞）',exact:true}),b=list.getByRole('tab',{name:'B 疾病病程',exact:true})
+ await expect(list.getByRole('tab')).toHaveCount(staff?6:5);await raw.focus();await page.keyboard.press('ArrowRight');await expect(list.getByRole('tab',{name:'A 病前功能',exact:true})).toBeFocused();await page.keyboard.press('ArrowRight');await expect(b).toBeFocused();await expect(raw).toHaveAttribute('aria-selected','true');await page.keyboard.press('Enter');await expect(b).toHaveAttribute('aria-selected','true')
+ expect(await page.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe(await b.getAttribute('id'));expect(await b.evaluate(e=>getComputedStyle(e).borderBottomWidth)).toBe('3px')
+ const prose=Array(5).fill('測'.repeat(423)).join('\n\n')+'測測';await page.getByLabel('訊息',{exact:true}).fill(prose);await page.getByRole('button',{name:'提交並取得 AI 助教回饋',exact:true}).click();await expect(page.getByRole('alert')).toContainText('模型回覆未完成');expect(receivedLength).toBe(2125);await expect(page.getByLabel('訊息',{exact:true})).toHaveValue(prose)
+ await expect(page.locator('[data-failure-diagnostic]')).toHaveCount(staff?1:0);await expect(page.getByRole('button',{name:'查看失敗請求',exact:true})).toHaveCount(staff?1:0)
+ if(staff){await expect(page.locator('[data-failure-diagnostic]')).toContainText('done_reason=length');await page.screenshot({path:`test-results/chat-tabs-error-${width}.png`,fullPage:true});await page.getByRole('button',{name:'查看失敗請求',exact:true}).click();await expect(page.getByRole('dialog',{name:'失敗請求診斷',exact:true})).toContainText('synthetic-model');await page.keyboard.press('Escape')}
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+})
+
 // Production bundle + synthetic API only: no service startup, database, or model request.
 const portal=resolve(fileURLToPath(new URL('../../../wwwroot/portal/',import.meta.url)))
 const stages=[{key:'premorbid',label:'A 病前功能'},{key:'illnessCourse',label:'B 疾病病程'},{key:'functionalAssessment',label:'C 功能評估結果'},{key:'psychosocial',label:'D 心理社會條件'}]
@@ -72,13 +88,13 @@ for(const width of [1440,390])test(`case chat raw isolation and persisted stage 
  expect(await log.locator('b').count()).toBe(0)
  const sends=state.requests.filter(r=>r.path.endsWith('/raw-1/messages'));expect(sends.map(r=>r.body)).toEqual([{content:'第一輪'},{content:'第二輪'},{content:'<b>第三輪純文字</b>'}])
  page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('link',{name:'← 返回我的課程',exact:true}).click();await expect(page).toHaveURL(/section=case-analysis/);await expect(log).toContainText('第一輪')
- page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'A 病前功能',exact:true}).click();await expect(log).toContainText('第一輪')
- page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'A 病前功能',exact:true}).click();await expect(log).not.toContainText('第一輪')
+ page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('tab',{name:'A 病前功能',exact:true}).click();await expect(log).toContainText('第一輪')
+ page.once('dialog',dialog=>dialog.accept());await page.getByRole('tab',{name:'A 病前功能',exact:true}).click();await expect(log).not.toContainText('第一輪')
  await page.getByLabel('訊息',{exact:true}).fill('階段合成訊息');await page.getByRole('button',{name:'提交並取得 AI 助教回饋',exact:true}).click();await expect(log).toContainText('已保存的階段回覆')
  await page.reload();await expect(log).not.toContainText('階段合成訊息');expect(state.getRawCount()).toBe(2)
- await page.getByRole('button',{name:'A 病前功能',exact:true}).click();await expect(log).toContainText('已保存的階段回覆')
+ await page.getByRole('tab',{name:'A 病前功能',exact:true}).click();await expect(log).toContainText('已保存的階段回覆')
  expect(state.requests.some(r=>r.path.includes('/records'))).toBe(false)
- await expect(page.locator('[data-mode="premorbid"]')).toHaveCSS('background-color','rgb(91, 95, 199)')
+ await expect(page.locator('[data-mode="premorbid"]')).toHaveAttribute('aria-selected','true');await expect(page.locator('[data-mode="premorbid"]')).toHaveCSS('border-bottom-width','3px')
  await page.screenshot({path:`test-results/case-chat-${width}.png`,fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([])
 })
 for(const [width,mode] of [[1440,'raw'],[390,'premorbid']])test(`pending AI reply placeholder at ${width}px in ${mode}`,async({page})=>{
@@ -104,7 +120,7 @@ for(const [width,mode] of [[1440,'raw'],[390,'premorbid']])test(`pending AI repl
 })
 test('teacher reads formal records and uses the owner course toggle',async({page})=>{
  const state=await fixture(page,true);await page.goto('/courses/chat-course?section=case-analysis')
- await expect(page.getByText(/教師／助教教學練習/)).toBeVisible();await page.getByRole('button',{name:'學生紀錄與統計',exact:true}).click()
+ await expect(page.getByText(/教師／助教教學練習/)).toBeVisible();await page.getByRole('tab',{name:'學生紀錄與統計',exact:true}).click()
  await expect(page.getByText(/全課程合計/)).toBeVisible();await page.getByRole('button',{name:'TEST01 合成學員',exact:true}).click();await expect(page.getByRole('log')).toContainText('合成正式學生對話');await expect(page.locator('textarea')).toHaveCount(0)
  await page.getByRole('link',{name:'課程設定',exact:true}).click();await page.getByLabel('啟用個案分析 AI 助教',{exact:true}).uncheck();await expect(page.getByLabel('啟用個案分析 AI 助教',{exact:true})).not.toBeChecked()
  expect(state.requests).toContainEqual({path:'/courses/chat-course/case-analysis/settings',method:'PUT',body:{enabled:false}})
@@ -135,7 +151,7 @@ test('BFcache lifecycle events allocate a new raw context without restoring prio
 })
 
 for(const width of [1440,390])test(`feedback round selection and immutable revision at ${width}px`,async({page})=>{
- await page.setViewportSize({width,height:1000});const state=await fixture(page,false,false,roundHistory());await page.goto('/courses/chat-course?section=case-analysis');await page.getByRole('button',{name:'A 病前功能',exact:true}).click()
+ await page.setViewportSize({width,height:1000});const state=await fixture(page,false,false,roundHistory());await page.goto('/courses/chat-course?section=case-analysis');await page.getByRole('tab',{name:'A 病前功能',exact:true}).click()
  const log=page.getByRole('log',{name:'對話內容'}),sidebar=page.getByRole('complementary',{name:'回饋輪次'})
  await expect(sidebar.locator('[data-round] strong')).toHaveText(['第 3 輪 · 修改 1 次','第 2 輪 · 原始作答','第 1 輪 · 原始作答'])
  await expect(sidebar.locator('[data-round]')).toHaveCount(3);await expect(log).toContainText('第三輪合成回饋');await expect(log).not.toContainText('第一輪合成回饋')
@@ -146,22 +162,22 @@ for(const width of [1440,390])test(`feedback round selection and immutable revis
  page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'修改這次作答',exact:true}).click();await expect(page.getByLabel('訊息',{exact:true})).toHaveValue('  第一份原始作答 \n')
  await page.getByLabel('訊息',{exact:true}).fill('  從第一輪修改 \n');await page.getByRole('button',{name:'提交並取得 AI 助教回饋',exact:true}).click();await expect(log).toContainText('已保存的階段回覆');await expect(sidebar.locator('[data-round]')).toHaveCount(4)
  const sent=state.requests.filter(r=>r.path.endsWith('/premorbid/messages')&&r.method==='POST');expect(sent).toHaveLength(1);expect(sent[0].body).toEqual({requestId:expect.any(String),content:'  從第一輪修改 \n',revisesMessageId:'u1'});expect(state.getHistory('premorbid').sessions[0].messages[0].content).toBe('  第一份原始作答 \n')
- await expect(page.locator('[data-mode="premorbid"]')).toHaveAttribute('aria-pressed','true');await expect(page.getByRole('button',{name:'下一階段：B 疾病病程',exact:true})).toBeVisible()
+ await expect(page.locator('[data-mode="premorbid"]')).toHaveAttribute('aria-selected','true');await expect(page.getByRole('button',{name:'下一階段：B 疾病病程',exact:true})).toBeVisible()
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/feedback-rounds-${width}.png`,fullPage:true})
- await page.getByRole('button',{name:'下一階段：B 疾病病程',exact:true}).click();await expect(page.locator('[data-mode="illnessCourse"]')).toHaveAttribute('aria-pressed','true');await expect(log).not.toContainText('從第一輪修改');expect(state.requests.some(r=>/grade|unlock|pass/.test(r.path))).toBe(false)
+ await page.getByRole('button',{name:'下一階段：B 疾病病程',exact:true}).click();await expect(page.locator('[data-mode="illnessCourse"]')).toHaveAttribute('aria-selected','true');await expect(log).not.toContainText('從第一輪修改');expect(state.requests.some(r=>/grade|unlock|pass/.test(r.path))).toBe(false)
 })
 
 test('keyboard navigation and session changes preserve unsent revisions when confirmation is canceled',async({page})=>{
- const seeded=roundHistory();seeded.sessions.push({id:'closed-session',status:'closed',messages:[{id:'old-user',role:'user',content:'歷史作答',status:'completed'}]});await fixture(page,false,false,seeded);await page.goto('/courses/chat-course?section=case-analysis');await page.getByRole('button',{name:'A 病前功能',exact:true}).click()
+ const seeded=roundHistory();seeded.sessions.push({id:'closed-session',status:'closed',messages:[{id:'old-user',role:'user',content:'歷史作答',status:'completed'}]});await fixture(page,false,false,seeded);await page.goto('/courses/chat-course?section=case-analysis');await page.getByRole('tab',{name:'A 病前功能',exact:true}).click()
  const draft=page.getByLabel('訊息',{exact:true}),revise=page.getByRole('button',{name:'修改這次作答',exact:true}),selector=page.locator('.history-select select')
  await page.locator('[data-round="u1"]').click();await revise.click();await draft.fill('  尚未提交的修改 \n')
  page.once('dialog',dialog=>dialog.dismiss());await revise.focus();await page.keyboard.press('Enter');await expect(draft).toHaveValue('  尚未提交的修改 \n');await expect(page.locator('.revision-notice')).toContainText('第 1 輪')
  page.once('dialog',dialog=>dialog.dismiss());await selector.selectOption('closed-session');await expect(selector).toHaveValue('stage-session');await expect(draft).toHaveValue('  尚未提交的修改 \n')
- page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'下一階段：B 疾病病程',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.locator('[data-mode="premorbid"]')).toHaveAttribute('aria-pressed','true')
+ page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('button',{name:'下一階段：B 疾病病程',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.locator('[data-mode="premorbid"]')).toHaveAttribute('aria-selected','true')
  page.once('dialog',dialog=>dialog.dismiss());await page.getByRole('link',{name:'← 返回我的課程',exact:true}).focus();await page.keyboard.press('Enter');await expect(page).toHaveURL(/section=case-analysis/);await expect(draft).toHaveValue('  尚未提交的修改 \n')
  page.once('dialog',dialog=>dialog.accept());await selector.selectOption('closed-session');await expect(selector).toHaveValue('closed-session');await expect(page.locator('textarea')).toHaveCount(0);await selector.selectOption('stage-session');await expect(draft).toHaveValue('');await expect(page.locator('.revision-notice')).toHaveCount(0)
  await page.locator('[data-round="u1"]').click();await revise.click();await draft.fill('將由確認覆寫');page.once('dialog',dialog=>dialog.accept());await revise.focus();await page.keyboard.press('Enter');await expect(draft).toHaveValue('  第一份原始作答 \n')
- page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'下一階段：B 疾病病程',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.locator('[data-mode="illnessCourse"]')).toHaveAttribute('aria-pressed','true');await expect(draft).toHaveValue('')
+ page.once('dialog',dialog=>dialog.accept());await page.getByRole('button',{name:'下一階段：B 疾病病程',exact:true}).focus();await page.keyboard.press('Enter');await expect(page.locator('[data-mode="illnessCourse"]')).toHaveAttribute('aria-selected','true');await expect(draft).toHaveValue('')
 })
 
 for(const width of [1440,390])test.describe(`phase annotations at ${width}px`,()=>{
@@ -170,13 +186,21 @@ for(const width of [1440,390])test.describe(`phase annotations at ${width}px`,()
   const seeded=annotatedHistory(),original=seeded.sessions[0].messages[0].content,errors=[];page.on('pageerror',e=>errors.push(e.message))
   await fixture(page,false,false,seeded);await page.goto('/courses/chat-course?section=case-analysis')
   if(theme==='dark')await page.getByRole('button',{name:'切換深色模式',exact:true}).click()
-  await page.getByRole('button',{name:'A 病前功能',exact:true}).click();await page.locator('[data-round="annotated-u"]').click()
+  await page.getByRole('tab',{name:'A 病前功能',exact:true}).click();await page.locator('[data-round="annotated-u"]').click()
   const answer=page.locator('[data-annotated-text]'),triggers=answer.locator('[data-annotation-segment]'),tooltip=page.getByRole('tooltip')
   await expect(answer).toBeVisible();expect(await answer.textContent()).toBe(original);await expect(answer.locator('b')).toHaveCount(0)
   await expect(answer.locator('[data-phases="A C"]')).toHaveCount(1)
   expect((await answer.evaluate(e=>getComputedStyle(e).getPropertyValue('--phase-A'))).trim()).toBe(theme==='dark'?'#86bbff':'#1861b8')
   expect(await answer.locator('[data-current-phase="A"]').first().evaluate(e=>getComputedStyle(e).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
   for(const phase of ['B','C','D'])expect(await answer.locator(`[data-underline-phases~="${phase}"]`).first().evaluate(e=>getComputedStyle(e).backgroundImage)).toContain('linear-gradient')
+  await page.locator('[data-annotation-mode="badges"]').click()
+  for(const [phase,color] of Object.entries({A:'rgb(24, 97, 184)',B:'rgb(22, 115, 67)',C:'rgb(133, 58, 195)',D:'rgb(167, 78, 11)'})){
+   const codes=answer.locator(`[data-reference-phase="${phase}"]`);expect(await codes.count()).toBeGreaterThan(0)
+   for(const code of await codes.all()){expect(await code.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe(color);expect(await code.evaluate(el=>getComputedStyle(el).color)).toBe('rgb(255, 255, 255)')}
+  }
+  await expect(answer.locator('[data-annotation-reference]').filter({has:page.locator('[data-reference-phase="A"]')}).filter({has:page.locator('[data-reference-phase="C"]')})).toHaveCount(1)
+  await page.screenshot({path:`test-results/annotation-phase-badges-${width}-${theme}.png`,fullPage:true})
+  await page.locator('[data-annotation-mode="underline"]').click()
   await triggers.first().focus();await expect(tooltip).toContainText('A1a — 年齡');await expect(tooltip).toContainText('A1b — 性別');await page.keyboard.press('Escape');await expect(tooltip).toHaveCount(0)
   if(width===390){await triggers.first().tap();await expect(tooltip).toBeVisible();await triggers.first().tap();await expect(tooltip).toHaveCount(0)}
   else{await triggers.first().hover();await expect(tooltip).toBeVisible();await tooltip.hover();await page.waitForTimeout(180);await expect(tooltip).toBeVisible()}
@@ -197,10 +221,10 @@ for(const [width,theme] of [[1440,'light'],[390,'dark']])test.describe(`referenc
  const seeded={activeSessionId:'references',sessions:[{id:'references',stage:'illnessCourse',status:'active',messages:[{id:'first-u',role:'user',content:text,status:'completed'},{id:'first-a',role:'assistant',replyTo:'first-u',content:'合成回饋',annotations},{id:'second-u',role:'user',content:text,status:'completed'},{id:'second-a',role:'assistant',replyTo:'second-u',content:'第二輪合成回饋',annotations}]}]}
  await page.setViewportSize({width,height:1000});await fixture(page,true,false,seeded,'illnessCourse');await page.goto('/courses/chat-course?section=case-analysis')
  if(theme==='dark')await page.getByRole('button',{name:'切換深色模式',exact:true}).click()
- await page.getByRole('button',{name:'B 疾病病程',exact:true}).click();const answer=page.locator('[data-annotated-text]'),spans=answer.locator('[data-annotation-segment]')
+ await page.getByRole('tab',{name:'B 疾病病程',exact:true}).click();const answer=page.locator('[data-annotated-text]'),spans=answer.locator('[data-annotation-segment]')
  await expect(spans).toHaveCount(2);expect(await answer.textContent()).toBe(text);expect(await spans.first().evaluate(el=>getComputedStyle(el).backgroundSize)).toBe('calc(100% - 3px) 2px');expect(await spans.last().evaluate(el=>getComputedStyle(el).backgroundPositionX)).toBe('3px')
  await page.locator('[data-annotation-mode="badges"]').click();const badges=answer.locator('[data-annotation-reference]');await expect(badges).toHaveText(['B1','B2'])
- expect(await badges.first().evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgb(22, 115, 67)');expect(await badges.first().evaluate(el=>getComputedStyle(el).color)).toBe('rgb(255, 255, 255)')
+ const badgeCode=badges.first().locator('[data-reference-phase="B"]');expect(await badgeCode.evaluate(el=>getComputedStyle(el).backgroundColor)).toBe('rgb(22, 115, 67)');expect(await badgeCode.evaluate(el=>getComputedStyle(el).color)).toBe('rgb(255, 255, 255)')
  expect(await answer.evaluate(el=>{const copy=el.cloneNode(true);copy.querySelectorAll('.annotation-reference').forEach(b=>b.remove());return copy.textContent})).toBe(text)
  await badges.last().focus();await expect(page.getByRole('tooltip')).toContainText('B2 — 疾病嚴重度');await page.keyboard.press('Escape');await expect(page.getByRole('tooltip')).toHaveCount(0)
  if(width===390){await badges.first().tap();await expect(page.getByRole('tooltip')).toContainText('B1 — 受傷資訊');await page.keyboard.press('Escape')}
@@ -209,14 +233,14 @@ for(const [width,theme] of [[1440,'light'],[390,'dark']])test.describe(`referenc
  await page.locator('[data-annotation-mode="underline"]').click();await expect(answer.locator('[data-annotation-reference]')).toHaveCount(0);expect(await answer.textContent()).toBe(text)
 })})
 test('teacher reads annotations on the saved answer without an editable composer',async({page})=>{
- await fixture(page,true,false,annotatedHistory());await page.goto('/courses/chat-course?section=case-analysis');await page.getByRole('button',{name:'學生紀錄與統計',exact:true}).click();await page.getByRole('button',{name:'TEST01 合成學員',exact:true}).click();await page.locator('[data-round="annotated-u"]').click()
+ await fixture(page,true,false,annotatedHistory());await page.goto('/courses/chat-course?section=case-analysis');await page.getByRole('tab',{name:'學生紀錄與統計',exact:true}).click();await page.getByRole('button',{name:'TEST01 合成學員',exact:true}).click();await page.locator('[data-round="annotated-u"]').click()
  await expect(page.locator('[data-annotated-text] [data-annotation-segment]')).toHaveCount(5);await expect(page.locator('textarea')).toHaveCount(0);await page.locator('[data-phases="D"]').focus();await expect(page.getByRole('tooltip')).toContainText('階段可能不符')
 })
 
 for(const width of [1440,390])for(const theme of ['light','dark'])test(`Ollama request snapshots stay with each staff reply at ${width}px in ${theme}`,async({page})=>{
  await page.setViewportSize({width,height:1000});const state=await fixture(page,true,false,roundHistory()),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.goto('/courses/chat-course?section=case-analysis')
  if(theme==='dark')await page.getByRole('button',{name:'切換深色模式',exact:true}).click()
- await page.getByRole('button',{name:'A 病前功能',exact:true}).click()
+ await page.getByRole('tab',{name:'A 病前功能',exact:true}).click()
  const send=async text=>{await page.getByLabel('訊息',{exact:true}).fill(text);await page.getByRole('button',{name:'提交並取得 AI 助教回饋',exact:true}).click();await expect(page.getByLabel('訊息',{exact:true})).toHaveValue('')}
  const open=async()=>{await page.getByRole('button',{name:'查看 Ollama 請求',exact:true}).click();await expect(page.getByRole('tab',{name:'Ollama 請求',exact:true})).toHaveAttribute('aria-selected','true')}
  const close=async()=>{await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).not.toBeVisible()}
@@ -228,8 +252,8 @@ for(const width of [1440,390])for(const theme of ['light','dark'])test(`Ollama r
  await dialog.evaluate(el=>el.scrollTop=0);await page.screenshot({path:`test-results/ollama-request-${width}-${theme}.png`});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await close()
  await page.locator(`[data-round="${firstId}"]`).click();await open();const firstSnapshot=JSON.parse(await page.getByRole('dialog').locator('[data-request-json]').textContent());expect(firstSnapshot.messages.at(-1).content).toBe('本頁第一份合成作答');await close()
  await page.locator('[data-round="u1"]').click();await open();await expect(page.getByRole('dialog')).toContainText('未擷取此回覆的 Ollama 請求');await close()
- await page.reload();await page.getByRole('button',{name:'A 病前功能',exact:true}).click();await open();await expect(page.getByRole('dialog')).toContainText('未擷取此回覆的 Ollama 請求');await close()
- await page.getByRole('button',{name:'學生紀錄與統計',exact:true}).click();await page.getByRole('button',{name:'TEST01 合成學員',exact:true}).click();await page.getByRole('button',{name:'查看回覆效能',exact:true}).click();await expect(page.getByRole('tab',{name:'Ollama 請求',exact:true})).toHaveCount(0);await close();expect(errors).toEqual([])
+ await page.reload();await page.getByRole('tab',{name:'A 病前功能',exact:true}).click();await open();await expect(page.getByRole('dialog')).toContainText('未擷取此回覆的 Ollama 請求');await close()
+ await page.getByRole('tab',{name:'學生紀錄與統計',exact:true}).click();await page.getByRole('button',{name:'TEST01 合成學員',exact:true}).click();await page.getByRole('button',{name:'查看回覆效能',exact:true}).click();await expect(page.getByRole('tab',{name:'Ollama 請求',exact:true})).toHaveCount(0);await close();expect(errors).toEqual([])
 })
 test('Ollama request capture clears with Raw and is unavailable to students',async({page})=>{
  await fixture(page,true);await page.goto('/courses/chat-course?section=case-analysis');await page.getByLabel('訊息',{exact:true}).fill('Raw 合成請求');await page.getByRole('button',{name:'傳送',exact:true}).click();await page.getByRole('button',{name:'查看回覆效能',exact:true}).click();await page.getByRole('tab',{name:'Ollama 請求',exact:true}).click();const snapshot=JSON.parse(await page.getByRole('dialog').locator('[data-request-json]').textContent());expect(snapshot.messages).toEqual([{role:'user',content:'Raw 合成請求'}]);await page.keyboard.press('Escape')
@@ -249,7 +273,7 @@ for(const width of [1440,390])for(const theme of ['light','dark'])test(`B stage 
  const capture=async name=>{await page.getByRole('heading',{name:'個案分析 AI 助教',exact:true}).click();await page.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));await page.screenshot({path:`test-results/phase-alignment-${name}-${width}-${theme}.png`,fullPage:true})}
  await fixture(page,false,false,seeded,'illnessCourse');await page.goto('/courses/chat-course?section=case-analysis')
  if(theme==='dark')await page.getByRole('button',{name:'切換深色模式',exact:true}).click()
- await page.getByRole('button',{name:'B 疾病病程',exact:true}).click();await page.locator('[data-round="b-old-u"]').click()
+ await page.getByRole('tab',{name:'B 疾病病程',exact:true}).click();await page.locator('[data-round="b-old-u"]').click()
  const answer=page.locator('[data-annotated-text]'),notice=page.locator('.from-assistant [data-phase-alignment]')
  expect(await answer.textContent()).toBe(first);await expect(page.locator('.from-assistant .message-content')).toHaveText(praise)
  await expect(notice).toContainText('目前階段：B 疾病病程');await expect(notice).toContainText('A 病前功能');await expect(notice).toContainText('請核對是否放錯階段');await expect(notice).toContainText('非 AI 回覆原文')

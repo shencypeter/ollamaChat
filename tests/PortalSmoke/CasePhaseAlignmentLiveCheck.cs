@@ -31,7 +31,7 @@ internal static class CasePhaseAlignmentLiveCheck
                 var response=await provider.CaseFeedbackAsync([new("system",CaseChatPrompts.Get(AnalysisStage.IllnessCourse)),new("user",input.Text)],AnalysisStage.IllnessCourse,default);
                 var parsed=CaseAnnotationContract.Parse(response.Content,input.Text);
                 using var json=JsonDocument.Parse(response.Content);var proposed=json.RootElement.GetProperty("annotations").GetArrayLength();
-                results.Add(new{id=input.Id,input.Scenario,model=options.Model,promptVersion=CaseChatPrompts.Version,currentPhase="B",feedback=parsed.Feedback,annotations=parsed.Annotations,proposedAnnotations=proposed,rejectedAnnotations=proposed-parsed.Annotations.Count,metrics=ChatPerformanceMetrics.Clean(response.Metrics),transport="passed"});
+                results.Add(new{id=input.Id,input.Scenario,model=options.Model,promptVersion=CaseChatPrompts.VersionFor(AnalysisStage.IllnessCourse),currentPhase="B",feedback=parsed.Feedback,annotations=parsed.Annotations,proposedAnnotations=proposed,rejectedAnnotations=proposed-parsed.Annotations.Count,metrics=ChatPerformanceMetrics.Clean(response.Metrics),transport="passed"});
                 Console.WriteLine($"{input.Id} synthetic phase B reply parsed; accepted={parsed.Annotations.Count}, rejected={proposed-parsed.Annotations.Count}; content omitted.");
             }
             catch(Exception)

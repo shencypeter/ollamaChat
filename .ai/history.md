@@ -1,5 +1,39 @@
 # 開發歷程與決策紀錄
 
+## 2026-11-17 教師診斷、聊天頁籤及中文容量
+
+依使用者要求將模式按鈕改語意／視覺頁籤，5個聊天tab加授權紀錄tab，單一關聯panel，左右/Home/End僅移焦點、native Enter／Space啟用，既有Raw清除／草稿確認保持；桌面平列、手機橫向捲動。新增固定CaseChatFailure碼／原因／HTTP狀態，涵蓋preflight、輸出length、空回覆、provider JSON、feedback JSON／格式、連線／逾時及已知HTTP error分類。已知上游原因只轉固定文字，不回任意error本文／inner／thinking。Send／Retry／Raw錯誤在server完成後重查course teacher／TA，排除學生POV、教授但只修課及降權；本人失敗payload沿同capture權限回傳。API／Vue顯示教師診斷並可開失敗請求dialog，離頁／角色變更清除；不存DB／storage／log、不重建舊原因。
+
+使用者同時回報2125中文預檢拒絕。先以五段合成文重現；根因是UTF8bytes當token及12KB硬cap混用，非Vue8000字驗證。分離bytes與估計tokens：Omni profile增加CaseChat bytecap24000、CJK2／overhead512；其他三profile未改，預設CJK3／overhead16重現原計算。ASCII及非基本CJK仍依UTF8bytes保守估，扣除Stage4096或Raw512輸出；不裁字、不加舊稿。測試中文2125接受、ASCII token及byte兩上限分別拒絕。真正Provider合成2125字五段原文完整、2messages、HTTP200、prompt4031／response567／stop；未寫正式DB。
+
+測試先確認UI缺tabs及教師診斷2項失敗，再修正；後續Vue全量288/288、Chrome30/30（含2125字真的AJAX、teacher/student、失敗dialog、鍵盤、390深色及全部既有流程），已檢視桌面／手機合成截圖。初Chrome4失敗是舊滿版按鈕CSS期待及新fixture模型名寫錯，按實際tab設計／fixture修正後通過。後端完整隔離DB394/394、036→039升級指紋保持，schema finally清除；新增當次staff／TA／student／降權／Raw與原因去敏、容量回歸。靜態審查無可行動問題。標準VS含Vue成功，NU1900弱點來源與506.13kB chunk提示非失敗。
+
+核對PID27984為專案後更新唯一7173正常bin/Debug PID36752、qwen25-omni，部署profile24k／2／512、bundle index-5twnEPzG.js、/courses200／匿名AI401，舊埠無listener。Local與Process/User/Machine無容量覆寫；模型／sampling及Bv4、其他phase版本不變。重啟清Raw、正式歷史保留，無Migration。規格／交接／Ollama／請求dialog／五模式與計畫同步，保留dirty工作，未提交推送。
+
+完成部署期間使用者提供長病例與重複回饋。未複製／重送病例作測試；只讀指定時間窗metadata：prompt4015／response1762／done_reason stop、feedback600字、有效ann5。這不是16K硬上限或num_predict4096耗盡，且JSON合法故不觸發失敗診斷；重複及分類品質仍未解決。8筆配額不能單憑有效ann5推論漏標原因，上游原回覆未留存，不反推原提議數。不擅自啟動分段管線或自動品質判定，後續應用合成情節做長／短及逐段對照。
+
+## 2026-11-17 B回饋修正實作與部署
+
+正式B新增短層級／時點示例，保留教授完整規則；只對B用較中性的outputRequirements，取消每次強迫改錯。B schema先annotations後feedback，欄位／上限／精確引用驗證不變，仍一次api/chat，無舊稿重新送入。A/C/D、Studio與Raw不改；四profile與appsettings相對HEAD無差異。B新增stage-aware版本professor-four-phase-20261117-b-v4，user／assistant保存、retry版本檢查、教師本人請求capture及live工具均採對應stage。舊記錄保留v3，不能將新版誤算舊版重試。
+
+先擴充封包測試確認VersionFor不存在，再驗schema順序斷言失敗後修正；相關25通過，普通全後端329／56外部DB略過。隔離schema初新增測試以UPDATE種舊version，被既有metadata不可變trigger正確擋下；改為INSERT合成舊記錄，不放寬保護。完整385/385、036→039升級／指紋及舊可選欄位NULL保持通過，schema清除。B system7704bytes，測試界線8500、其他階段6500不變，實際12KB guard不放寬，755個合成中文字可用。
+
+合成試驗包含hierarchy重申、ChatML、generate、縮短教授規則、user例子與兩次模型回饋，均未部署；採完整規則＋B指南＋先標註的一次呼叫。真正Provider最終原7＋新4完整JSON／stop，輸入2493–2503：B1/B3/B5/B7b同階段誤判及重複改善，純A回饋能說與B不符，但IADL細碼／status、舊手術與本次混碼、無據職災等仍不穩，不能稱教學品質驗收。沒有程式補標／猜碼／重寫AI評語。詳細方法與限制已寫評估文件。
+
+依requesting-code-review技能作一次靜態審查，無可行動問題（審查者未另跑測試）。最終Chrome請求dialog與標註桌面／390淺深色11/11、標準VS含Vue成功；NU1900為NuGet弱點資料來源網路警告，504.08kB chunk提示非失敗。首次受限testhost無法連線而逾時，切到允許環境後測試成功。驗證PID18048確為本專案後，唯一7173更新正常bin/Debug PID27984，qwen25-omni、Bv4／Av3部署DLL反射核對，/courses200／匿名AI401、舊埠無listener，bundle index-BOZ0N_8q.js。已告知重啟清Raw、正式歷史保留，舊B失敗需重新開始再自行提交。無Migration／正式資料寫入，規格／Ollama／評估／交接／計畫同步，未提交推送，保留既有dirty工作。
+
+## 2026-11-17 B階段困難分解
+
+使用者觀察B較困難，依最新HEAD90aeaa6及當下profile檢查（原模型設定等工作已由使用者提交，不沿舊dirty清單推定）。建立忽略的BPhaseProbe，用現行CaseFeedbackAsync／教授v3／compact schema測7個全新合成短例，無歷史或DB。2138–2148輸入tokens、全完整JSON／stop，B1卻判misplaced並要求改階段為B1；B3否認已寫病灶；B7b未來目標混B7a/C5；A1e／本次B5混合時回饋概括A且建議切到已選B。B5及B2細碼可辨識但回饋重複；純A放B能辨識A但細碼／status不穩。這是具體模型遵循失敗，不能稱B比其他階段的統計性結論或都歸因截斷。
+
+沒有改教授原規則、版本、payload、profile或來源驗證，不硬修模型status；後續調校候選為ABCD與子碼層級、時點及有據回饋，尚未實驗／部署。本輪探針建置成功，NU1900是NuGet弱點資料來源網路警告；正式程式未改，不重跑全量測試、不重啟7173。詳docs/ai-tuning/03-evaluation-results.md，規格／交接／本歷程同步，未提交推送，既有dirty工作保留。
+
+## 2026-11-17 行內編碼徽章分類配色
+
+使用者要求徽章與ABCD底線的分類配色一致，取代先前全部綠底。PhaseAnnotatedAnswer共用既有category-A/B/C/D底色白字，各code獨立span以處理同片段跨phase碼；同組button與tooltip／鍵盤／touch維持。A藍、B綠、C紫、D橘；深色保留分類深色底，避免把亮底線色當白字背景造成低對比。原文／UTF-16／metadata／模型payload不變。
+
+擴充既有Vue測試先2項失敗，再驗49/49；既有Chrome流程加入四phase實際computed背景色／白字、跨phase同組、原文、切換與tooltip斷言，桌面1440及手機390淺深色6/6。已檢視390深色合成畫面，Vite成功（504.08kB chunk提示，非失敗），部署index-BOZ0N_8q.js。只前端無重啟、DB／Migration／模型改動，Raw記憶不清除。規格／交接／標註與回饋說明同步，保留dirty工作，未提交推送。
+
 ## 2026-11-17 Taipei輸入截斷假說驗證
 
 區分輸入截斷與上一輪輸出length問題。唯讀show確認Omni模型預設context4096、native32768；Breeze預設8000、native32768，兩者模板簡單；profile實際仍送16384。11次合成首／中／尾key探針（Taipei各4、IAN02 Llama3共3）同步讀ps，實際載入context全匹配請求。Omni同23,167-byte輸入在4096時回報2050 tokens／key錯，16384時10079 tokens／三key全對。46,167-byte超量輸入於兩Taipei模型降至8194／8195，key錯；Llama3因tokenizer較省仍13088可讀，另69,167-byte溢位同降8194且首中key遺失。故有超限截斷證據，但無Taipei固定較低上限證據。Breeze中型例11105輸入、輸出128達length，本身不能判定key可讀性。

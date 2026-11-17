@@ -12,7 +12,7 @@ vi.mock('vue-router',()=>({onBeforeRouteLeave:vi.fn(),onBeforeRouteUpdate:vi.fn(
 const base='/courses/c/case-analysis',stages=[{key:'premorbid',label:'A 病前功能'},{key:'illnessCourse',label:'B 疾病病程'},{key:'functionalAssessment',label:'C 功能評估結果'},{key:'psychosocial',label:'D 心理社會條件'}]
 const empty=()=>({sessions:[],activeSessionId:null})
 let wrappers=[],rawId,rawMessages,history,config
-function view(){const v=mount(CaseAnalysisChat,{props:{course:{id:'c',courseRole:config.canReview?'teacher':'student'}}});wrappers.push(v);return v}
+function view(attach=false){const v=mount(CaseAnalysisChat,{attachTo:attach?document.body:undefined,props:{course:{id:'c',courseRole:config.canReview?'teacher':'student'}}});wrappers.push(v);return v}
 async function mode(v,key){await v.get(`[data-mode="${key}"]`).trigger('click');await flushPromises()}
 async function send(v,text){await v.get('textarea').setValue(text);await v.get('form').trigger('submit');await flushPromises()}
 beforeEach(()=>{
@@ -30,6 +30,18 @@ beforeEach(()=>{
  })
 })
 const capture=text=>({promptVersion:'captured-v3',requests:[{purpose:'feedback',url:'http://model.test/api/chat',payload:{model:'captured-model',messages:[{role:'system',content:'實際系統提示'},{role:'user',content:text}],format:{type:'object'},options:{temperature:0.2}}}]})
+it('uses keyboard-focusable tabs with a linked selected panel and preserves raw departure confirmation',async()=>{
+ const v=view(true);await flushPromises();const list=v.get('[role="tablist"]'),tabs=list.findAll('[role="tab"]');expect(tabs).toHaveLength(5);expect(tabs[0].attributes('aria-selected')).toBe('true');expect(v.get('[role="tabpanel"]').attributes('aria-labelledby')).toBe(tabs[0].attributes('id'))
+ await tabs[0].trigger('keydown',{key:'ArrowRight'});expect(document.activeElement).toBe(tabs[1].element);expect(tabs[1].attributes('aria-selected')).toBe('false');expect(rawId).toBe(1)
+ await v.get('textarea').setValue('未儲存');window.confirm.mockReturnValue(false);await tabs[1].trigger('click');await flushPromises();expect(tabs[0].attributes('aria-selected')).toBe('true');expect(v.get('textarea').element.value).toBe('未儲存')
+ window.confirm.mockReturnValue(true);await tabs[1].trigger('click');await flushPromises();expect(tabs[1].attributes('aria-selected')).toBe('true');expect(v.get('[role="tabpanel"]').attributes('id')).toBe(tabs[1].attributes('aria-controls'))
+})
+it.each([true,false])('shows safe failure diagnostics and a failed-request dialog only for current course staff (%s)',async staff=>{
+ config.canReview=staff;config.canInspectRequests=staff;const v=view();await flushPromises();await mode(v,'illnessCourse');
+ api.mockRejectedValueOnce(Object.assign(new Error('模型暫時無法回覆'),{status:502,diagnostic:{code:'provider_http',reason:'模型服務回傳 HTTP 503。',upstreamStatus:503},requestInspection:capture('合成失敗作答')}));await send(v,'合成失敗作答')
+ expect(v.find('[data-failure-diagnostic]').exists()).toBe(staff);expect(v.find('[data-action="failed-request"]').exists()).toBe(staff);expect(v.get('textarea').element.value).toBe('合成失敗作答')
+ if(staff){await v.get('[data-action="failed-request"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toEqual(capture('合成失敗作答'));experience.student=true;await flushPromises();expect(v.find('[data-failure-diagnostic]').exists()).toBe(false)}
+})
 it.each(['raw','premorbid'])('shows a reply placeholder while %s inference is pending and clears it on success or failure',async(key)=>{
  const v=view();await flushPromises();if(key!=='raw')await mode(v,key)
  let finish;api.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve}))
@@ -153,7 +165,7 @@ it('does not let a late raw response append to a stage after switching modes',as
  api.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve}))
  await v.get('textarea').setValue('pending raw');await v.get('form').trigger('submit');await mode(v,'premorbid')
  finish({sessionId:'raw-1',messages:[{role:'assistant',content:'late raw'}]});await flushPromises()
- expect(v.text()).not.toContain('late raw');expect(v.get('[data-mode="premorbid"]').attributes('aria-pressed')).toBe('true')
+ expect(v.text()).not.toContain('late raw');expect(v.get('[data-mode="premorbid"]').attributes('aria-selected')).toBe('true')
 })
 it('retains raw context on 413 and offers a fresh session after expiry',async()=>{
  const v=view();await flushPromises();await send(v,'first turn')
@@ -179,7 +191,7 @@ it('reminds before browser unload and preserves the raw conversation if clearing
  const v=view();await flushPromises();await send(v,'keep this raw')
  const event=new Event('beforeunload',{cancelable:true});window.dispatchEvent(event);expect(event.defaultPrevented).toBe(true)
  api.mockImplementationOnce(async()=>{throw new Error('clear failed')})
- await mode(v,'premorbid');expect(v.text()).toContain('clear failed');expect(v.text()).toContain('keep this raw');expect(v.get('[data-mode="raw"]').attributes('aria-pressed')).toBe('true')
+ await mode(v,'premorbid');expect(v.text()).toContain('clear failed');expect(v.text()).toContain('keep this raw');expect(v.get('[data-mode="raw"]').attributes('aria-selected')).toBe('true')
 })
 it('starts a new stage conversation when only closed history exists',async()=>{
  history={activeSessionId:null,sessions:[{id:'closed',status:'closed',messages:[{id:'u',role:'user',content:'old closed conversation'}]}]}
@@ -297,7 +309,7 @@ it('copies an old answer verbatim and submits a new immutable revision with its 
  await v.get('form').trigger('submit');await flushPromises()
  const request=api.mock.calls.find(([p,o])=>p.endsWith('/premorbid/messages')&&o?.method==='POST')[1].body
  expect(request).toEqual({requestId:expect.any(String),content:'  修改舊答案 \n',revisesMessageId:'u1'});expect(history.sessions[0].messages[0].content).toBe('  第一份原始作答 \n');expect(v.get('.chat-log').text()).toContain('新修改回饋')
- expect(v.get('[data-action="next-stage"]').text()).toContain('B 疾病病程');expect(v.get('[data-mode="premorbid"]').attributes('aria-pressed')).toBe('true')
+ expect(v.get('[data-action="next-stage"]').text()).toContain('B 疾病病程');expect(v.get('[data-mode="premorbid"]').attributes('aria-selected')).toBe('true')
 })
 it('preserves revision parent and request identity on ambiguous failure and clears both when switching stage',async()=>{
  history=savedRounds();const v=view();await flushPromises();await mode(v,'premorbid');await v.get('[data-round="u1"]').trigger('click');await v.get('[data-action="revise-answer"]').trigger('click')
@@ -352,11 +364,11 @@ it('confirms replacing a draft and preserves its revision parent when revising a
 })
 it('guards next-stage and session changes without losing the selected session or draft on cancel',async()=>{
  history=savedRounds();history.sessions.push({id:'closed',status:'closed',messages:[{id:'old',role:'user',status:'completed',content:'舊對話'}]});const v=view();await flushPromises();await mode(v,'premorbid');await v.get('[data-round="u1"]').trigger('click');await v.get('[data-action="revise-answer"]').trigger('click');await v.get('textarea').setValue('正在編輯')
- window.confirm.mockReturnValueOnce(false);await v.get('[data-action="next-stage"]').trigger('click');await flushPromises();expect(v.get('[data-mode="premorbid"]').attributes('aria-pressed')).toBe('true');expect(v.get('textarea').element.value).toBe('正在編輯')
+ window.confirm.mockReturnValueOnce(false);await v.get('[data-action="next-stage"]').trigger('click');await flushPromises();expect(v.get('[data-mode="premorbid"]').attributes('aria-selected')).toBe('true');expect(v.get('textarea').element.value).toBe('正在編輯')
  window.confirm.mockReturnValueOnce(false);await v.get('.history-select select').setValue('closed');expect(v.get('.history-select select').element.value).toBe('s');expect(v.get('.chat-log').text()).toContain('第一輪回饋');expect(v.get('.revision-notice').text()).toContain('第 1 輪')
  await v.get('.history-select select').setValue('closed');expect(v.find('textarea').exists()).toBe(false);expect(v.get('.chat-log').text()).toContain('舊對話')
  await v.get('.history-select select').setValue('s');expect(v.get('textarea').element.value).toBe('');expect(v.find('.revision-notice').exists()).toBe(false)
- await v.get('textarea').setValue('允許清除');await v.get('[data-action="next-stage"]').trigger('click');await flushPromises();expect(v.get('[data-mode="illnessCourse"]').attributes('aria-pressed')).toBe('true');expect(v.get('textarea').element.value).toBe('')
+ await v.get('textarea').setValue('允許清除');await v.get('[data-action="next-stage"]').trigger('click');await flushPromises();expect(v.get('[data-mode="illnessCourse"]').attributes('aria-selected')).toBe('true');expect(v.get('textarea').element.value).toBe('')
 })
 it('protects formal drafts on teacher review, browser unload and router navigation',async()=>{
  config.canReview=true;history=savedRounds();const v=view();await flushPromises();await mode(v,'premorbid');await v.get('textarea').setValue('尚未提交')

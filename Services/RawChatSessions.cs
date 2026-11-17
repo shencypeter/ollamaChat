@@ -72,7 +72,7 @@ public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions
                 }
             }
             if (string.IsNullOrWhiteSpace(result.Content) || result.Content.Length > settings.MaxResponseCharacters)
-                throw new CaseChatException(502, "模型回覆為空或超過長度上限，請重試。");
+                throw new CaseChatException(502, "模型回覆為空或超過長度上限，請重試。",new("reply_size",$"模型回覆長度 {result.Content?.Length??0} 字元；需為非空白，且不超過 {settings.MaxResponseCharacters} 字元。"));
             lock (gate)
             {
                 linked.Token.ThrowIfCancellationRequested();

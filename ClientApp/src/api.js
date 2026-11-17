@@ -19,6 +19,7 @@ export async function api(path, options = {}) {
     const error = new Error(body?.error || (response.status === 401 ? '登入已逾時，請重新登入。' : response.status === 403 ? '你沒有執行此操作的權限。' : response.status === 429 ? '操作過於頻繁，請稍後再試。' : Object.values(body?.errors || {}).flat().join(' ') || '請求失敗，請稍後再試。'))
     error.status = response.status
     error.requestInspection = body?.requestInspection || null
+    error.diagnostic = body?.diagnostic || null
     if (response.status === 401) window.dispatchEvent(new Event('portal-session-expired'))
     throw error
   }

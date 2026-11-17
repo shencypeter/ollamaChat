@@ -5,6 +5,23 @@ namespace AiTeachingAssistant.Services;
 public static class CaseChatPrompts
 {
     public const string Version = "professor-four-phase-20261116-v3";
+    public static string VersionFor(AnalysisStage stage) => stage == AnalysisStage.IllnessCourse
+        ? "professor-four-phase-20261117-b-v4" : Version;
+
+    // These contrasting examples describe the coding hierarchy, not case facts.
+    // Keep the professor's complete rules below; never use an example as evidence.
+    private const string IllnessFeedbackGuide = """
+        層級對照（不是本次學生資料，不得標註示例或照抄回饋）：階段只有A/B/C/D；分類碼首字母代表階段。B1至B7及其子碼全屬B，B階段不等於B4。先依原文選碼，再比對首字母；同屬B不能標misplaced或要求換到子碼。
+        例一：目前B，「四月九日被腳踏車撞傷」→B1b時間、B1c機制，無年齡不編B1a。這段屬B的子分類，與目前B相符。
+        例二：目前B，「規劃語言治療改善構音，尚未開始」→B7b，不是目前C3/C5或醫療B7a。這是未來計畫，與目前B相符。
+        例三：目前B，「十年前白內障手術；本次住院清創術」→前段A1e、後段B5，按時點分段引用及評論；不能把舊手術改B5或概括整份錯置。
+        例四：目前B，「生病前自行搭捷運並料理家務，每週健走兩次」→A2b/A3，純A內容才misplaced，建議移至A，不是改成B4。
+        目前與子碼相符時可明說相符，有實際問題才建議修改，不強迫挑錯。已寫的病灶、日期等不能說沒寫；無獨立病例原文只能說無法核實案例事實，不能斷定遺漏。回饋每個重點只說一次，不重述規則／示例／未提及清單，不代寫。
+        """;
+
+    public static string FeedbackRequirements(AnalysisStage? stage) => stage == AnalysisStage.IllnessCourse
+        ? "先閱讀answerText。本次階段只有currentPhase的大字母。只依原文辨識分類，子分類不另算階段；同階段說明相符。先確認原文已寫的內容，有實際問題才建議修改；混合時點分段引用，不概括整份錯置。回饋2到4句，只說一次，無獨立病例原文請明示無法核實案例事實。只輸出feedback與annotations JSON，text逐字引自本次answerText，occurrence從0算，不標示例、包裝或回饋，不必計算位置。"
+        : "只評閱 answerText 本次作答，先逐句核對 currentPhase。feedback依序說明目前作答階段、原文實際分類、修改建議；不要把目前階段當成原文所屬分類，不能只稱讚。混合本階段事件與他階段背景時分開說明，必要背景可保留，不概括整份錯置。無獨立病例原文不能宣稱資料遺漏。用繁體中文精簡回饋，不代寫。只回傳 feedback 與 annotations 的 JSON；標註逐字引用 answerText 及0起算 occurrence，不標回饋或包裝、不必計算位置。";
 
     private const string TeachingAssistantPrompt = """
         你是中山醫學大學臨床心理學課程AI教學助教，以繁體中文提供形成性回饋。僅有A病前功能、B疾病病程、C功能評估結果、D心理社會條件四階段；整合概念化只供推理，不增第五階段。不給分、不判通過、不解鎖。
@@ -68,5 +85,6 @@ public static class CaseChatPrompts
         return "本次作答階段："+AnalysisStageCatalog.Get(stage).Label+"\n"+TeachingAssistantPrompt + "\n\n通用分類代碼表（只表示分類，不表示事實正確）：\n" + catalog + "\n\n" + phaseInstructions;
     }
 
-    public static string Get(AnalysisStage stage) => TeachingInstructions(stage) + "\n\n" + AnnotationOutputInstructions;
+    public static string Get(AnalysisStage stage) => TeachingInstructions(stage) + "\n\n" + AnnotationOutputInstructions
+        + (stage == AnalysisStage.IllnessCourse ? "\n\n" + IllnessFeedbackGuide : "");
 }

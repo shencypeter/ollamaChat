@@ -50,7 +50,7 @@ public sealed partial class CaseAnalysisChat
         if(foundStatus=="completed"||foundStatus=="failed"&&!retry){await tx.CommitAsync(ct);return null;}
         if(foundStatus=="pending")throw new CaseChatException(409,"這則訊息仍在等待回覆，請稍後重新載入。");
         if(retry&&foundSession!=active)throw new CaseChatException(409,"已結束的對話不可重試，請在目前工作階段提問。");
-        if(retry&&(foundModel!=modelOptions.Value.Model||foundVersion!=CaseChatPrompts.Version))throw new CaseChatException(409,"模型或提示版本已變更，請開始新的對話。");
+        if(retry&&(foundModel!=modelOptions.Value.Model||foundVersion!=CaseChatPrompts.VersionFor(Stage(stage))))throw new CaseChatException(409,"模型或提示版本已變更，請開始新的對話。");
         if(!retry&&revisesMessageId.HasValue)
         {
             await using var parent=new NpgsqlCommand("SELECT m.response_status FROM case_analysis_messages m JOIN case_analysis_sessions s ON s.id=m.session_id WHERE m.id=$1 AND m.role='user' AND s.course_id=$2 AND s.student_id=$3 AND s.stage=$4 AND s.is_practice=$5",conn);
@@ -73,7 +73,7 @@ public sealed partial class CaseAnalysisChat
         {
             var sequence=await NextSequence(conn,active.Value,ct);
             await using var insert=new NpgsqlCommand("INSERT INTO case_analysis_messages(id,session_id,role,content,sequence_number,response_status,model_name,prompt_version,attempt_token,lease_until,created_at,revises_message_id) VALUES($1,$2,'user',$3,$4,'pending',$5,$6,$7,$8,$9,$10)",conn);
-            Add(insert,requestId,active.Value,content!,sequence,modelOptions.Value.Model,CaseChatPrompts.Version,attempt,lease,clock.GetUtcNow());insert.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Uuid,Value=(object?)revisesMessageId??DBNull.Value});await insert.ExecuteNonQueryAsync(ct);
+            Add(insert,requestId,active.Value,content!,sequence,modelOptions.Value.Model,CaseChatPrompts.VersionFor(Stage(stage)),attempt,lease,clock.GetUtcNow());insert.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Uuid,Value=(object?)revisesMessageId??DBNull.Value});await insert.ExecuteNonQueryAsync(ct);
         }
         await using(var update=new NpgsqlCommand("UPDATE case_analysis_sessions SET last_activity_at=$2 WHERE id=$1",conn)){Add(update,active.Value,clock.GetUtcNow());await update.ExecuteNonQueryAsync(ct);}
         // Revisions and feedback remain in the database for review/diff/statistics.
@@ -94,13 +94,13 @@ public sealed partial class CaseAnalysisChat
             var result=await provider.CaseFeedbackAsync(turn.Context,Stage(turn.Stage),ct);
             CaseAnnotationContract.EnsureComplete(result.Metrics.DoneReason);
             var feedback=CaseAnnotationContract.Parse(result.Content,turn.Context.Last(m=>m.Role=="user").Content);
-            if(feedback.Feedback.Length>chatOptions.Value.MaxResponseCharacters)throw new CaseChatException(502,"模型回覆超出長度限制，原提問已保留，可重試。");
+            if(feedback.Feedback.Length>chatOptions.Value.MaxResponseCharacters)throw new CaseChatException(502,"模型回覆超出長度限制，原提問已保留，可重試。",new("output_size",$"回饋長度 {feedback.Feedback.Length} 字元，超過應用程式回覆上限 {chatOptions.Value.MaxResponseCharacters}。"));
             await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);
             await Access(conn,turn.Course,turn.Actor,true,true,ct);
             await using(var session=new NpgsqlCommand("SELECT status FROM case_analysis_sessions WHERE id=$1 FOR UPDATE",conn)){Add(session,turn.Session);if(await session.ExecuteScalarAsync(ct) is not "active")throw new CaseChatException(409,"對話已結束，未保存逾時回覆。");}
             await using(var guard=new NpgsqlCommand("UPDATE case_analysis_messages SET response_status='completed',lease_until=NULL WHERE id=$1 AND response_status='pending' AND attempt_token=$2 AND lease_until>$3",conn)){Add(guard,turn.Message,turn.Attempt,clock.GetUtcNow());if(await guard.ExecuteNonQueryAsync(ct)!=1)throw new CaseChatException(409,"這次回覆已失效，請重新載入紀錄。");}
             var sequence=await NextSequence(conn,turn.Session,ct);
-            await using(var insert=new NpgsqlCommand("INSERT INTO case_analysis_messages(id,session_id,role,content,sequence_number,response_status,in_reply_to,model_name,prompt_version,created_at,performance_metrics,annotations) VALUES($1,$2,'assistant',$3,$4,'completed',$5,$6,$7,$8,$9::jsonb,$10::jsonb)",conn)){Add(insert,Guid.NewGuid(),turn.Session,feedback.Feedback,sequence,turn.Message,modelOptions.Value.Model,CaseChatPrompts.Version,clock.GetUtcNow(),System.Text.Json.JsonSerializer.Serialize(ChatPerformanceMetrics.Clean(result.Metrics),PerformanceJson),System.Text.Json.JsonSerializer.Serialize(feedback.Annotations,PerformanceJson));await insert.ExecuteNonQueryAsync(ct);}
+            await using(var insert=new NpgsqlCommand("INSERT INTO case_analysis_messages(id,session_id,role,content,sequence_number,response_status,in_reply_to,model_name,prompt_version,created_at,performance_metrics,annotations) VALUES($1,$2,'assistant',$3,$4,'completed',$5,$6,$7,$8,$9::jsonb,$10::jsonb)",conn)){Add(insert,Guid.NewGuid(),turn.Session,feedback.Feedback,sequence,turn.Message,modelOptions.Value.Model,CaseChatPrompts.VersionFor(Stage(turn.Stage)),clock.GetUtcNow(),System.Text.Json.JsonSerializer.Serialize(ChatPerformanceMetrics.Clean(result.Metrics),PerformanceJson),System.Text.Json.JsonSerializer.Serialize(feedback.Annotations,PerformanceJson));await insert.ExecuteNonQueryAsync(ct);}
             await using(var update=new NpgsqlCommand("UPDATE case_analysis_sessions SET last_activity_at=$2 WHERE id=$1",conn)){Add(update,turn.Session,clock.GetUtcNow());await update.ExecuteNonQueryAsync(ct);}
             await tx.CommitAsync(ct);
         }

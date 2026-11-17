@@ -1,5 +1,13 @@
 # 課程個案分析五模式：交付與維護
 
+## 2026-11-17 模式頁籤／容量／安全診斷
+
+五模式改tablist／tab／tabpanel，手機橫向捲動，左右／Home／End只移焦點、Enter／Space啟用，既有未存提醒保留。本人課程教師／TA當次錯誤可看安全分類原因及失敗請求，學生／學生POV／降權不提供；不回任意服務本文、thinking或stack，頁面外不保存，舊錯誤不重建。
+
+bytecap與估計token分開：Omni使用24000bytes、基本CJK估2tokens／字及512tokens傳輸預留；其他模型保留原12000bytes及UTF8保守算法。仍扣輸出預算、8k字限制、不裁字、不丟完整Raw history，Stage只送本輪。估算不是精確模型tokenizer。合成2125中文字五段已完整送模型（4031prompt tokens／stop），未用真實病例。以下舊12KB描述對Omni由本節取代，其他模型不變。
+
+合法JSON仍可能有重複評語／錯碼；本輪不新增分段分析或自動品質判定。Vue288、Chrome30、隔離DB394及舊資料升級通過，無Migration。
+
 > 後續更新：038已加入回饋輪次sidebar、原始作答修訂關聯／次數、任兩版學生原文diff及逐回覆效能dialog。舊量測維持NULL，Raw仍不持久化。現行操作與新增驗證見 [回饋輪次交付](feedback-rounds.md)，下列037為前次實作紀錄。
 
 更新：2026-11-16；開發站 https://localhost:7173。只以去識別化合成內容測試，不代表臨床資料／IRB／教學品質認證。
