@@ -7,19 +7,26 @@ namespace AiTeachingAssistant.Services;
 public static class CaseAnnotationContract
 {
     public const int MaximumAnnotations=48;
-    public static JsonElement AnnotationSchema=>JsonSerializer.SerializeToElement(new {
+    public static JsonElement AnnotationSchema=>AnnotationSchemaFor(false);
+    private static JsonElement AnnotationSchemaFor(bool compact)=>JsonSerializer.SerializeToElement(new {
         type="object",additionalProperties=false,required=new[]{"occurrence","text","codes","explanation","status"},properties=new {
-            occurrence=new{type="integer",minimum=0,maximum=15999},text=new{type="string",minLength=1,maxLength=16000},
+            occurrence=new{type="integer",minimum=0,maximum=15999},text=new{type="string",minLength=1,maxLength=compact?160:16000},
             codes=new{type="array",minItems=1,maxItems=8,uniqueItems=true,items=new{type="string",@enum=CaseCodingCatalog.All.Select(c=>c.Code).ToArray()}},
-            explanation=new{type="string",maxLength=200},status=new{type="string",@enum=new[]{"unverified","unsupported","misplaced"}}
+            explanation=new{type="string",maxLength=compact?80:200},status=new{type="string",@enum=new[]{"unverified","unsupported","misplaced"}}
         }
     });
-    public static JsonElement Schema=>JsonSerializer.SerializeToElement(new {
+    public static JsonElement Schema=>SchemaFor(false);
+    public static JsonElement SchemaFor(bool compact)=>JsonSerializer.SerializeToElement(new {
         type="object",additionalProperties=false,required=new[]{"feedback","annotations"},properties=new {
-            feedback=new{type="string",minLength=1,maxLength=12000},
-            annotations=new{type="array",maxItems=MaximumAnnotations,items=AnnotationSchema}
+            feedback=new{type="string",minLength=1,maxLength=compact?600:12000},
+            annotations=new{type="array",maxItems=compact?8:MaximumAnnotations,items=AnnotationSchemaFor(compact)}
         }
     });
+    public static void EnsureComplete(string? doneReason)
+    {
+        if(string.Equals(doneReason,"length",StringComparison.OrdinalIgnoreCase))
+            throw new CaseChatException(502,"模型回覆達到輸出上限而未完成，原作答已保留，請重試回覆。");
+    }
     public sealed record FeedbackResult(string Feedback,IReadOnlyList<CaseTextAnnotation> Annotations);
     public static FeedbackResult Parse(string body,string original)
     {

@@ -13,7 +13,7 @@ internal static class CasePhaseAlignmentLiveCheck
         if(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")!="Development")throw new InvalidOperationException("Synthetic checks require Development.");
         var baseline=new ConfigurationBuilder().SetBasePath(root).AddJsonFile("appsettings.json").AddEnvironmentVariables().Build();
         var profile=baseline["Ollama:Profile"]??"llama3";
-        if(profile is not ("breeze" or "llama3" or "qwen"))throw new InvalidOperationException("Unknown model profile.");
+        if(!AiTeachingAssistant.Options.OllamaOptions.ProfileNames.Contains(profile))throw new InvalidOperationException("Unknown model profile.");
         var config=new ConfigurationBuilder().SetBasePath(root).AddJsonFile("appsettings.json").AddJsonFile($"Configuration/Ollama/{profile}.json").AddJsonFile("appsettings.Local.json",true).AddEnvironmentVariables().Build();
         var options=config.GetSection("Ollama").Get<OllamaOptions>()!;
         using var http=new HttpClient{BaseAddress=new Uri(options.BaseUrl.TrimEnd('/')+"/"),Timeout=TimeSpan.FromSeconds(options.TimeoutSeconds)};

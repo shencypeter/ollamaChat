@@ -123,7 +123,7 @@ public class CaseAnalysisChatTests
         await using var f=await Fixture.Create();var original=Guid.NewGuid();var revised=Guid.NewGuid();
         f.Provider.Metrics=new(2000000000,100000000,300000000,1500000000,321,17,9,6,2345,"stop");
         await f.Workflow.Send(f.Course,f.Student,"premorbid",new(){RequestId=original,Content="第一版原始作答"},default);
-        f.Provider.Metrics=new(1000000000,0,200000000,800000000,444,10,8,10,1234,"length");
+        f.Provider.Metrics=new(1000000000,0,200000000,800000000,444,10,8,10,1234,"stop");
         var result=await f.Workflow.Send(f.Course,f.Student,"premorbid",new(){RequestId=revised,Content="第二版修改作答",RevisesMessageId=original},default);
         var session=result.Sessions.Single();var root=session.Messages.Single(m=>m.Id==original);var child=session.Messages.Single(m=>m.Id==revised);
         Assert.Equal("第一版原始作答",root.Content);Assert.Null(root.RevisesMessageId);Assert.Equal(original,child.RevisesMessageId);Assert.Equal(1,session.Statistics.RevisionCount);
@@ -243,6 +243,15 @@ public class CaseAnalysisChatTests
         }
         var history=(await f.Workflow.History(f.Course,f.Student,"illnessCourse",default)).Sessions.Single();
         Assert.Equal(16,history.Messages.Count);Assert.Equal(8,history.Statistics.RoundTrips);
+    }
+    [FormativeDatabaseFact] public async Task TruncatedReplyDoesNotPublishPartialFeedbackAndSameSavedAnswerCanRetry()
+    {
+        await using var f=await Fixture.Create();var id=Guid.NewGuid();f.Provider.Metrics=f.Provider.Metrics with{DoneReason="length"};
+        var failure=await Assert.ThrowsAsync<CaseChatException>(()=>f.Workflow.Send(f.Course,f.Student,"illnessCourse",new(){RequestId=id,Content="合成輸出上限測試"},default));
+        Assert.Equal(502,failure.StatusCode);Assert.Contains("輸出上限",failure.Message);
+        var failed=(await f.Workflow.History(f.Course,f.Student,"illnessCourse",default)).Sessions.Single();Assert.Equal("failed",Assert.Single(failed.Messages).Status);Assert.Equal(0,failed.Statistics.RoundTrips);
+        f.Provider.Metrics=f.Provider.Metrics with{DoneReason="stop"};var retried=(await f.Workflow.Retry(f.Course,f.Student,"illnessCourse",id,default)).Sessions.Single();
+        Assert.Equal(2,retried.Messages.Count);Assert.Equal(1,retried.Statistics.RoundTrips);Assert.Equal(id,retried.Messages.First().Id);Assert.All(f.Provider.Requests,request=>Assert.Equal(2,request.Count));
     }
     [FormativeDatabaseFact] public async Task ContextRejectionRetainsOriginalQuestionWithoutCallingTheModel()
     {

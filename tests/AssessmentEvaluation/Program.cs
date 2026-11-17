@@ -13,7 +13,7 @@ var profile = Arg("--profile", "");
 OllamaOptions? profileOptions = null;
 if (profile.Length > 0)
 {
-    if (!new[] { "breeze", "llama3", "qwen" }.Contains(profile)) throw new ArgumentException("Unknown profile");
+    if (!AiTeachingAssistant.Options.OllamaOptions.ProfileNames.Contains(profile)) throw new ArgumentException("Unknown profile");
     using var config = JsonDocument.Parse(await File.ReadAllTextAsync($"Configuration/Ollama/{profile}.json"));
     profileOptions = config.RootElement.GetProperty("Ollama").Deserialize<OllamaOptions>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 }

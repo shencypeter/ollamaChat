@@ -90,8 +90,9 @@ public sealed partial class CaseAnalysisChat
     {
         try
         {
-            CaseChatBudget.EnsureFits(turn.Context,chatOptions.Value,modelOptions.Value);
+            CaseChatBudget.EnsureFits(turn.Context,chatOptions.Value,modelOptions.Value,modelOptions.Value.CaseFeedbackMaxTokens);
             var result=await provider.CaseFeedbackAsync(turn.Context,Stage(turn.Stage),ct);
+            CaseAnnotationContract.EnsureComplete(result.Metrics.DoneReason);
             var feedback=CaseAnnotationContract.Parse(result.Content,turn.Context.Last(m=>m.Role=="user").Content);
             if(feedback.Feedback.Length>chatOptions.Value.MaxResponseCharacters)throw new CaseChatException(502,"模型回覆超出長度限制，原提問已保留，可重試。");
             await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);

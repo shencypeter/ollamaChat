@@ -14,7 +14,29 @@ namespace AiTeachingAssistant.Tests;
 
 public sealed class CaseConversationPayloadTests
 {
-    [Theory][InlineData("breeze")][InlineData("llama3")][InlineData("qwen")]
+    [Fact] public async Task CompactCaseBudgetKeepsRawShortAndReturnsBoundedFormalSchemaWithoutMutatingSampling()
+    {
+        var settings=new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?>{["Model"]="test-omni",["AssessmentSampling:NumPredict"]="512",["CaseFeedbackMaxTokens"]="4096",["CompactCaseFeedback"]="true"}).Build().Get<OllamaOptions>()!;
+        var capture=new Capture();var client=new OllamaClient(new HttpClient(capture){BaseAddress=new Uri("http://localhost:11434/")},Microsoft.Extensions.Options.Options.Create(settings),new CaptureLogger());
+        await client.CaseFeedbackAsync([new("system",CaseChatPrompts.Get(AnalysisStage.IllnessCourse)),new("user","合成格式測試")],AnalysisStage.IllnessCourse,default);
+        using(var stage=JsonDocument.Parse(capture.Body!)){
+            Assert.Equal(4096,stage.RootElement.GetProperty("options").GetProperty("num_predict").GetInt32());
+            var properties=stage.RootElement.GetProperty("format").GetProperty("properties");Assert.Equal(600,properties.GetProperty("feedback").GetProperty("maxLength").GetInt32());
+            Assert.Equal(8,properties.GetProperty("annotations").GetProperty("maxItems").GetInt32());
+            var annotation=properties.GetProperty("annotations").GetProperty("items").GetProperty("properties");Assert.Equal(160,annotation.GetProperty("text").GetProperty("maxLength").GetInt32());Assert.Equal(80,annotation.GetProperty("explanation").GetProperty("maxLength").GetInt32());
+        }
+        await client.ConversationAsync([new("user","合成Raw")],default);using var raw=JsonDocument.Parse(capture.Body!);
+        Assert.Equal(512,raw.RootElement.GetProperty("options").GetProperty("num_predict").GetInt32());Assert.False(raw.RootElement.TryGetProperty("format",out _));Assert.Equal(512,settings.AssessmentSampling.NumPredict);
+    }
+    [Fact] public async Task TruncatedFormalReplyHasAnExplicitSafeErrorWhileRawKeepsItsExistingBehavior()
+    {
+        var capture=new Capture{Response="""{"message":{"role":"assistant","content":"synthetic partial reply"},"done_reason":"length"}"""};
+        var client=new OllamaClient(new HttpClient(capture){BaseAddress=new Uri("http://localhost:11434/")},Microsoft.Extensions.Options.Options.Create(new OllamaOptions()),new CaptureLogger());
+        var failure=await Assert.ThrowsAsync<CaseChatException>(()=>client.CaseFeedbackAsync([new("system","synthetic system"),new("user","synthetic answer")],AnalysisStage.IllnessCourse,default));
+        Assert.Equal(502,failure.StatusCode);Assert.Contains("輸出上限",failure.Message);Assert.DoesNotContain("partial reply",failure.Message);
+        Assert.Equal("synthetic partial reply",(await client.ConversationAsync([new("user","synthetic raw")],default)).Content);
+    }
+    [Theory][InlineData("breeze")][InlineData("llama3")][InlineData("qwen")][InlineData("qwen25-omni")]
     public async Task StagePayloadContainsOnlyCurrentSystemAndAnswerEvenWhenCallerSuppliesDraftHistory(string profile)
     {
         using var file=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"Configuration","Ollama",profile+".json")));
@@ -43,7 +65,7 @@ public sealed class CaseConversationPayloadTests
         Assert.Equal("system",payload.RootElement.GetProperty("messages")[0].GetProperty("role").GetString());
     }
     [Theory]
-    [InlineData("breeze")][InlineData("llama3")][InlineData("qwen")]
+    [InlineData("breeze")][InlineData("llama3")][InlineData("qwen")][InlineData("qwen25-omni")]
     public async Task AnnotatedFeedbackHasIsolatedSchemaAndNeverRewritesTheLatestOriginal(string profile)
     {
         using var file=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"Configuration","Ollama",profile+".json")));
@@ -73,8 +95,8 @@ public sealed class CaseConversationPayloadTests
         Assert.Equal(0,reply.Metrics.ResponseTokens);
     }
     [Theory]
-    [InlineData("breeze")][InlineData("llama3")][InlineData("qwen")]
-    public async Task RawHasOnlyOriginalRolesStageHasExplicitSystemAndBothShareSamplingWithoutCapture(string profile)
+    [InlineData("breeze")][InlineData("llama3")][InlineData("qwen")][InlineData("qwen25-omni")]
+    public async Task RawHasOnlyOriginalRolesAndStageKeepsItsConfiguredSamplingWithoutCapture(string profile)
     {
         using var configuration = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Configuration", "Ollama", profile + ".json")));
         var options = configuration.RootElement.GetProperty("Ollama").Deserialize<OllamaOptions>(new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
@@ -91,11 +113,12 @@ public sealed class CaseConversationPayloadTests
         using var stage = JsonDocument.Parse(transport.Body!);
         Assert.Equal("server stage instructions", stage.RootElement.GetProperty("messages")[0].GetProperty("content").GetString());
         Assert.Equal(2, stage.RootElement.GetProperty("messages").GetArrayLength());
-        Assert.Equal(raw.RootElement.GetProperty("options").GetRawText(), stage.RootElement.GetProperty("options").GetRawText());
+        var expectedStageSampling=JsonSerializer.SerializeToElement(options.AssessmentSampling with{NumPredict=options.CaseFeedbackMaxTokens??options.AssessmentSampling.NumPredict});
+        Assert.Equal(expectedStageSampling.GetRawText(), stage.RootElement.GetProperty("options").GetRawText());
         var sampling = raw.RootElement.GetProperty("options");
         Assert.Equal(0, sampling.GetProperty("temperature").GetDouble()); Assert.Equal(42, sampling.GetProperty("seed").GetInt32());
         Assert.Equal(0.9, sampling.GetProperty("top_p").GetDouble()); Assert.Equal(40, sampling.GetProperty("top_k").GetInt32());
-        Assert.Equal(16384, sampling.GetProperty("num_ctx").GetInt32()); Assert.Equal(4096, sampling.GetProperty("num_predict").GetInt32());
+        Assert.Equal(options.AssessmentSampling.NumCtx, sampling.GetProperty("num_ctx").GetInt32()); Assert.Equal(options.AssessmentSampling.NumPredict, sampling.GetProperty("num_predict").GetInt32());
         Assert.Null(diagnostics.LatestRedactedPayload); Assert.Null(inspection.Current); Assert.Empty(logger.Messages);
     }
 

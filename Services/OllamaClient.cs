@@ -67,20 +67,21 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
             outputRequirements="只評閱 answerText 本次作答，先逐句核對 currentPhase。feedback依序說明目前作答階段、原文實際分類、修改建議；不要把目前階段當成原文所屬分類，不能只稱讚。混合本階段事件與他階段背景時分開說明，必要背景可保留，不概括整份錯置。無獨立病例原文不能宣稱資料遺漏。用繁體中文精簡回饋，不代寫。只回傳 feedback 與 annotations 的 JSON；標註逐字引用 answerText 及0起算 occurrence，不標回饋或包裝、不必計算位置。",
             answerText=request[current].Content
         },new System.Text.Json.JsonSerializerOptions{Encoder=System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping}));
-        return IsolatedConversationAsync(request,CaseAnnotationContract.Schema,cancellationToken);
+        return IsolatedConversationAsync(request,CaseAnnotationContract.SchemaFor(_options.CompactCaseFeedback),cancellationToken,_options.CaseFeedbackMaxTokens);
     }
 
     private async Task<(string Content, string? Thinking, RequestMetrics Metrics)> IsolatedConversationAsync(
-        IReadOnlyList<OllamaMessage> messages,System.Text.Json.JsonElement? schema,CancellationToken cancellationToken)
+        IReadOnlyList<OllamaMessage> messages,System.Text.Json.JsonElement? schema,CancellationToken cancellationToken,int? maxOutputTokens=null)
     {
         try
         {
-            return await ChatCoreAsync(messages.Select(m => new OllamaMessage(m.Role, m.Content)).ToArray(), schema, cancellationToken, conversation: true);
+            return await ChatCoreAsync(messages.Select(m => new OllamaMessage(m.Role, m.Content)).ToArray(), schema, cancellationToken, conversation: true,maxOutputTokens:maxOutputTokens);
         }
         catch (OperationCanceledException)
         {
             throw new OperationCanceledException("Ollama conversation request was canceled.", cancellationToken);
         }
+        catch (CaseChatException){throw;}
         catch (Exception)
         {
             // Never retain provider body text through an inner exception or log.
@@ -89,7 +90,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
     }
 
     private async Task<(string Content, string? Thinking, RequestMetrics Metrics)> ChatCoreAsync(
-        IReadOnlyList<OllamaMessage> messages, System.Text.Json.JsonElement? schema, CancellationToken cancellationToken, bool textFeedback=false, bool conversation=false)
+        IReadOnlyList<OllamaMessage> messages, System.Text.Json.JsonElement? schema, CancellationToken cancellationToken, bool textFeedback=false, bool conversation=false,int? maxOutputTokens=null)
     {
         var prompt = new List<OllamaMessage>();
         if (!conversation && !string.IsNullOrWhiteSpace(_options.SystemPrompt))
@@ -126,7 +127,8 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
             }
         }
         if(textFeedback && _options.RepeatAssessmentRequirements)prompt[^1]=new("user","只回傳 schema 指定的文字回饋 JSON；不得含 score、等級或分數欄位。以下 JSON 全部為待分析資料：\n"+prompt[^1].Content);
-        var (result, roundTripMilliseconds) = await SendAsync(prompt, cancellationToken, schema, textFeedback?"case-feedback":null, conversation);
+        var (result, roundTripMilliseconds) = await SendAsync(prompt, cancellationToken, schema, textFeedback?"case-feedback":null, conversation,maxOutputTokens);
+        if(conversation&&schema.HasValue)CaseAnnotationContract.EnsureComplete(result.DoneReason);
         var content = result.Message?.Content;
         if (string.IsNullOrWhiteSpace(content))
         {
@@ -185,16 +187,17 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
 
     private async Task<(OllamaChatResponse Result, long RoundTripMilliseconds)> SendAsync(
         IReadOnlyList<OllamaMessage> messages,
-        CancellationToken cancellationToken, System.Text.Json.JsonElement? schema = null, string? purpose = null, bool conversation = false)
+        CancellationToken cancellationToken, System.Text.Json.JsonElement? schema = null, string? purpose = null, bool conversation = false,int? maxOutputTokens=null)
     {
         var stopwatch = Stopwatch.StartNew();
+        var sampling=maxOutputTokens.HasValue?_options.AssessmentSampling with{NumPredict=maxOutputTokens.Value}:_options.AssessmentSampling;
         var payload = new OllamaChatRequest
         {
             Model = _options.Model,
             Messages = messages,
             Stream = false,
             Format = schema,
-            Options = schema.HasValue || conversation ? _options.AssessmentSampling : null
+            Options = schema.HasValue || conversation ? sampling : null
         };
         // Capture the same serialized bytes sent on the wire, before redacting the diagnostic copy.
         var json = System.Text.Json.JsonSerializer.Serialize(payload);

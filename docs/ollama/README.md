@@ -1,5 +1,31 @@
 # Ollama 模型設定與有效負載保存
 
+## 2026-11-17 輸入長度實測
+
+已比較Taipei Omni／Breeze與IAN02 Llama3的實際載入容量、prompt token量及首／中／尾合成標記。Omni可在16384設定讀10079 tokens，沒有固定卡4096；刻意溢位時兩台均有前文截斷跡象。正式Stage合成2375輸入tokens仍有錯碼，不能把分類失準全部歸因截斷。未改設定／Prompt／模板或重啟，詳[容量診斷與限制](context-size-check.md)。
+
+## 2026-11-17 Omni正式階段獨立輸出預算（現行）
+
+修正qwen25-omni把Raw的512上限直接套到正式JSON的問題：Raw及原AssessmentSampling仍512，僅CaseFeedback以CaseFeedbackMaxTokens=4096、CompactCaseFeedback=true送出。schema上限收斂為feedback600、annotations8、quote160、explanation80；其餘三模型及原預設schema不變。sampling使用複本，context budget亦扣實際Stage輸出預算，不會污染下一次Raw呼叫。實際payload dialog可看到不同options／format。
+
+教學System Prompt與v3原文未改，未修補原文引用或補造分類；舊同model／prompt失敗作答仍可同ID重試。正式回覆length會明確報輸出上限（包含content空白的情況），不保存不完整assistant；Raw length行為維持。failure_code仍provider_failed，無Migration。
+
+HTTP mock與隔離DB383項全部通過、schema已刪；實際Provider合成長文約7.8s完整JSON／stop，Raw多輪與短Stage可用。模型仍有過度分類等品質問題。沒有讀出或重送使用者真實作答，原失敗封包未留存，歷史原因僅能結合metadata與合成重現判讀。7173已更新且仍Taipei指定Omni。
+
+## 2026-11-17 Taipei Qwen2.5 Omni（現行設定）
+
+使用者指定`rockn/Qwen2.5-Omni-7B-Q4_K_M:latest`，新增獨立`qwen25-omni` profile，端點沿Taipei192.168.1.195:11434。預設與7173已切換，VS選項`https-Taipei-Qwen25Omni`；原`https-IAN02-Qwen3`、`https-IAN02-Llama3`、`https-Taipei-Breeze`及三份profile完全保留，全部只用7173。支援名稱集中於OllamaOptions.ProfileNames，主程式及實驗工具共用白名單，不開任意檔案路徑。
+
+實際模型show為qwen2vl／Q4_K_M，模板只有System＋Prompt，因此合併單system、未套Breeze的legacy user重申。新profile沿模型原生num_predict512（原模型仍4096），context16384及其餘共用抽樣不變；沒有改遠端模板、think flag或加入音訊／圖片流程。初沿4096時首Raw太長而次輪budget拒絕，512下2Raw＋短Stage JSON可用；較長B例仍以length截斷JSON、重複feedback，後端拒絕，品質未驗收。完整[觀察紀錄](../ai-tuning/03-evaluation-results.md)。
+
+後端326通過／54外部DB略過，新增5個profile封包案例、evaluation helper及標準VS含Vue成功；7173 profile／精確model／頁面200／匿名AI401已核對。切換清Raw暫存，Stage歷史保留，沒有自動fallback。512與4096的延遲不可直接視為同條件速度比較。
+
+## 2026-11-17 目前切換Qwen3比較（現行設定）
+
+依使用者要求，預設Profile現qwen，使用既有IAN02 qwen3:8b。新增VS選項https-IAN02-Qwen3，與https-IAN02-Llama3／https-Taipei-Breeze均只用7173，停止目前服務後再選另一個F5。三份模型profile／sampling／think設定未修改，未採用Breeze實驗提示，沒有自動fallback。
+
+IAN020.40.16及模型存在已核對；2輪Raw與1輪Stage JSON均成功，約51.2／4.5／46.5秒。另1則B病程合成例約71.1秒，有效引用標B1b／B1c，但影像／手術未標、feedback要求未提供細節，未通過教學品質驗收。相關封包13及標準VS含Vue通過，7173已核對profile=qwen、頁面200／匿名AI401。切換清Raw暫存、Stage保留，建議新開階段對話。實際合成觀察見[評估紀錄](../ai-tuning/03-evaluation-results.md)。
+
 ## 2026-11-17 使用者確認切回Llama3（現行設定）
 
 在Breeze分類診斷後，使用者選「切回Llama3，保留Breeze供比較」。appsettings預設Profile現為llama3，IAN02的llama3.1:8b；Breeze／Qwen的各自設定及兩個VS7173選項完全保留，沒有自動fallback，也未部署四種Breeze實驗提示。切換前原IAN02名稱短暫解析失敗，重新解析／連線成功後，version／tags及合成2Raw＋1Stage均成功；沒有改用固定IP。
@@ -71,7 +97,7 @@ $env:Ollama__Profile = 'llama3' # 或 qwen、breeze
 dotnet run --launch-profile http
 ```
 
-發布版本亦使用同一環境變數啟動 DLL。專案預設現為 `llama3`（2026-11-17使用者確認切回，Breeze保留供比較），不會在失敗時自動改用其他模型。啟動時依序套用基礎設定、所選 profile、`appsettings.Local.json`、環境變數；本地檔及環境中的 BaseUrl／Model 會覆寫 profile，切換前應檢查是否存在舊覆寫。Profile 的選擇在讀取本地檔前完成，請用啟動選單、基礎appsettings或環境變數 `Ollama__Profile` 選擇，不要只寫進本地檔。
+發布版本亦使用同一環境變數啟動 DLL。專案預設現為 `qwen25-omni`（2026-11-17使用者指定Taipei模型，原三份保留），不會在失敗時自動改用其他模型。啟動時依序套用基礎設定、所選 profile、`appsettings.Local.json`、環境變數；本地檔及環境中的 BaseUrl／Model 會覆寫 profile，切換前應檢查是否存在舊覆寫。Profile 的選擇在讀取本地檔前完成，請用啟動選單、基礎appsettings或環境變數 `Ollama__Profile` 選擇，不要只寫進本地檔。
 
 設定保存在 `Configuration/Ollama/`，會隨建置及發布複製。切換設定不會更動資料庫、學生資料或全域臨床評分規準；請在新的對話中驗收，避免沿用舊模型一般對話內容。
 

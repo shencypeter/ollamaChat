@@ -37,6 +37,26 @@
         "Ollama__Profile": "llama3"
       }
     },
+    "https-IAN02-Qwen3": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "applicationUrl": "https://localhost:7173",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Ollama__Profile": "qwen"
+      }
+    },
+    "https-Taipei-Qwen25Omni": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": true,
+      "applicationUrl": "https://localhost:7173",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "Ollama__Profile": "qwen25-omni"
+      }
+    },
     "https-Taipei-Breeze": {
       "commandName": "Project",
       "dotnetRunMessages": true,

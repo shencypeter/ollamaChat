@@ -17,6 +17,7 @@ public class AssessmentPayloadTests
     [InlineData("breeze", true, 2)]
     [InlineData("llama3", false, 4)]
     [InlineData("qwen", false, 4)]
+    [InlineData("qwen25-omni", true, 2)]
     public async Task SavedProfilesPreserveWireLayout(string profile, bool merged, int count)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);

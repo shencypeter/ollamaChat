@@ -1,5 +1,45 @@
 # 開發歷程與決策紀錄
 
+## 2026-11-17 Taipei輸入截斷假說驗證
+
+區分輸入截斷與上一輪輸出length問題。唯讀show確認Omni模型預設context4096、native32768；Breeze預設8000、native32768，兩者模板簡單；profile實際仍送16384。11次合成首／中／尾key探針（Taipei各4、IAN02 Llama3共3）同步讀ps，實際載入context全匹配請求。Omni同23,167-byte輸入在4096時回報2050 tokens／key錯，16384時10079 tokens／三key全對。46,167-byte超量輸入於兩Taipei模型降至8194／8195，key錯；Llama3因tokenizer較省仍13088可讀，另69,167-byte溢位同降8194且首中key遺失。故有超限截斷證據，但無Taipei固定較低上限證據。Breeze中型例11105輸入、輸出128達length，本身不能判定key可讀性。
+
+再用既有實際Provider及合成骨折Stage，2375輸入／747輸出、stop、完整JSON約8.3s，仍過度分類；不把教學遵循失敗當截斷證據。未取得遠端host／proxy／runner log，亦無法重建前次失敗封包，不改遠端模板、sampling、Prompt或放寬驗證。所有資料全新合成、無真實學生作答／DB寫入、無Migration。新增docs/ollama/context-size-check.md保存方法／表格／官方參考；Ollama索引、規格／交接／本歷程同步。未跑build／全回歸（無程式改動）；7173仍正常bin/Debug PID18048／qwen25-omni、/courses200，未重啟。保留dirty工作，未提交推送。
+
+## 2026-11-17 等待提示改接收／閱讀／分類／著色流程
+
+使用者希望動態訊息模擬助教收到作答後閱讀、分類及著色。改caseChatRequestGuide為流程文案：前端接收提交、閱讀段落、核對編碼、整理原文引用、準備底線與徽章著色資料、整理回饋；保留目前stage及該phase公開分類參考。AiReplyWaiting的Stage標題改處理中、label改作答處理流程，caption明示非模型即時進度，Raw改用聊天前文及等待回覆流程。沒有新增server進度事件／SSE／串流回覆或自動宣告儲存／標註完成。
+
+更新既有文案斷言，相關Vue46/46、Chrome桌面Raw／390深色Stage2/2及Vite通過，驗證暫停、下一則、reduced-motion、成功後移除及request content原樣，已檢視手機深色。既有7173無重啟，/courses200供index-DudL5rjP.js，Vite原chunk警告非失敗。無後端／DB／Prompt／模型設定改動，Raw不因部署清除；交接／規格／回饋說明及合成截圖同步，保留dirty工作，未提交推送。
+
+## 2026-11-17 Omni長作答回覆失敗修正
+
+使用者提供失敗畫面與作答。僅讀production指定時點status／failure_code／字數／stage，確認provider_failed而非context_limit；沒有讀出、重送或保存該內容，上游失敗本文原本未留存，不能逐包證實舊回覆。使用完全不同的新合成長案例做探針，確認既有512輸出會截斷；試驗階段獨立4096＋compact schema後可完整JSON／stop，約7.8s，仍有不正確過度分類，未宣稱教學品質通過。
+
+新增選用CaseFeedbackMaxTokens與CompactCaseFeedback，只於qwen25-omni啟用。Raw仍512；Stage用4096，feedback600、最多8標註、引用160、說明80。CaseAnnotationContract原預設仍12000／48／16000／200，其他profile檔完全未改；SendAsync只複製sampling、絕不改共享Options，CaseChatBudget預留Stage實際輸出。Prompt文字／v3不變，未改評分／Studio／Raw策略或來源資料。正式回覆length在provider（含空content）及workflow拒絕，明確安全錯誤、不存partial assistant；仍用既有provider_failed，不需Migration／變更資料庫check constraint。
+
+先以新2項HTTP mock回歸重現512／未報截斷，再修正；新增DB回歸驗證截斷後只留user、0往返、同ID retry產生1正式回覆。初次全DB回歸發現舊修訂成功fixture用length作量測樣本，改成stop，截斷語意由新測試獨立覆蓋。最終隔離schema383/383、036→039升級與舊資料指紋通過、finally刪schema。真實修正Provider（非臨時HTTP轉換）合成長文完整JSON／stop約7.8s，2Raw與短Stage也成功；沒有實呼使用者答案。標準VS含Vue成功（原chunk警告仍在），唯一7173由核對PID24724更新正常bin/Debug PID18048，profile=qwen25-omni、部署Raw512／Stage4096／compact核對，/courses200／匿名AI401、其他舊埠無listener，bundle仍index-CunPqfQQ.js。原失敗user不改、不自動retry，重啟清Raw、正式歷史保留。規格／交接／Ollama／評估／README同步，保留dirty工作，未提交推送。
+
+## 2026-11-17 切換Taipei指定Qwen2.5 Omni
+
+使用者要求Taipei的rockn/Qwen2.5-Omni-7B-Q4_K_M:latest（訊息末尾反斜線視為排版，不是tag）。核對version0.40.11／tags精確存在，show為qwen2vl／Q4_K_M、單純System＋Prompt模板、原生num_ctx4096／num_predict512；沒有改遠端Modelfile或新增多模態功能。先新增5個profile封包案例重現檔案不存在，再新增獨立qwen25-omni.json，不覆寫原三份。沿模板採MergeAssessmentSystemMessages=true、RepeatAssessmentRequirements=false；共用seed／temperature／top_p／top_k與16384 context保留。
+
+初先沿4096輸出，Raw首輪約31.9s回覆過長，次輪完整history budget拒絕；未截斷記憶或放寬budget，改新profile沿模型原生512上限。再驗2Raw及簡短Stage均成功，累計約4.1／7.9／9.9s；另1則合成B病程HTTP200、512 tokens以length結束，JSON截斷被CaseAnnotationContract拒絕，內容重複且混淆B階段與B1子碼，未宣稱分類／教學驗收通過。所有輸入合成、無DB歷程／成績寫入。輸出上限不同，不能拿延遲當同參數模型排名。
+
+OllamaOptions.ProfileNames集中四個白名單，Program及3個PortalSmoke工具／AssessmentEvaluation沿用，保留原拒絕未知profile的檔案路徑保護。新增VS https-Taipei-Qwen25Omni並設appsettings預設qwen25-omni，全部沿7173。新5個封包案例與舊模型布局通過；全後端326通過／54外部DB略過（未跑DB，模型設定無schema變更），evaluation helper及標準Visual Studio含Vue成功；Vite仍僅505.2kB chunk警告。核對舊PID34716後重啟為正常bin/Debug PID24724，明確profile=qwen25-omni、部署Model精確值，/courses200／匿名AI401，其他舊埠無listener，bundle仍index-CunPqfQQ.js。Raw清除、Stage歷史保留，未提交推送，文件同步並保留既有dirty工作。
+
+## 2026-11-17 等待泡泡輪播請求教學要求
+
+使用者希望長時間等待時輪播Ollama請求中的要求、呈現AI串流感。採前端公開教學要求摘要，明示不是即時生成內容或實際模型進度，不假造partial response／thinking。新增caseChatRequestGuide（對照既有教授要求＋目前stage與授權API分類目錄）及AiReplyWaiting（40ms逐字、短暫停留後輪播、游標、暫停／下一則、reduced-motion靜態）。Raw有獨立摘要，避免宣稱Raw帶教學prompt；沒有讀取私有System Prompt、requestSnapshots或學生作答。CaseAnalysisChat用原busy生命週期掛載，成功／錯誤／切模式及卸載清計時器，不動HTTP payload或持久化。
+
+新增timer／暫停／手動切換／卸載清除、reduced-motion動態變更、Unicode／HTML安全及Raw／Stage摘要隔離測試；先確認功能不存在，完成後Vue全量285/285。既有延遲API Chrome流程擴充逐字文字、暫停／下一則、提示模式正確、reduced-motion、原送出content不變，完整26/26；已檢視1440淺色Raw與390深色Stage。Vite成功（單chunk505.2kB警告，gzip164.11kB；未因此重構），/courses200供index-CunPqfQQ.js。模型Qwen與既有7173 PID34716無重啟，未實呼LLM、無後端／API／DB／Migration／Prompt／模型參數變更，Raw暫存未因部署清除。規格、交接、回饋說明及合成截圖同步；保留既有dirty工作，未提交推送。
+
+## 2026-11-17 使用者要求切換Qwen3比較
+
+核對持久文件、Git、三profile與覆寫；IAN02解析／version0.40.16／qwen3:8b存在成功，無本地或環境相關覆寫。沿既有Provider／抽樣作合成2輪Raw＋1輪明確Stage成功，累計51.2／55.7／102.2秒；單輪差值約51.2／4.5／46.5秒，未將第一輪延遲全歸因載入。另以同批純B合成作答做1次分類：HTTP200、JSON可解析、1筆精確引用、B1b/B1c，約71.1秒、prompt2173／response1035 tokens。影像與手術未標，feedback要求未提供的細節，僅是初步觀察而非教學品質驗收。
+
+appsettings預設llama3→qwen，新增VS https-IAN02-Qwen3並沿7173；保留Llama3、Breeze及三profile原內容，不改think flag、sampling、Prompt或Provider。相關三profile／conversation封包13/13及標準VS含Vue建置成功。核對原PID36892後，唯一7173更新正常bin/Debug PID34716，明確--Ollama:Profile=qwen，部署設定同值，/courses200／匿名AI401、其他舊埠無listener，bundle仍index-DD-5sG5c.js。無DB／Migration／真實作答，Raw暫存重啟清除，Stage歷史保留。README、模型說明、規格／交接／評估同步；保留所有dirty工作，未提交推送。
+
 ## 2026-11-17 確認切回Llama3、保留Breeze比較
 
 使用者回覆模型選項，明確要求切回Llama3。先重查持久文件、Git、三profile與模型覆寫，沒有相關覆寫；初次IAN02的version／tags因名稱解析失敗，未停止7173。再查DNS及本機名稱得到ian02.local、IPv4 ping成功，原IAN02 BaseUrl重試version0.40.16／模型存在，既有Provider合成2輪Raw＋1輪明確stage結構化回饋皆成功，無DB寫入。未猜測固定IP、未修改hosts／BaseUrl或模型相容設定。

@@ -1,7 +1,7 @@
 <script setup>
 import {computed,onMounted,onBeforeUnmount,ref,watch} from 'vue'
 import {onBeforeRouteLeave,onBeforeRouteUpdate} from 'vue-router'
-import {LoaderCircle,MessagesSquare,RotateCcw,Send,UsersRound} from '@lucide/vue'
+import {MessagesSquare,RotateCcw,Send,UsersRound} from '@lucide/vue'
 import {api} from '../api'
 import {auth} from '../composables/auth'
 import {experience} from '../composables/experience'
@@ -10,6 +10,8 @@ import AnswerRevisionDiff from './AnswerRevisionDiff.vue'
 import TutorAvatar from './TutorAvatar.vue'
 import PhaseAnnotatedAnswer from './PhaseAnnotatedAnswer.vue'
 import PhaseAlignmentNotice from './PhaseAlignmentNotice.vue'
+import AiReplyWaiting from './AiReplyWaiting.vue'
+import {caseChatRequestGuide} from '../utils/caseChatRequestGuide'
 const props=defineProps({course:{type:Object,required:true}})
 const base=`/courses/${props.course.id}/case-analysis`
 const config=ref(null),mode=ref('raw'),tab=ref('chat'),draft=ref(''),error=ref(''),loading=ref(true),busy=ref(false)
@@ -18,6 +20,7 @@ const records=ref(null),studentId=ref(''),reviewStage=ref('premorbid'),attempt=r
 const annotationDisplayMode=ref('underline')
 const selectedRoundId=ref(''),revisionParent=ref(null),performance=ref(null)
 const allowedStages=['premorbid','illnessCourse','functionalAssessment','psychosocial']
+const requestHints=computed(()=>caseChatRequestGuide(mode.value,config.value?.classifications||[]))
 const canReview=computed(()=>config.value?.canReview&&['teacher','ta'].includes(props.course.courseRole))
 const canInspectRequests=computed(()=>config.value?.canInspectRequests===true&&['teacher','ta'].includes(props.course.courseRole)&&!experience.student&&tab.value==='chat')
 // Captures belong only to this mounted page. Never attach them to messages/history or a request body.
@@ -236,7 +239,7 @@ onBeforeUnmount(()=>{destroyed=true;invalidate();window.removeEventListener('bef
       <p v-if="!shownMessages.length&&!busy" class="empty-inline">尚無訊息。</p>
       <article v-for="(message,index) in shownMessages" :key="message.id||index" class="chat-message" :class="message.role==='user'?'from-user':'from-assistant'"><div class="message-author"><TutorAvatar v-if="message.role==='assistant'"/><strong>{{message.role==='user'?(formal?'學生作答':'使用者'):(formal?'AI 助教回饋':'AI 助教')}}</strong></div><PhaseAnnotatedAnswer v-model:display-mode="annotationDisplayMode" v-if="formal&&message.role==='user'&&feedback?.replyTo===message.id" :key="`${diffScope}:${session?.id}:${message.id}`" :content="message.content" :stage="activeStage" :annotations="feedback.annotations||[]" :classifications="config.classifications||[]"/><p v-else class="message-content">{{message.content}}</p><PhaseAlignmentNotice :display-mode="annotationDisplayMode" v-if="formal&&message.role==='assistant'&&message.replyTo===selectedRound?.id" :content="selectedRound.content" :stage="activeStage" :annotations="message.annotations||[]" :classifications="config.classifications||[]"/><small v-if="message.createdAt" class="muted">{{date(message.createdAt)}}</small><span v-if="message.status==='pending'" role="status"> 等待回覆中</span><span v-if="message.status==='failed'" class="error-text"> 回覆失敗，原訊息已保留</span><button v-if="message.role==='user'&&message.status==='failed'&&!readonly" class="button secondary" :disabled="busy" data-action="retry-message" @click="retryMessage(message)">重試回覆</button><button v-if="message.role==='assistant'" type="button" class="button secondary" data-action="performance" @click="openPerformance(message)">查看回覆效能</button><button v-if="message.role==='assistant'&&canInspectRequests" type="button" class="button secondary" data-action="request-inspection" @click="openPerformance(message,'request')">查看 Ollama 請求</button></article>
      </div>
-     <div v-if="busy" class="chat-message from-assistant reply-loading" data-reply-loading role="status" aria-live="polite"><div class="message-author"><TutorAvatar/><strong>{{formal?'AI 助教回饋':'AI 助教'}}</strong></div><div class="reply-loading-content"><LoaderCircle class="reply-spinner" :size="30" aria-hidden="true"/><span>AI 助教正在回覆…</span></div></div>
+     <AiReplyWaiting v-if="busy" class="chat-message from-assistant" :formal="formal" :hints="requestHints"/>
      <button v-if="formal&&feedback&&nextStage&&tab==='chat'" type="button" class="button secondary" data-action="next-stage" @click="chooseMode(nextStage.key)">下一階段：{{nextStage.label}}</button>
     </div>
    </div>
@@ -251,7 +254,7 @@ onBeforeUnmount(()=>{destroyed=true;invalidate();window.removeEventListener('bef
 </template>
 
 <style scoped>
-.reply-loading{margin:16px 0;width:100%;box-sizing:border-box}.reply-loading-content{display:flex;align-items:center;justify-content:center;gap:12px;min-height:110px;color:var(--text)}.reply-spinner{flex:none;color:var(--accent);animation:reply-spin 1s linear infinite}@keyframes reply-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.reply-spinner{animation:none}}
+
 .feedback-workspace{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,1fr);gap:20px;margin:20px 0;align-items:start}.round-sidebar{min-width:0;border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--surface)}.round-sidebar h3,.round-heading h3{margin:0;font-size:1rem}.round-sidebar .history-select{margin:14px 0}.round-sidebar select{width:100%;min-width:0;max-width:100%}.round-list{display:grid;gap:8px;max-height:54vh;overflow-y:auto;margin:14px 0}.round-option{display:grid;gap:5px;padding:12px;text-align:left;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:inherit;overflow-wrap:anywhere;cursor:pointer;min-height:44px}.round-option[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}.round-option:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.round-option span,.round-option small{font-size:.8rem}.round-detail{min-width:0}.round-heading{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.round-heading .button{margin-left:auto}.feedback-workspace .chat-log{max-height:none;margin:16px 0}.feedback-workspace .chat-message{width:100%;max-width:100%;box-sizing:border-box}.revision-notice{padding:12px;background:var(--accent-soft);overflow-wrap:anywhere}.revision-notice .button{margin-left:8px}@media(max-width:760px){.feedback-workspace{grid-template-columns:minmax(0,1fr)}.round-list{max-height:220px}.round-heading .button{margin-left:0}.round-sidebar{padding:12px}}
 .case-analysis{padding:24px;min-width:0}.section-title,.chat-modes,.chat-history-actions,.composer-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.section-title{justify-content:space-between}.section-title h2{display:flex;align-items:center;gap:8px;margin:0}.chat-modes{margin:20px 0}.chat-modes .button[aria-pressed=true]{background:#5b5fc7;color:#fff;border-color:#5b5fc7}.practice-notice{padding:12px 16px;background:var(--accent-soft);border-left:4px solid var(--accent);border-radius:6px}.chat-log{display:flex;flex-direction:column;gap:14px;margin:20px 0;max-height:65vh;overflow-y:auto;overflow-wrap:anywhere}.chat-message{padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface);max-width:95%;min-width:0}.from-user{align-self:flex-end;background:var(--accent-soft)}.from-assistant{align-self:flex-start;background:color-mix(in srgb,#438b88 12%,var(--surface));border-color:color-mix(in srgb,#438b88 30%,var(--line));border-radius:18px 18px 18px 5px}.message-author{display:flex;align-items:center;gap:12px}.from-assistant .message-content{line-height:1.9}.from-assistant .message-author{margin-bottom:12px}.message-content{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}.chat-message .button{margin:8px}.chat-composer{border-top:1px solid var(--line);padding-top:16px}.chat-composer label,.history-select,.review-stage{display:grid;gap:8px}.chat-composer textarea{resize:vertical;min-height:100px}.composer-actions{justify-content:space-between;margin-top:10px}.history-select,.review-stage{margin:16px 0;max-width:450px}.error-text{color:var(--danger)}.data-table td{vertical-align:top}.statistics-summary{line-height:1.8}.button{white-space:normal}.table-scroll{max-width:100%;overflow-x:auto}@media(max-width:600px){.case-analysis{padding:16px}.chat-modes{display:grid;grid-template-columns:1fr 1fr}.chat-modes button:first-child{grid-column:1/-1}.chat-modes .button{min-height:44px}.chat-message{max-width:100%}.section-title{align-items:flex-start;flex-direction:column}}
 </style>

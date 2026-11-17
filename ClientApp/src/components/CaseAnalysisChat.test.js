@@ -34,7 +34,9 @@ it.each(['raw','premorbid'])('shows a reply placeholder while %s inference is pe
  const v=view();await flushPromises();if(key!=='raw')await mode(v,key)
  let finish;api.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve}))
  await v.get('textarea').setValue('pending answer');await v.get('form').trigger('submit')
- expect(v.get('[data-reply-loading]').attributes('role')).toBe('status');expect(v.get('[data-reply-loading]').text()).toContain('AI 助教正在回覆');expect(v.text()).not.toContain('尚無訊息。')
+ expect(v.get('[data-reply-loading]').attributes('role')).toBe('status');expect(v.get('[data-reply-loading]').text()).toContain(key==='raw'?'AI 助教正在回覆':'AI 助教處理中');expect(v.text()).not.toContain('尚無訊息。')
+ expect(v.get('[data-current-request-hint]').attributes('data-current-request-hint')).toContain(key==='raw'?'已送出本次訊息':'A 病前功能')
+ expect(v.get('[data-reply-loading]').text()).toContain('並非模型即時進度')
  const reply={id:'a',role:'assistant',replyTo:'u',content:'completed response'}
  finish(key==='raw'?{sessionId:'raw-1',messages:[reply]}:{activeSessionId:'s',sessions:[{id:'s',status:'active',messages:[{id:'u',role:'user',status:'completed',content:'pending answer'},reply]}]});await flushPromises()
  expect(v.find('[data-reply-loading]').exists()).toBe(false);expect(v.text()).toContain('completed response')

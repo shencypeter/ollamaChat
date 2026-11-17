@@ -82,7 +82,7 @@ for(const width of [1440,390])test(`case chat raw isolation and persisted stage 
  await page.screenshot({path:`test-results/case-chat-${width}.png`,fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([])
 })
 for(const [width,mode] of [[1440,'raw'],[390,'premorbid']])test(`pending AI reply placeholder at ${width}px in ${mode}`,async({page})=>{
- await page.setViewportSize({width,height:1000});await fixture(page,true)
+ await page.setViewportSize({width,height:1000});const state=await fixture(page,true)
  let release;const pending=new Promise(resolve=>{release=resolve})
  await page.route('**/api/courses/chat-course/case-analysis/**/messages',async route=>{await pending;await route.fallback()})
  await page.goto('/courses/chat-course?section=case-analysis')
@@ -90,12 +90,17 @@ for(const [width,mode] of [[1440,'raw'],[390,'premorbid']])test(`pending AI repl
  if(mode!=='raw'){await page.locator(`[data-mode="${mode}"]`).click();await expect(page.getByRole('button',{name:'提交並取得 AI 助教回饋',exact:true})).toBeVisible()}
  await page.getByLabel('訊息',{exact:true}).fill('合成等待回覆測試')
  await page.getByRole('button',{name:mode==='raw'?'傳送':'提交並取得 AI 助教回饋',exact:true}).click()
- const loading=page.locator('[data-reply-loading]');await expect(loading).toBeVisible();await expect(loading).toHaveAttribute('role','status');await expect(loading).toContainText('AI 助教正在回覆')
+ const loading=page.locator('[data-reply-loading]');await expect(loading).toBeVisible();await expect(loading).toHaveAttribute('role','status');await expect(loading).toContainText(mode==='raw'?'AI 助教正在回覆':'AI 助教處理中')
+ await expect(loading).toContainText('並非模型即時進度');const hint=loading.locator('[data-current-request-hint]'),firstHint=await hint.getAttribute('data-current-request-hint')
+ expect(firstHint).toContain(mode==='raw'?'已送出本次訊息':'A 病前功能')
+ await expect(loading.locator('[data-request-hint-text]')).not.toHaveText('');await loading.getByRole('button',{name:'暫停提示輪播',exact:true}).click();await expect(loading.getByRole('button',{name:'繼續提示輪播',exact:true})).toHaveAttribute('aria-pressed','true')
+ await loading.getByRole('button',{name:'下一則處理提示',exact:true}).click();expect(await hint.getAttribute('data-current-request-hint')).not.toBe(firstHint)
  await loading.scrollIntoViewIfNeeded();expect(await loading.locator('.reply-spinner').evaluate(el=>getComputedStyle(el).animationName)).not.toBe('none')
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
  await page.screenshot({path:`test-results/reply-loading-${width}.png`})
  await page.emulateMedia({reducedMotion:'reduce'});expect(await loading.locator('.reply-spinner').evaluate(el=>getComputedStyle(el).animationName)).toBe('none')
  release();await expect(loading).toHaveCount(0);await expect(page.locator('.chat-log .from-assistant')).toHaveCount(1)
+ expect(state.requests.filter(r=>r.method==='POST'&&r.path.endsWith('/messages')).at(-1).body.content).toBe('合成等待回覆測試')
 })
 test('teacher reads formal records and uses the owner course toggle',async({page})=>{
  const state=await fixture(page,true);await page.goto('/courses/chat-course?section=case-analysis')

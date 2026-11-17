@@ -5,9 +5,12 @@ namespace AiTeachingAssistant.Options;
 public sealed class OllamaOptions
 {
     public const string SectionName = "Ollama";
+    public static IReadOnlyList<string> ProfileNames { get; } = Array.AsReadOnly(new[] { "breeze", "llama3", "qwen", "qwen25-omni" });
     public string Profile { get; set; } = "breeze";
     public bool MergeAssessmentSystemMessages { get; set; } = true;
     public bool RepeatAssessmentRequirements { get; set; } = true;
+    [Range(1, 16384)] public int? CaseFeedbackMaxTokens { get; set; }
+    public bool CompactCaseFeedback { get; set; }
 
     [Required, Url]
     public string BaseUrl { get; set; } = "http://localhost:11434";

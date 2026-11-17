@@ -1,5 +1,29 @@
 # 四階段回歸與行為評估
 
+## 2026-11-17 Omni JSON截斷修正驗證
+
+使用者回報B階段失敗。僅讀指定時點metadata，確認provider_failed而非context_limit；失敗upstream本文原先未保存，未直接還原或重送實際使用者內容。使用新且不同的全合成長案例測試，Stage獨立4096輸出與compact schema（feedback600／annotations8／quote160／explanation80），原教學Prompt及v3不變。
+
+臨時邊界試驗及其後真正修正Provider都在約7.8s返回完整JSON，done_reason=stop、feedback600字、1筆逐字引用有效；Raw保持512且兩輪／短Stage可用。但該合成例標出無據碼，精確引用通過不表示分類正確，**本項只修復格式／截斷，不是教學品質驗收**。短schema可能減少涵蓋，不能要求模型一定標滿或用程式補造缺漏。
+
+隔離資料庫383/383通過，含半份回覆不保存、原user保留及same-ID retry，舊資料升級指紋保持、schema清除。其他模型配置、Raw記憶與教學Prompt不變，無Migration；實際使用者原文未進測試、文件或本機診斷結果。
+
+## 2026-11-17 Taipei Qwen2.5 Omni初步觀察
+
+依使用者指定，Taipei `rockn/Qwen2.5-Omni-7B-Q4_K_M:latest`確認存在，Ollama0.40.11、qwen2vl／Q4_K_M；模板為單純System＋Prompt，未修改遠端模板。原生輸出上限512。最初套共用4096上限，Raw首輪約31.9秒產生過長回覆，第二輪被完整history budget拒絕；沒有截斷原歷史或放寬限制。
+
+新獨立profile改沿原生512上限（context16384、其他抽樣不變），合成兩輪Raw及短Stage JSON成功，約4.1／3.8／2.0秒。另用上輪相同純B病程作答：HTTP200但生成512 tokens、done_reason=length，JSON未結束，被嚴格解析拒絕；feedback複述及重複，且將B1子分類當成要切換的階段。這不是分類成功，也不能以短延遲稱優於Qwen3：輸出上限已不同。單次小樣本未通過教學品質驗收。
+
+平台已依使用者指定切至此模型供比較，四份profile保留；沒有新增多模態輸入、沒有修補不完整JSON、沒有補造分類。輸入全合成、無正式聊天／成績寫入，忽略結果位於`.codex-build/qwen25-omni-labels-experiments.json`。
+
+## 2026-11-17 Qwen3初步比較
+
+使用者要求改回早期IAN02 qwen3:8b，沿既有Qwen profile及同一套Provider／參數，不加think flag或更改分類提示。2輪Raw及1輪Stage JSON回饋成功；首Raw約51.2秒、次輪約4.5秒、Stage約46.5秒（此為程序累計時間差，不將全部延遲歸因載入）。
+
+再對上輪相同的純B病程合成作答做單次stage-aware分類：HTTP200且JSON可解析；1筆逐字引用通過，codes為B1b／B1c，主要涵蓋受傷日期及機制。影像與手術等內容沒有標註；feedback要求補受傷年齡、職災相關性等來源未提供細節，仍有無據缺漏要求。實際metrics約71.1秒、prompt2173／response1035 tokens。沒有完整／混合案例驗收，不據此推論Qwen整體優於其他模型。
+
+所有內容合成、沒有DB歷程／成績寫入或真實病例，結果僅留本機忽略的`.codex-build/qwen-labels-experiments.json`。7173依使用者要求切為Qwen供後續人工比較，Llama3／Breeze保留。
+
 ## 2026-11-17 Breeze分類遵循診斷
 
 使用者回報Taipei Breeze不如Llama3遵循分類碼。先核對實際模板／設定及網站Provider，未使用學生作答或參考病例；以3則新合成情境比較：A主要作答放B、B病程作答、A背景加B病程。所有Stage請求僅目前system＋本次作答。

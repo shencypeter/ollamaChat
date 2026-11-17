@@ -12,8 +12,8 @@ using Npgsql;
 var builder = WebApplication.CreateBuilder(args);
 // Select a versioned payload profile before applying machine-local and environment overrides.
 var ollamaProfile = builder.Configuration["Ollama:Profile"] ?? "breeze";
-if (!new[] { "breeze", "llama3", "qwen" }.Contains(ollamaProfile))
-    throw new InvalidOperationException("Unknown Ollama profile. Use breeze, llama3 or qwen.");
+if (!OllamaOptions.ProfileNames.Contains(ollamaProfile))
+    throw new InvalidOperationException("Unknown Ollama profile. Use " + string.Join(", ", OllamaOptions.ProfileNames) + ".");
 builder.Configuration.AddJsonFile($"Configuration/Ollama/{ollamaProfile}.json", optional: false);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true).AddEnvironmentVariables();
 builder.Logging.ClearProviders();builder.Logging.AddConsole();builder.Logging.AddDebug();

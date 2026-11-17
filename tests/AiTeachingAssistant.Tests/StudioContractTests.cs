@@ -15,7 +15,7 @@ public class StudioContractTests
     [Theory][InlineData("=SUM(A1)")] [InlineData(" +cmd")] [InlineData("-1+2")] [InlineData("@function")]
     public void CsvNeutralizesFormulaCells(string cell)=>Assert.StartsWith("\"'",StudioTeachingController.CsvCell(cell));
     [Fact]public void CsvEscapesQuotesAndPreservesPlainText()=>Assert.Equal("\"合成\"\"案例\"",StudioTeachingController.CsvCell("合成\"案例"));
-    [Theory][InlineData("breeze",2)][InlineData("llama3",4)][InlineData("qwen",4)]
+    [Theory][InlineData("breeze",2)][InlineData("llama3",4)][InlineData("qwen",4)][InlineData("qwen25-omni",2)]
     public async Task TextFeedbackPreservesEachModelProfileWithoutAssessmentScores(string profile,int count)
     {
         using var config=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory,"Configuration","Ollama",profile+".json")));
