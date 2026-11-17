@@ -107,6 +107,7 @@ onBeforeUnmount(() => { closeRequested = true; hide() })
       <p v-if="!metrics" role="status">此回覆未提供效能資料；較早的紀錄可能尚未記錄這些數據。</p>
       <template v-else>
         <dl><div v-for="[label, value] in rows" :key="label"><dt>{{ label }}</dt><dd>{{ value }}</dd></div></dl>
+        <p v-if="metrics.providerCalls>1" class="chat-performance-note" data-provider-calls>模型呼叫 {{metrics.providerCalls}} 次，包含一次評語重整；Token 與耗時為合計，正式回饋輪次仍為一次。</p>
         <p v-if="metrics.doneReason" class="muted">結束原因：{{ metrics.doneReason }}</p>
         <p class="chat-performance-note">往返時間為應用程式到模型服務的本次請求時間，不包含完整頁面與資料庫流程；模型耗時依本次回傳資料呈現。未提供的數值不推算為 0。</p>
       </template>
@@ -120,6 +121,7 @@ onBeforeUnmount(() => { closeRequested = true; hide() })
             <h3>請求 {{ index+1 }}<span v-if="request.purpose"> · {{ request.purpose }}</span></h3>
             <p class="muted">端點：{{ request.url }}</p><p>實際模型：{{ request.payload?.model || '未提供' }}</p>
             <h4>訊息與提示詞</h4>
+            <template v-if="typeof request.payload?.prompt==='string'"><p class="chat-performance-note">完整 prompt（含模型角色標記）；Raw 不會因此增加應用程式 System Prompt。</p><pre tabindex="0" data-generated-prompt :aria-label="`請求 ${index+1} 完整 prompt`">{{request.payload.prompt}}</pre></template>
             <section v-for="(message,messageIndex) in request.payload?.messages||[]" :key="messageIndex" class="request-message"><h5>{{ messageIndex+1 }} · {{ message.role }}</h5><pre tabindex="0" :aria-label="`請求 ${index+1} 訊息 ${messageIndex+1}`">{{ typeof message.content==='string'?message.content:pretty(message.content) }}</pre></section>
             <template v-if="request.payload?.format!==undefined"><h4>回覆格式（format）</h4><pre tabindex="0" aria-label="回覆格式">{{ pretty(request.payload.format) }}</pre></template>
             <template v-if="request.payload?.options!==undefined"><h4>模型選項（options）</h4><pre tabindex="0" aria-label="模型選項">{{ pretty(request.payload.options) }}</pre></template>

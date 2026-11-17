@@ -16,6 +16,7 @@ const props=defineProps({course:{type:Object,required:true}})
 const base=`/courses/${props.course.id}/case-analysis`
 const config=ref(null),mode=ref('raw'),tab=ref('chat'),draft=ref(''),error=ref(''),loading=ref(true),busy=ref(false)
 const failureDiagnostic=ref(null),failureInspection=ref(null),focusedTab=ref('raw'),tabPrefix=`chat-modes-${useId()}`
+const selectedModelProfile=ref('')
 const activeTab=computed(()=>tab.value==='review'?'review':mode.value)
 watch(activeTab,key=>{focusedTab.value=key})
 function navigateTabs(event){
@@ -24,7 +25,7 @@ function navigateTabs(event){
  event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length
  tabs[next].focus()
 }
-function openFailureRequest(){if(canInspectRequests.value&&failureInspection.value)performance.value={initialTab:'request',title:'失敗請求診斷',metrics:null,modelName:config.value?.modelName,promptVersion:failureInspection.value.promptVersion,requestInspection:failureInspection.value}}
+function openFailureRequest(){if(canInspectRequests.value&&failureInspection.value)performance.value={initialTab:'request',title:'失敗請求診斷',metrics:null,modelName:failureInspection.value.requests?.[0]?.payload?.model||currentModelName.value,promptVersion:failureInspection.value.promptVersion,requestInspection:failureInspection.value}}
 const rawId=ref(null),rawMessages=ref([]),expired=ref(false),rawCapacityReached=ref(false),history=ref({sessions:[],activeSessionId:null}),selectedSessionId=ref('')
 const records=ref(null),studentId=ref(''),reviewStage=ref('premorbid'),attempt=ref(null)
 const annotationDisplayMode=ref('underline')
@@ -33,6 +34,10 @@ const allowedStages=['premorbid','illnessCourse','functionalAssessment','psychos
 const requestHints=computed(()=>caseChatRequestGuide(mode.value,config.value?.classifications||[]))
 const canReview=computed(()=>config.value?.canReview&&['teacher','ta'].includes(props.course.courseRole))
 const canInspectRequests=computed(()=>config.value?.canInspectRequests===true&&['teacher','ta'].includes(props.course.courseRole)&&!experience.student&&tab.value==='chat')
+const canChooseModel=computed(()=>config.value?.canChooseModel===true&&['teacher','ta'].includes(props.course.courseRole)&&!experience.student&&tab.value==='chat')
+const modelProfiles=computed(()=>canChooseModel.value?config.value?.modelProfiles||[]:[])
+const currentModelName=computed(()=>modelProfiles.value.find(p=>p.key===selectedModelProfile.value)?.modelName||config.value?.modelName)
+function selectedModelBody(){return canChooseModel.value&&selectedModelProfile.value?{modelProfile:selectedModelProfile.value}:{}}
 // Captures belong only to this mounted page. Never attach them to messages/history or a request body.
 const requestSnapshots=new Map()
 const stageSnapshotKey=(sessionId,replyTo)=>`stage:${sessionId}:${replyTo}`
@@ -60,7 +65,7 @@ const readonly=computed(()=>tab.value==='review'||!config.value?.canChat||(mode.
 const rawAtRisk=computed(()=>tab.value==='chat'&&mode.value==='raw'&&(rawMessages.value.length>0||busy.value||draft.value.length>0))
 const formalDraftAtRisk=computed(()=>tab.value==='chat'&&mode.value!=='raw'&&(draft.value.length>0||revisionParent.value!==null))
 const maxCharacters=computed(()=>config.value?.maximumMessageCharacters||8000)
-const failedDraft=computed(()=>mode.value!=='raw'&&messages.value.find(m=>m.role==='user'&&m.status==='failed'&&m.content===draft.value&&(m.revisesMessageId||null)===revisionParent.value))
+const failedDraft=computed(()=>mode.value!=='raw'&&messages.value.find(m=>m.role==='user'&&m.status==='failed'&&m.content===draft.value&&(m.revisesMessageId||null)===revisionParent.value&&(!canChooseModel.value||!m.modelName||m.modelName===currentModelName.value)))
 const totals=computed(()=>{
  const result={studentMessages:0,assistantReplies:0,roundTrips:0,revisionCount:0,lastActivityAt:null}
  for(const student of records.value?.students||[]){const s=student.statistics||{};for(const key of ['studentMessages','assistantReplies','roundTrips','revisionCount'])result[key]+=s[key]||0;if(s.lastActivityAt&&(!result.lastActivityAt||s.lastActivityAt>result.lastActivityAt))result.lastActivityAt=s.lastActivityAt}
@@ -92,13 +97,26 @@ function cancelRevision(){if(confirmDeparture())clearComposer()}
 function openPerformance(message,initialTab='statistics'){const key=formal.value?stageSnapshotKey(session.value?.id,message.replyTo):rawSnapshotKey(rawId.value,rawMessages.value.indexOf(message));performance.value={initialTab,metrics:message.metrics||null,title:formal.value?`第 ${rounds.value.indexOf(selectedRound.value)+1} 輪回饋效能`:'AI 回覆效能',modelName:message.modelName||config.value?.modelName,promptVersion:message.promptVersion,requestInspection:canInspectRequests.value?requestSnapshots.get(key)||null:null}}
 async function disposeRaw(strict=false){const id=rawId.value;if(id)try{await api(`${base}/raw/sessions/${id}`,{method:'DELETE'})}catch(e){if(strict&&e.status!==404)throw e}clearRawRequestSnapshots(id);if(rawId.value===id){rawId.value=null;rawMessages.value=[];expired.value=false}}
 async function startRaw(g=generation){
- if(!config.value?.canChat)return
+ if(!config.value?.canChat){if(current(g))loading.value=false;return}
  loading.value=true
- try{const data=await api(`${base}/raw/sessions`,options({method:'POST'}));if(current(g)){rawId.value=data.id;expired.value=false;rawCapacityReached.value=false}else if(data.id){void api(`${base}/raw/sessions/${data.id}`,{method:'DELETE'}).catch(()=>{})}}
+ try{const choice=selectedModelBody();const data=await api(`${base}/raw/sessions`,options({method:'POST',...(choice.modelProfile?{body:choice}:{})}));if(current(g)){rawId.value=data.id;expired.value=false;rawCapacityReached.value=false}else if(data.id){void api(`${base}/raw/sessions/${data.id}`,{method:'DELETE'}).catch(()=>{})}}
  catch(e){if(current(g)&&e.name!=='AbortError'){rawCapacityReached.value=e.status===429;report(e)}}finally{if(current(g))loading.value=false}
 }
 function confirmRaw(){return !rawAtRisk.value||window.confirm('離開純 AI 聊天後，這段暫存對話將清除且無法恢復。確定離開？')}
 function confirmDeparture(){return mode.value==='raw'&&tab.value==='chat'?confirmRaw():!formalDraftAtRisk.value||window.confirm('目前尚有未提交的作答或修改。離開後草稿將清除，確定繼續？')}
+async function chooseModel(event){
+ const key=event.target.value,restore=()=>{event.target.value=selectedModelProfile.value}
+ if(!canChooseModel.value||busy.value||loading.value||(key&&!modelProfiles.value.some(p=>p.key===key))){restore();return}
+ if(key===selectedModelProfile.value)return
+ if(mode.value==='raw'){
+  if(!confirmDeparture()){restore();return}
+  const g=invalidate();loading.value=true
+  try{await disposeRaw(true);if(!current(g))return;selectedModelProfile.value=key;clearComposer();error.value='';await startRaw(g)}
+  catch(e){if(current(g)){restore();report(e)}}finally{if(current(g))loading.value=false}
+ }else{
+  selectedModelProfile.value=key;attempt.value=null;error.value='';failureDiagnostic.value=null;failureInspection.value=null;performance.value=null
+ }
+}
 async function loadStage(g=generation){
  const path=tab.value==='review'?`${base}/records/${studentId.value}/${reviewStage.value}`:`${base}/stages/${mode.value}`
  if(tab.value==='review'&&!studentId.value)return
@@ -108,7 +126,7 @@ async function loadStage(g=generation){
 async function chooseMode(key){
  if(mode.value===key&&tab.value==='chat')return
  if(!confirmDeparture())return
- const g=invalidate();try{await disposeRaw(true)}catch(e){if(current(g))report(e);return}if(!current(g))return
+ const g=invalidate();loading.value=true;try{await disposeRaw(true)}catch(e){if(current(g)){loading.value=false;report(e)}return}if(!current(g))return
  tab.value='chat';mode.value=key;clearComposer();error.value='';setHistory({sessions:[],activeSessionId:null})
  if(key==='raw')await startRaw(g);else await loadStage(g)
 }
@@ -138,12 +156,12 @@ async function send(){
    const data=await api(`${base}/raw/sessions/${sentSessionId}/messages`,options({method:'POST',body:{content}}))
    if(current(g)){
     if(canInspectRequests.value&&data.requestInspection&&data.sessionId===sentSessionId){const index=data.messages.length-1;if(index>=previousLength&&data.messages[index]?.role==='assistant')requestSnapshots.set(rawSnapshotKey(sentSessionId,index),structuredClone(data.requestInspection))}
-    rawMessages.value=data.messages;draft.value=''
+    rawMessages.value=data.messages.map(message=>message.role==='assistant'&&!message.modelName&&data.modelName?{...message,modelName:data.modelName}:message);draft.value=''
    }
   }else{
    if(attempt.value?.content!==content||attempt.value?.revisesMessageId!==revisionParent.value)attempt.value={requestId:crypto.randomUUID(),content,revisesMessageId:revisionParent.value}
    const requestId=attempt.value.requestId
-   const data=await api(`${base}/stages/${mode.value}/messages`,options({method:'POST',body:{...attempt.value}}))
+   const data=await api(`${base}/stages/${mode.value}/messages`,options({method:'POST',body:{...attempt.value,...selectedModelBody()}}))
    if(current(g)){saveStageInspection(data,requestId);setHistory(data);clearComposer()}
   }
  }catch(e){if(current(g)&&e.name!=='AbortError'){report(e);if(mode.value!=='raw')await loadStage(g)}}finally{if(current(g))busy.value=false}
@@ -151,7 +169,7 @@ async function send(){
 async function retryMessage(message){
  if(busy.value||readonly.value)return
  const g=generation;busy.value=true;error.value=''
- try{const data=await api(`${base}/stages/${mode.value}/messages/${message.id}/retry`,options({method:'POST'}));if(current(g)){saveStageInspection(data,message.id);setHistory(data);if(draft.value===message.content)clearComposer();attempt.value=null}}
+ try{const profile=modelProfiles.value.find(p=>p.modelName===message.modelName);const data=await api(`${base}/stages/${mode.value}/messages/${message.id}/retry`,options({method:'POST',...(profile?{body:{modelProfile:profile.key}}:{})}));if(current(g)){saveStageInspection(data,message.id);setHistory(data);if(draft.value===message.content)clearComposer();attempt.value=null}}
  catch(e){if(current(g)&&e.name!=='AbortError'){report(e);await loadStage(g)}}finally{if(current(g))busy.value=false}
 }
 async function restartStage(){
@@ -197,18 +215,19 @@ async function loadConfiguration(){
  try{const data=await api(base,options());if(!current(g))return;config.value=data;if(data.enabled)await startRaw(g)}catch(e){if(current(g)&&e.name!=='AbortError')report(e)}finally{if(current(g))loading.value=false}
 }
 onMounted(()=>{window.addEventListener('beforeunload',beforeUnload);window.addEventListener('pagehide',pageHide);window.addEventListener('pageshow',pageShow);void loadConfiguration()})
-watch(()=>[auth.user?.id,experience.student,props.course.id,props.course.courseRole],()=>{invalidate();if(config.value)config.value={...config.value,canInspectRequests:false}},{flush:'sync'})
+watch(()=>[auth.user?.id,experience.student,props.course.id,props.course.courseRole],()=>{invalidate();selectedModelProfile.value='';attempt.value=null;if(config.value)config.value={...config.value,canInspectRequests:false,canChooseModel:false,modelProfiles:[]};void disposeRaw()},{flush:'sync'})
 onBeforeUnmount(()=>{destroyed=true;invalidate();window.removeEventListener('beforeunload',beforeUnload);window.removeEventListener('pagehide',pageHide);window.removeEventListener('pageshow',pageShow);void disposeRaw()})
 </script>
 
 <template>
  <section class="surface case-analysis" aria-label="個案分析 AI 助教">
-  <div class="section-title"><h2><MessagesSquare :size="22" aria-hidden="true"/> 個案分析 AI 助教</h2><span v-if="config?.modelName" class="muted">模型：{{config.modelName}}</span></div>
+  <div class="section-title"><h2><MessagesSquare :size="22" aria-hidden="true"/> 個案分析 AI 助教</h2><span v-if="currentModelName" class="muted" data-current-model>模型：{{currentModelName}}</span></div>
   <div v-if="error" class="error-box" role="alert"><p>{{error}}</p><div v-if="canInspectRequests&&failureDiagnostic" data-failure-diagnostic><strong>教師診斷：{{failureDiagnostic.code}}</strong><p>{{failureDiagnostic.reason}}</p><p v-if="failureDiagnostic.upstreamStatus">模型服務 HTTP {{failureDiagnostic.upstreamStatus}}</p><small>診斷僅保留於本頁，不寫入聊天歷史；模型未提供的原因不會推測。</small></div><button v-if="canInspectRequests&&failureInspection" class="button secondary" type="button" data-action="failed-request" @click="openFailureRequest">查看失敗請求</button></div>
   <p v-if="!config&&loading" role="status">載入 AI 助教中…</p>
   <button v-if="!config&&!loading" class="button secondary" @click="loadConfiguration">重新載入 AI 助教</button>
   <p v-if="config&&!config.enabled" class="empty-inline">此課程尚未啟用個案分析 AI 助教。</p>
   <template v-if="config?.enabled">
+   <label v-if="canChooseModel" class="model-select">本次聊天模型<select data-model-select :value="selectedModelProfile" :disabled="busy||loading||!config.canChat" @change="chooseModel"><option value="">環境預設（{{config.modelName}}）</option><option v-for="profile in modelProfiles" :key="profile.key" :value="profile.key">{{profile.label}} · {{profile.modelName}}</option></select><small class="field-hint">只影響本人接下來的聊天；歷次回饋保留當時模型。純 AI 聊天切換模型會重新開始。</small></label>
    <p v-if="config.isPractice" class="practice-notice">教師／助教教學練習：階段對話僅供本人練習，不計入正式學生統計。各階段系統目前為 AI 提供，尚未經過專業調教與驗證。</p>
    <p v-if="!config.canChat" class="practice-notice">目前為唯讀檢視，無法傳送訊息或建立對話。</p>
    <nav class="chat-modes" role="tablist" aria-label="聊天模式" @keydown="navigateTabs">
@@ -240,7 +259,7 @@ onBeforeUnmount(()=>{destroyed=true;invalidate();window.removeEventListener('bef
     <aside v-if="formal" class="round-sidebar" aria-label="回饋輪次">
      <h3>回饋輪次 <span class="muted">{{rounds.length}}</span></h3>
      <label v-if="history.sessions?.length" class="history-select">對話紀錄<select :value="selectedSessionId" :disabled="busy||loading" @change="selectSession($event.target.value,$event)"><option v-if="!history.activeSessionId&&tab==='chat'" value="">新對話（送出後建立）</option><option v-for="(item,index) in history.sessions" :key="item.id" :value="item.id">對話 {{index+1}} · {{item.status==='closed'?'已結束・唯讀':'進行中'}}</option></select></label>
-     <nav class="round-list" aria-label="選擇回饋輪次"><button v-for="({round,number}) in displayRounds" :key="round.id" type="button" class="round-option" :data-round="round.id" :aria-pressed="selectedRound?.id===round.id" @click="selectRound(round.id)"><strong>第 {{number}} 輪 · {{revisionLabel(round)}}</strong><span>{{round.status==='failed'?'回覆失敗':round.status==='pending'?'等待回覆中':'已提交'}}</span><small>{{date(round.createdAt)}}</small></button></nav>
+     <nav class="round-list" aria-label="選擇回饋輪次"><button v-for="({round,number}) in displayRounds" :key="round.id" type="button" class="round-option" :data-round="round.id" :aria-pressed="selectedRound?.id===round.id" @click="selectRound(round.id)"><strong>第 {{number}} 輪 · {{revisionLabel(round)}}</strong><span>{{round.status==='failed'?'回覆失敗':round.status==='pending'?'等待回覆中':'已提交'}}</span><small v-if="round.modelName">模型：{{round.modelName}}</small><small>{{date(round.createdAt)}}</small></button></nav>
      <p v-if="!rounds.length" class="empty-inline">提交作答後，回饋輪次會列在這裡。</p>
      <AnswerRevisionDiff :key="diffScope" :revisions="revisions"/>
     </aside>
@@ -248,7 +267,7 @@ onBeforeUnmount(()=>{destroyed=true;invalidate();window.removeEventListener('bef
      <div v-if="formal&&selectedRound" class="round-heading"><h3>第 {{rounds.indexOf(selectedRound)+1}} 輪回饋</h3><span class="muted">{{revisionLabel(selectedRound)}}</span><button v-if="!readonly" type="button" class="button secondary" data-action="revise-answer" :disabled="busy||selectedRound.status!=='completed'" @click="reviseAnswer">修改這次作答</button></div>
      <div class="chat-log" role="log" aria-live="polite" aria-label="對話內容" :aria-busy="busy">
       <p v-if="!shownMessages.length&&!busy" class="empty-inline">尚無訊息。</p>
-      <article v-for="(message,index) in shownMessages" :key="message.id||index" class="chat-message" :class="message.role==='user'?'from-user':'from-assistant'"><div class="message-author"><TutorAvatar v-if="message.role==='assistant'"/><strong>{{message.role==='user'?(formal?'學生作答':'使用者'):(formal?'AI 助教回饋':'AI 助教')}}</strong></div><PhaseAnnotatedAnswer v-model:display-mode="annotationDisplayMode" v-if="formal&&message.role==='user'&&feedback?.replyTo===message.id" :key="`${diffScope}:${session?.id}:${message.id}`" :content="message.content" :stage="activeStage" :annotations="feedback.annotations||[]" :classifications="config.classifications||[]"/><p v-else class="message-content">{{message.content}}</p><PhaseAlignmentNotice :display-mode="annotationDisplayMode" v-if="formal&&message.role==='assistant'&&message.replyTo===selectedRound?.id" :content="selectedRound.content" :stage="activeStage" :annotations="message.annotations||[]" :classifications="config.classifications||[]"/><small v-if="message.createdAt" class="muted">{{date(message.createdAt)}}</small><span v-if="message.status==='pending'" role="status"> 等待回覆中</span><span v-if="message.status==='failed'" class="error-text"> 回覆失敗，原訊息已保留</span><button v-if="message.role==='user'&&message.status==='failed'&&!readonly" class="button secondary" :disabled="busy" data-action="retry-message" @click="retryMessage(message)">重試回覆</button><button v-if="message.role==='assistant'" type="button" class="button secondary" data-action="performance" @click="openPerformance(message)">查看回覆效能</button><button v-if="message.role==='assistant'&&canInspectRequests" type="button" class="button secondary" data-action="request-inspection" @click="openPerformance(message,'request')">查看 Ollama 請求</button></article>
+      <article v-for="(message,index) in shownMessages" :key="message.id||index" class="chat-message" :class="message.role==='user'?'from-user':'from-assistant'"><div class="message-author"><TutorAvatar v-if="message.role==='assistant'"/><strong>{{message.role==='user'?(formal?'學生作答':'使用者'):(formal?'AI 助教回饋':'AI 助教')}}</strong></div><PhaseAnnotatedAnswer v-model:display-mode="annotationDisplayMode" v-if="formal&&message.role==='user'&&feedback?.replyTo===message.id" :key="`${diffScope}:${session?.id}:${message.id}`" :content="message.content" :stage="activeStage" :annotations="feedback.annotations||[]" :classifications="config.classifications||[]"/><p v-else class="message-content">{{message.content}}</p><PhaseAlignmentNotice :display-mode="annotationDisplayMode" v-if="formal&&message.role==='assistant'&&message.replyTo===selectedRound?.id" :content="selectedRound.content" :stage="activeStage" :annotations="message.annotations||[]" :classifications="config.classifications||[]"/><small v-if="message.modelName" class="muted message-model" data-message-model>模型：{{message.modelName}}</small><small v-if="message.createdAt" class="muted">{{date(message.createdAt)}}</small><span v-if="message.status==='pending'" role="status"> 等待回覆中</span><span v-if="message.status==='failed'" class="error-text"> 回覆失敗，原訊息已保留</span><button v-if="message.role==='user'&&message.status==='failed'&&!readonly" class="button secondary" :disabled="busy" data-action="retry-message" @click="retryMessage(message)">重試回覆</button><button v-if="message.role==='assistant'" type="button" class="button secondary" data-action="performance" @click="openPerformance(message)">查看回覆效能</button><button v-if="message.role==='assistant'&&canInspectRequests" type="button" class="button secondary" data-action="request-inspection" @click="openPerformance(message,'request')">查看 Ollama 請求</button></article>
      </div>
      <AiReplyWaiting v-if="busy" class="chat-message from-assistant" :formal="formal" :hints="requestHints"/>
      <button v-if="formal&&feedback&&nextStage&&tab==='chat'" type="button" class="button secondary" data-action="next-stage" @click="chooseMode(nextStage.key)">下一階段：{{nextStage.label}}</button>
@@ -267,7 +286,7 @@ onBeforeUnmount(()=>{destroyed=true;invalidate();window.removeEventListener('bef
 
 <style scoped>
 
-.feedback-workspace{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,1fr);gap:20px;margin:20px 0;align-items:start}.round-sidebar{min-width:0;border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--surface)}.round-sidebar h3,.round-heading h3{margin:0;font-size:1rem}.round-sidebar .history-select{margin:14px 0}.round-sidebar select{width:100%;min-width:0;max-width:100%}.round-list{display:grid;gap:8px;max-height:54vh;overflow-y:auto;margin:14px 0}.round-option{display:grid;gap:5px;padding:12px;text-align:left;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:inherit;overflow-wrap:anywhere;cursor:pointer;min-height:44px}.round-option[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}.round-option:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.round-option span,.round-option small{font-size:.8rem}.round-detail{min-width:0}.round-heading{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.round-heading .button{margin-left:auto}.feedback-workspace .chat-log{max-height:none;margin:16px 0}.feedback-workspace .chat-message{width:100%;max-width:100%;box-sizing:border-box}.revision-notice{padding:12px;background:var(--accent-soft);overflow-wrap:anywhere}.revision-notice .button{margin-left:8px}@media(max-width:760px){.feedback-workspace{grid-template-columns:minmax(0,1fr)}.round-list{max-height:220px}.round-heading .button{margin-left:0}.round-sidebar{padding:12px}}
+.model-select{display:grid;gap:8px;margin:18px 0;max-width:650px}.model-select select{width:100%;min-width:0}.message-model{display:block;overflow-wrap:anywhere}.feedback-workspace{display:grid;grid-template-columns:minmax(180px,240px) minmax(0,1fr);gap:20px;margin:20px 0;align-items:start}.round-sidebar{min-width:0;border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--surface)}.round-sidebar h3,.round-heading h3{margin:0;font-size:1rem}.round-sidebar .history-select{margin:14px 0}.round-sidebar select{width:100%;min-width:0;max-width:100%}.round-list{display:grid;gap:8px;max-height:54vh;overflow-y:auto;margin:14px 0}.round-option{display:grid;gap:5px;padding:12px;text-align:left;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:inherit;overflow-wrap:anywhere;cursor:pointer;min-height:44px}.round-option[aria-pressed=true]{border-color:var(--accent);background:var(--accent-soft)}.round-option:focus-visible{outline:2px solid var(--accent);outline-offset:2px}.round-option span,.round-option small{font-size:.8rem}.round-detail{min-width:0}.round-heading{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.round-heading .button{margin-left:auto}.feedback-workspace .chat-log{max-height:none;margin:16px 0}.feedback-workspace .chat-message{width:100%;max-width:100%;box-sizing:border-box}.revision-notice{padding:12px;background:var(--accent-soft);overflow-wrap:anywhere}.revision-notice .button{margin-left:8px}@media(max-width:760px){.feedback-workspace{grid-template-columns:minmax(0,1fr)}.round-list{max-height:220px}.round-heading .button{margin-left:0}.round-sidebar{padding:12px}}
 .case-analysis{padding:24px;min-width:0}.section-title,.chat-modes,.chat-history-actions,.composer-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.section-title{justify-content:space-between}.section-title h2{display:flex;align-items:center;gap:8px;margin:0}.chat-modes{margin:20px 0}.chat-modes .button[aria-pressed=true]{background:#5b5fc7;color:#fff;border-color:#5b5fc7}.practice-notice{padding:12px 16px;background:var(--accent-soft);border-left:4px solid var(--accent);border-radius:6px}.chat-log{display:flex;flex-direction:column;gap:14px;margin:20px 0;max-height:65vh;overflow-y:auto;overflow-wrap:anywhere}.chat-message{padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface);max-width:95%;min-width:0}.from-user{align-self:flex-end;background:var(--accent-soft)}.from-assistant{align-self:flex-start;background:color-mix(in srgb,#438b88 12%,var(--surface));border-color:color-mix(in srgb,#438b88 30%,var(--line));border-radius:18px 18px 18px 5px}.message-author{display:flex;align-items:center;gap:12px}.from-assistant .message-content{line-height:1.9}.from-assistant .message-author{margin-bottom:12px}.message-content{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0}.chat-message .button{margin:8px}.chat-composer{border-top:1px solid var(--line);padding-top:16px}.chat-composer label,.history-select,.review-stage{display:grid;gap:8px}.chat-composer textarea{resize:vertical;min-height:100px}.composer-actions{justify-content:space-between;margin-top:10px}.history-select,.review-stage{margin:16px 0;max-width:450px}.error-text{color:var(--danger)}.data-table td{vertical-align:top}.statistics-summary{line-height:1.8}.button{white-space:normal}.table-scroll{max-width:100%;overflow-x:auto}@media(max-width:600px){.case-analysis{padding:16px}.chat-modes{display:grid;grid-template-columns:1fr 1fr}.chat-modes button:first-child{grid-column:1/-1}.chat-modes .button{min-height:44px}.chat-message{max-width:100%}.section-title{align-items:flex-start;flex-direction:column}}
 
 .chat-modes{display:flex;flex-wrap:nowrap;gap:0;overflow-x:auto;max-width:100%;margin:20px 0 0;border-bottom:1px solid var(--line);scrollbar-width:thin}.mode-tab{display:inline-flex;align-items:center;justify-content:center;gap:7px;flex-shrink:0;min-height:48px;padding:12px 16px;border:0;border-bottom:3px solid transparent;background:transparent;color:var(--muted);font:inherit;font-weight:600;white-space:nowrap;cursor:pointer}.mode-tab[aria-selected=true]{border-bottom-color:var(--accent);color:var(--accent);background:var(--accent-soft)}.mode-tab:hover{color:var(--text)}.mode-tab:focus-visible,.mode-panel:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}.mode-panel{padding-top:18px;min-width:0}.error-box p{margin:6px 0}.error-box [data-failure-diagnostic]{border-top:1px solid currentColor;margin-top:10px;padding-top:10px;overflow-wrap:anywhere}.error-box .button{margin-top:10px}

@@ -1,5 +1,11 @@
 # 回覆效能與實際 Ollama 請求
 
+## 2026-11-17 generate原始prompt與多次呼叫
+
+只有Omni聊天使用api/generate，dialog以安全文字顯示真正prompt（含Qwen role delimiters）、raw=true、format及options，JSON複製仍是實際body。其他模型仍顯示api/chat messages；不是推測服務內部token展開。Raw prompt無app system且帶同次LangChain完整成功歷史；Stage只帶目前phase system與當次作答。
+
+長B若評語機械重複，可能有第二個case-feedback-repair請求，dialog保留兩份實際payload；統計明示ProviderCalls=2及合計量測，正式往返不是2。每輪顯示保存的實際模型，切下拉不會改舊回饋標籤。資料仍只在本人staff HTTPscope／本頁記憶，不入DB／log／storage、刷新不重建。詳[模型選擇與修正](model-selection.md)。
+
 ## 2026-11-17 本人失敗請求與原因
 
 本課teacher／TA自己當次Stage／Raw錯誤，會顯示固定診斷碼、固定說明及可用的HTTP狀態；「查看失敗請求」直接開既有dialog的Ollama頁籤，顯示當次真正送出的payload。輸入預檢尚未送模型時沒有payload，不重建。沒有回覆量測時仍明示無量測。

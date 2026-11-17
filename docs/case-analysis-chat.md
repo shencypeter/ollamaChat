@@ -1,5 +1,11 @@
 # 課程個案分析五模式：交付與維護
 
+## 2026-11-17 教師模型比較與回饋循環修正
+
+課內教師／TA本人新增本次聊天模型下拉，學生／預覽無此權限；四個現有profile獨立載入，不更動他人或環境預設。正式新回合保存實際model_name、保留既有歷史及草稿；retry用原模型／提示，換模型是新提交。Raw選模確認清除再建session，仍LangChain暫存完整多輪、不加app system、不寫DB或正式統計。
+
+僅Omni聊天改為Qwen role delimiters＋api/generate raw=true，實際prompt可在本人請求彈窗查閱。長B機械循環最多再整理一次評語，保留首輪有效標註，失敗不存assistant；Bv5，其他階段v3。舊B失敗須新提交，不用新版偷偷重試。原長度／授權／登入檢查保留，其他profiles容量未放寬。驗證406後端、301 Vue、32 Chrome及VS建置通過；無Migration，詳細[選模說明](ollama/model-selection.md)。
+
 ## 2026-11-17 模式頁籤／容量／安全診斷
 
 五模式改tablist／tab／tabpanel，手機橫向捲動，左右／Home／End只移焦點、Enter／Space啟用，既有未存提醒保留。本人課程教師／TA當次錯誤可看安全分類原因及失敗請求，學生／學生POV／降權不提供；不回任意服務本文、thinking或stack，頁面外不保存，舊錯誤不重建。

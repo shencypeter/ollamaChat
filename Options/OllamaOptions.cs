@@ -13,6 +13,7 @@ public sealed class OllamaOptions
     public bool CompactCaseFeedback { get; set; }
     [Range(1,3)] public int CjkContextTokensPerCharacter { get; set; } = 3;
     [Range(16,4096)] public int ContextTokenOverhead { get; set; } = 16;
+    [RegularExpression("^(chat|qwen-chatml-generate)$")] public string ConversationTransport {get;set;}="chat";
 
     [Required, Url]
     public string BaseUrl { get; set; } = "http://localhost:11434";

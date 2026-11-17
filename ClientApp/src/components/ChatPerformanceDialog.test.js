@@ -3,6 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import ChatPerformanceDialog from './ChatPerformanceDialog.vue'
 
+it('shows actual generate prompt safely and discloses combined repair calls',async()=>{
+  const prompt='<|im_start|>user\n<script>literal text</script><|im_end|>\n<|im_start|>assistant\n',payload={model:'qwen-test',prompt,raw:true,stream:false,options:{num_ctx:16384}}
+  const wrapper=mount(ChatPerformanceDialog,{attachTo:document.body,props:{open:true,canInspectRequests:true,initialTab:'request',metrics:{providerCalls:2},requestInspection:{requests:[{url:'http://model.test/api/generate',payload}]}}});await nextTick();await nextTick()
+  expect(wrapper.get('[data-generated-prompt]').text()).toBe(prompt.trim());expect(wrapper.find('script').exists()).toBe(false);expect(JSON.parse(wrapper.get('[data-request-json]').text())).toEqual(payload)
+  await wrapper.get('[data-tab="statistics"]').trigger('click');expect(wrapper.get('[data-provider-calls]').text()).toContain('模型呼叫 2 次');wrapper.unmount()
+})
+
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks() })
 const row = (wrapper, label) => wrapper.findAll('dl > div').find(r => r.find('dt').text() === label)?.find('dd').text()
 describe('chat performance dialog', () => {

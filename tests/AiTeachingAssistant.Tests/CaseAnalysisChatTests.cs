@@ -13,6 +13,14 @@ namespace AiTeachingAssistant.Tests;
 
 public class CaseAnalysisChatTests
 {
+    [FormativeDatabaseFact] public async Task RepetitiveLongBFeedbackCannotEnterHistoryOrCompletedRoundStatistics()
+    {
+        await using var f=await Fixture.Create();var original=new string('測',1100);
+        f.Provider.Feedback=JsonSerializer.Serialize(new{annotations=Array.Empty<object>(),feedback=string.Concat(Enumerable.Repeat("這是一段重複的合成評語內容，",30))});
+        var error=await Assert.ThrowsAsync<CaseChatException>(()=>f.Workflow.Send(f.Course,f.Student,"illnessCourse",new(){RequestId=Guid.NewGuid(),Content=original},default));
+        Assert.Equal("feedback_repetition",error.Diagnostic!.Code);
+        var history=(await f.Workflow.History(f.Course,f.Student,"illnessCourse",default)).Sessions.Single();var user=Assert.Single(history.Messages);Assert.Equal(original,user.Content);Assert.Equal("failed",user.Status);Assert.Equal(0,history.Statistics.RoundTrips);
+    }
     [FormativeDatabaseFact] public async Task OnlyCurrentCourseStaffReceiveSafeFailureDetailsAndTheirFailedRequest()
     {
         await using var f=await Fixture.Create();

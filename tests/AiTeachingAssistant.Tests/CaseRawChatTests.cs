@@ -6,6 +6,16 @@ namespace AiTeachingAssistant.Tests;
 
 public sealed class CaseRawChatTests
 {
+    [Fact] public async Task SelectedModelSnapshotBelongsOnlyToItsRawSessionAndNeverChangesTheDefault()
+    {
+        using var sessions=Sessions();var course=Guid.NewGuid();var actor=Guid.NewGuid();
+        var selected=sessions.Create(course,actor,new("llama3",new(){Model="chosen-raw",AssessmentSampling=new(){NumCtx=200000}},new()));
+        var normal=sessions.Create(course,actor);var provider=new Provider();
+        Assert.Equal("chosen-raw",(await sessions.Send(course,actor,selected,"合成選模訊息",provider,default)).ModelName);
+        Assert.Equal("synthetic",(await sessions.Send(course,actor,normal,"合成預設訊息",provider,default)).ModelName);
+        Assert.Equal("llama3",sessions.GetChoice(course,actor,selected)!.Profile);Assert.Null(sessions.GetChoice(course,actor,normal));
+        Assert.Equal(404,Assert.Throws<CaseChatException>(()=>sessions.GetChoice(course,Guid.NewGuid(),selected)).StatusCode);
+    }
     [Fact]
     public async Task RawPerformanceIsPerReplyOnlyAndNeverEntersConversationContext()
     {

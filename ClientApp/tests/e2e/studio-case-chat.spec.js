@@ -23,6 +23,7 @@ for(const width of [1440,390])for(const staff of [true,false])test(`chat tabs an
 const portal=resolve(fileURLToPath(new URL('../../../wwwroot/portal/',import.meta.url)))
 const stages=[{key:'premorbid',label:'A 病前功能'},{key:'illnessCourse',label:'B 疾病病程'},{key:'functionalAssessment',label:'C 功能評估結果'},{key:'psychosocial',label:'D 心理社會條件'}]
 const metrics={promptTokens:120,cachedPromptTokens:0,responseTokens:36,tokensPerSecond:18,roundTripMilliseconds:2450,totalDurationNanoseconds:2400000000,loadDurationNanoseconds:100000000,promptEvalDurationNanoseconds:300000000,evalDurationNanoseconds:2000000000,doneReason:'stop'}
+const modelProfiles=[{key:'llama3',label:'IAN02 Llama3',modelName:'llama3.1:8b'},{key:'qwen',label:'IAN02 Qwen3',modelName:'qwen3:8b'},{key:'breeze',label:'Taipei Breeze',modelName:'ycchen/breeze-7b-instruct-v1_0'},{key:'qwen25-omni',label:'Taipei Qwen2.5 Omni',modelName:'rockn/Qwen2.5-Omni-7B-Q4_K_M:latest'}]
 const requestCapture=(messages,stage=null)=>({promptVersion:stage?'synthetic-v3':null,requests:[{purpose:stage?'case_feedback':'conversation',url:'http://synthetic-ollama.test/api/chat',payload:{model:'synthetic-model',messages:[...(stage?[{role:'system',content:`合成教學系統提示\n目前階段 ${stage}／A 病前功能\n請依四階段方法分類，保留必要背景。<script>escaped sample</script>`}]:[]),...messages.map(m=>({role:m.role,content:m.content}))],stream:false,...(stage?{format:{type:'object',properties:{feedback:{type:'string'},annotations:{type:'array'}}}}:{}),options:{temperature:0.2,num_ctx:8192}}}]})
 const classifications=[{code:'A1',label:'人口學資料',phase:'A'},{code:'A1a',label:'年齡',phase:'A'},{code:'A1b',label:'性別',phase:'A'},{code:'A1e',label:'疾病史',phase:'A'},{code:'B1',label:'受傷資訊',phase:'B'},{code:'B2',label:'疾病嚴重度',phase:'B'},{code:'B6',label:'診斷',phase:'B'},{code:'C5',label:'日常生活活動',phase:'C'},{code:'D3',label:'家庭支持',phase:'D'}]
 const annotatedHistory=()=>{
@@ -42,7 +43,7 @@ const roundHistory=()=>({activeSessionId:'stage-session',sessions:[{id:'stage-se
  ]}]})
 async function fixture(page,staff=false,rejectRawCleanup=false,initialHistory=null,initialStage='premorbid'){
  const course={id:'chat-course',title:'合成個案分析課程',code:'CHAT115',termCode:'115-1',status:'active',courseRole:staff?'teacher':'student',isOwner:staff,canPractice:staff,caseAnalysisEnabled:true,taRestrictions:[],studentCount:1,resourceCount:0,quizCount:0,reportCount:0}
- let nextId=0,raw=new Map(),histories=new Map(initialHistory?[[initialStage,initialHistory]]:[]);const requests=[]
+ let nextId=0,raw=new Map(),rawModels=new Map(),histories=new Map(initialHistory?[[initialStage,initialHistory]]:[]);const requests=[]
  await page.route('**/*',async route=>{
   const req=route.request(),path=new URL(req.url()).pathname
   if(path.startsWith('/portal/assets/'))return route.fulfill({body:readFileSync(resolve(portal,'assets',basename(path))),contentType:path.endsWith('.js')?'text/javascript':'text/css'})
@@ -55,20 +56,21 @@ async function fixture(page,staff=false,rejectRawCleanup=false,initialHistory=nu
   else if(p==='/academic-calendar')result={currentTerm:'115-1',terms:['115-1'],semesters:[]}
   else if(p==='/notifications')result={materials:0,assignments:0,questions:0,total:0,courses:[]}
   else if(p==='/courses/chat-course')result=course
-  else if(p==='/courses/chat-course/case-analysis')result={enabled:true,canChat:true,canReview:staff,canInspectRequests:staff,isPractice:staff,modelName:'synthetic-model',maximumMessageCharacters:8000,stages,classifications}
+  else if(p==='/courses/chat-course/case-analysis')result={enabled:true,canChat:true,canReview:staff,canInspectRequests:staff,canChooseModel:staff,...(staff?{modelProfiles,defaultModelProfile:'qwen25-omni'}:{}),isPractice:staff,modelName:'synthetic-model',maximumMessageCharacters:8000,stages,classifications}
   else if(p.endsWith('/case-analysis/settings')){course.caseAnalysisEnabled=body.enabled;result=null}
-  else if(p.endsWith('/raw/sessions')){if(method==='DELETE'){raw.clear();result=null}else{if(raw.size>=3)return route.fulfill({status:429,json:{error:'Raw capacity reached'}});const id='raw-'+(++nextId);raw.set(id,[]);result={id}}}
+  else if(p.endsWith('/raw/sessions')){if(method==='DELETE'){raw.clear();rawModels.clear();result=null}else{if(raw.size>=3)return route.fulfill({status:429,json:{error:'Raw capacity reached'}});const id='raw-'+(++nextId);raw.set(id,[]);rawModels.set(id,modelProfiles.find(p=>p.key===body?.modelProfile)?.modelName||'synthetic-model');result={id}}}
   else if(p.includes('/raw/sessions/')){
    const id=p.split('/')[6]
    if(method==='DELETE'){if(rejectRawCleanup)return route.fulfill({status:503,json:{error:'Simulated unload cleanup loss'}});raw.delete(id);result=null}
-   else{const messages=raw.get(id);messages.push({role:'user',content:body.content},{role:'assistant',content:'合成回覆：'+body.content,metrics});result={sessionId:id,messages,modelName:'synthetic-model',...(staff?{requestInspection:requestCapture(messages.slice(0,-1))}:{})}}
+   else{const messages=raw.get(id),modelName=rawModels.get(id);messages.push({role:'user',content:body.content,modelName},{role:'assistant',content:'合成回覆：'+body.content,modelName,metrics});result={sessionId:id,messages,modelName,...(staff?{requestInspection:requestCapture(messages.slice(0,-1))}:{})}}
   }
   else if(p.includes('/case-analysis/stages/')){
    const stage=p.split('/')[5];let history=histories.get(stage)||{sessions:[],activeSessionId:null}
    if(method==='POST'){
     if(!history.activeSessionId)history={activeSessionId:'stage-session',sessions:[{id:'stage-session',stage,status:'active',messages:[]}]}
     const messages=history.sessions.find(s=>s.id===history.activeSessionId).messages,id=body.requestId
-    if(!messages.some(m=>m.requestId===body.requestId))messages.push({id,role:'user',content:body.content,status:'completed',revisesMessageId:body.revisesMessageId||null,requestId:body.requestId},{id:'a'+id,role:'assistant',content:'已保存的階段回覆',status:'completed',replyTo:id,metrics})
+    const modelName=modelProfiles.find(p=>p.key===body?.modelProfile)?.modelName||'synthetic-model'
+    if(!messages.some(m=>m.requestId===body.requestId))messages.push({id,role:'user',content:body.content,status:'completed',modelName,revisesMessageId:body.revisesMessageId||null,requestId:body.requestId},{id:'a'+id,role:'assistant',content:'已保存的階段回覆',status:'completed',modelName,replyTo:id,metrics})
     histories.set(stage,history)
    }
    result={...history,...(staff&&method==='POST'?{requestInspection:requestCapture(history.sessions.find(s=>s.id===history.activeSessionId).messages.slice(-2,-1),stage)}:{})}
@@ -80,6 +82,20 @@ async function fixture(page,staff=false,rejectRawCleanup=false,initialHistory=nu
  })
  return {requests,getRawCount:()=>nextId,getHistory:stage=>histories.get(stage)}
 }
+for(const width of [1440,390])test(`staff chooses chat models without relabeling history at ${width}px`,async({page})=>{
+ await page.setViewportSize({width,height:1000});const state=await fixture(page,true)
+ await page.goto('/courses/chat-course?section=case-analysis');const select=page.locator('[data-model-select]'),draft=page.getByLabel('訊息',{exact:true})
+ await expect(select).toHaveValue('');await expect(select.locator('option')).toHaveCount(5);await expect(select).toBeEnabled();expect(state.requests.find(r=>r.method==='POST'&&r.path.endsWith('/raw/sessions')).body).toBeNull()
+ await page.getByRole('tab',{name:'A 病前功能',exact:true}).click();await select.selectOption('llama3');await draft.fill('合成模型比較作答');await select.selectOption('qwen');await expect(draft).toHaveValue('合成模型比較作答');expect(state.requests.filter(r=>r.method==='POST'&&r.path.endsWith('/messages'))).toHaveLength(0)
+ await page.getByRole('button',{name:'提交並取得 AI 助教回饋',exact:true}).click();await expect(page.locator('.from-assistant [data-message-model]')).toHaveText('模型：qwen3:8b');expect(state.requests.filter(r=>r.method==='POST'&&r.path.endsWith('/messages')).at(-1).body.modelProfile).toBe('qwen')
+ await select.selectOption('llama3');await expect(page.locator('[data-current-model]')).toHaveText('模型：llama3.1:8b');await expect(page.locator('.from-assistant [data-message-model]')).toHaveText('模型：qwen3:8b');await expect(page.locator('[data-round]').first()).toContainText('qwen3:8b')
+ await draft.fill('尚未提交的正式草稿');await select.selectOption('breeze');await expect(draft).toHaveValue('尚未提交的正式草稿');await draft.fill('');await page.getByRole('tab',{name:'純 AI 聊天（無教學提示詞）',exact:true}).click()
+ await draft.fill('Raw 仍需保留');await page.getByRole('button',{name:'傳送',exact:true}).click();await expect(page.getByRole('log')).toContainText('合成回覆：Raw 仍需保留');await draft.fill('Raw 草稿')
+ page.once('dialog',dialog=>dialog.dismiss());await select.selectOption('qwen');await expect(select).toHaveValue('breeze');await expect(draft).toHaveValue('Raw 草稿');await expect(page.getByRole('log')).toContainText('Raw 仍需保留')
+ page.once('dialog',dialog=>dialog.accept());await select.selectOption('qwen');await expect(draft).toHaveValue('');await expect(page.getByRole('log')).not.toContainText('Raw 仍需保留');expect(state.requests.filter(r=>r.method==='POST'&&r.path.endsWith('/raw/sessions')).at(-1).body).toEqual({modelProfile:'qwen'})
+ expect(state.requests.filter(r=>r.method==='POST'&&r.path.includes('/raw/')&&r.path.endsWith('/messages')).at(-1).body).toEqual({content:'Raw 仍需保留'});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+ await page.screenshot({path:`test-results/chat-model-select-${width}.png`,fullPage:true})
+})
 for(const width of [1440,390])test(`case chat raw isolation and persisted stage at ${width}px`,async({page})=>{
  await page.setViewportSize({width,height:900});const state=await fixture(page),errors=[];page.on('pageerror',e=>errors.push(e.message))
  await page.goto('/courses/chat-course?section=case-analysis');await expect(page.getByRole('heading',{name:'個案分析 AI 助教',exact:true})).toBeVisible()

@@ -6,7 +6,7 @@ public static class CaseChatPrompts
 {
     public const string Version = "professor-four-phase-20261116-v3";
     public static string VersionFor(AnalysisStage stage) => stage == AnalysisStage.IllnessCourse
-        ? "professor-four-phase-20261117-b-v4" : Version;
+        ? "professor-four-phase-20261117-b-v5" : Version;
 
     // These contrasting examples describe the coding hierarchy, not case facts.
     // Keep the professor's complete rules below; never use an example as evidence.
@@ -19,9 +19,10 @@ public static class CaseChatPrompts
         目前與子碼相符時可明說相符，有實際問題才建議修改，不強迫挑錯。已寫的病灶、日期等不能說沒寫；無獨立病例原文只能說無法核實案例事實，不能斷定遺漏。回饋每個重點只說一次，不重述規則／示例／未提及清單，不代寫。
         """;
 
-    public static string FeedbackRequirements(AnalysisStage? stage) => stage == AnalysisStage.IllnessCourse
+    public static string FeedbackRequirements(AnalysisStage? stage,int characters=0) => (stage == AnalysisStage.IllnessCourse
         ? "先閱讀answerText。本次階段只有currentPhase的大字母。只依原文辨識分類，子分類不另算階段；同階段說明相符。先確認原文已寫的內容，有實際問題才建議修改；混合時點分段引用，不概括整份錯置。回饋2到4句，只說一次，無獨立病例原文請明示無法核實案例事實。只輸出feedback與annotations JSON，text逐字引自本次answerText，occurrence從0算，不標示例、包裝或回饋，不必計算位置。"
-        : "只評閱 answerText 本次作答，先逐句核對 currentPhase。feedback依序說明目前作答階段、原文實際分類、修改建議；不要把目前階段當成原文所屬分類，不能只稱讚。混合本階段事件與他階段背景時分開說明，必要背景可保留，不概括整份錯置。無獨立病例原文不能宣稱資料遺漏。用繁體中文精簡回饋，不代寫。只回傳 feedback 與 annotations 的 JSON；標註逐字引用 answerText 及0起算 occurrence，不標回饋或包裝、不必計算位置。";
+        : "只評閱 answerText 本次作答，先逐句核對 currentPhase。feedback依序說明目前作答階段、原文實際分類、修改建議；不要把目前階段當成原文所屬分類，不能只稱讚。混合本階段事件與他階段背景時分開說明，必要背景可保留，不概括整份錯置。無獨立病例原文不能宣稱資料遺漏。用繁體中文精簡回饋，不代寫。只回傳 feedback 與 annotations 的 JSON；標註逐字引用 answerText 及0起算 occurrence，不標回饋或包裝、不必計算位置。")
+        +(CaseFeedbackText.Applies(stage,characters)?"分類碼與逐字引用只放annotations；feedback是給學生的自然語言教學評語，用2到3句說明整理特點及有據建議，不列原文→代碼清單、不重複同一句，也不重抄分類規則。":"");
 
     private const string TeachingAssistantPrompt = """
         你是中山醫學大學臨床心理學課程AI教學助教，以繁體中文提供形成性回饋。僅有A病前功能、B疾病病程、C功能評估結果、D心理社會條件四階段；整合概念化只供推理，不增第五階段。不給分、不判通過、不解鎖。

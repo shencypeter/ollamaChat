@@ -1,5 +1,11 @@
 # Ollama 模型設定與有效負載保存
 
+## 2026-11-17 教師選模及Omni角色格式（現行）
+
+教師／本課TA可逐次選四個既有profile，不修改全域；正式user／assistant保存實際model_name，Raw切換清暫存且不入DB。只有Omni聊天transport改用api/generate raw=true＋Qwen角色分隔，解決短Raw也循環的模板問題；原其他三模型仍api/chat，各自容量／抽樣／相容設定保持。B長文機械循環最多一次評語重整、原annotations保留，v5取代Bv4，其他phase仍v3。實際請求dialog顯示generate prompt及多次請求，效能合計明示呼叫數。
+
+完整行為、證據、限制及驗收見[教師選模與循環修正](model-selection.md)。本節取代下方較早「不採generate／永遠單次請求／所有conversation都api/chat」的現行效力；舊紀錄保留時間脈絡。後端406、Vue301、Chrome32及正常VS含Vue通過，唯一7173已部署，無Migration。
+
 ## 2026-11-17 中文預檢與教師錯誤診斷
 
 修正將UTF8bytes當token而擋下2125中文字的問題：獨立bytecap與token估計，只有Omni profile採24000bytes、CjkContextTokensPerCharacter=2及ContextTokenOverhead=512；其他三份不改，預設3／16保留原行為，仍預留實際輸出。這不是精確tokenizer，原文不裁字、Stage不加歷史。真正Provider合成五段2125字完整送達、2messages、prompt4031／response567／stop。Bv4及模型／抽樣未改；本節取代下方較早Omni預檢仍12KB的現行效力。

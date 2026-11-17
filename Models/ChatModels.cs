@@ -88,6 +88,8 @@ public sealed record RequestMetrics(
 {
     [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? AvailableFields {get;init;}
+    [JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)]
+    public int? ProviderCalls {get;init;}
 }
 
 public sealed record OllamaHealthResult(bool Online, string Message, IReadOnlyList<string> Models, long LatencyMilliseconds);
@@ -119,7 +121,9 @@ internal sealed class OllamaChatResponse
 {
     [JsonIgnore] public IReadOnlyList<string>? AvailableMetrics {get;set;}
     [JsonPropertyName("message")]
-    public OllamaMessage? Message { get; init; }
+    public OllamaMessage? Message { get; set; }
+    [JsonPropertyName("response")]
+    public string? GeneratedResponse {get;init;}
 
     [JsonPropertyName("done_reason")]
     public string DoneReason { get; init; } = string.Empty;

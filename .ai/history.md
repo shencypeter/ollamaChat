@@ -1,5 +1,17 @@
 # 開發歷程與決策紀錄
 
+## 2026-11-17 教師逐次選模與Omni聊天循環修正
+
+使用者要求教授自行比較四個既有模型並記錄model，且補充短Raw問候也重複，推翻只因B長篇的假說。新增scoped CaseChatModels白名單resolver，重新從base／environment appsettings→選定profile→Local→env載入，不繼承active profile overlay；每request獨立HttpClient/options，不改全域。正式turn在開始鎖runtime，user／assistant沿model_name保存實際tag，same-ID不得換模型，retry須原model／prompt，完成前重查角色。Raw entry只存設定choice，不保留scoped provider／inspection；每次送出另建provider並檢查owner／course／Practice，無DB／統計。前端staff-only native下拉、保留正式草稿／歷史、Raw切模確認清除、actual model逐輪顯示，學生POV同步隱藏。
+
+長B>=1000才追加自然語言評語提醒及機械檢查。重複佔主要內容或大量箭頭編碼配對觸發最多一次feedback-only；只送當次作答與有效annotation參考，不重新分類、不送先前壞評語或歷史。第二次仍失敗明確報feedback_repetition，不存assistant，原user保留。原首輪annotations原樣保留，ProviderCalls2及數值量測合計，缺少的量測保持不可用，正式往返仍1。B版本v5，其他phase／Studio未改。這是輸出呈現守門，不是臨床品質評分，也不以程式去重冒充模型原回饋。
+
+以不同於使用者的合成短句比對Omni：原api/chat模板512tokens／length、重複14次；repeat_penalty1.15仍512／length、重複9次，未採用；api/generate raw=true＋明確Qwen user／assistant delimiters只23tokens／stop，有無額外stop皆同，未新增stop。因此只Omni採qwen-chatml-generate選用transport；共享SendAsync產生實際prompt、raw=true及既有options／format，normalize response欄位，Raw不加system、Stage仍完整教授提示。其他profiles及抽樣保持，遠端模板不改。本人請求dialog顯示真正generate prompt，不假造messages。最終實際C# Provider Raw兩輪均23tokens／stop，合成五段2125字B prompt4103／response166／stop、完整JSON且無循環；未使用真實病例／學生作答，不代表分類全正確。
+
+新增授權／並發／原模型retry／實際DB tag、Raw snapshot、no-system ChatML與完整Raw roles、長B最多兩次／保留標註／不送舊稿、量測合計與workflow不存循環回覆回歸。完整隔離DB406/406及036→039指紋升級通過，finally刪schema。Vue301/301、最終Chrome32/32、VS含Vue建置成功。初E2E新案例揭露chooseMode在Raw清除await期間loading=false，立刻選模會取消切頁；先補deferred cleanup失敗測試再修。靜態審查另發現唯讀切Raw載入不結束，先重現再修startRaw early guard；另補fixture等待初始化，沒有用固定sleep掩蓋。Chrome最終手機畫面已檢視。NU1900弱點來源及原>500KB chunk提示仍非失敗，沒有獨立型別檢查命令（專案JS／Vite）。
+
+核對PID36752確為本專案後重啟唯一7173為正常bin/Debug PID7332，qwen25-omni、部署generate設定、bundle index-CaiDGwMW.js、/courses200／匿名AI401核對，5097／5173／5174無listener。Raw清除、正式歷史保留，無Migration／正式資料寫入。初步其他模型容量探針使用預設JSON escaping而非正式序列化，不以其數字宣稱產品可用容量或放寬原profile限制。不同模型仍有細碼／時點／語意問題，不新增自動評分。文件／交接／Ollama／五模式／輪次／評估／計畫同步，未提交推送。
+
 ## 2026-11-17 教師診斷、聊天頁籤及中文容量
 
 依使用者要求將模式按鈕改語意／視覺頁籤，5個聊天tab加授權紀錄tab，單一關聯panel，左右/Home/End僅移焦點、native Enter／Space啟用，既有Raw清除／草稿確認保持；桌面平列、手機橫向捲動。新增固定CaseChatFailure碼／原因／HTTP狀態，涵蓋preflight、輸出length、空回覆、provider JSON、feedback JSON／格式、連線／逾時及已知HTTP error分類。已知上游原因只轉固定文字，不回任意error本文／inner／thinking。Send／Retry／Raw錯誤在server完成後重查course teacher／TA，排除學生POV、教授但只修課及降權；本人失敗payload沿同capture權限回傳。API／Vue顯示教師診斷並可開失敗請求dialog，離頁／角色變更清除；不存DB／storage／log、不重建舊原因。

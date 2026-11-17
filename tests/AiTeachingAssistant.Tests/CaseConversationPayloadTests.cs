@@ -14,6 +14,15 @@ namespace AiTeachingAssistant.Tests;
 
 public sealed class CaseConversationPayloadTests
 {
+    [Fact] public async Task OmniConversationUsesExplicitQwenRoleProtocolWithoutAddingARawSystemPrompt()
+    {
+        var capture=new Capture();var settings=new OllamaOptions{ConversationTransport="qwen-chatml-generate"};
+        var client=new OllamaClient(new HttpClient(capture){BaseAddress=new Uri("http://localhost:11434/")},Microsoft.Extensions.Options.Options.Create(settings),new CaptureLogger());
+        await client.ConversationAsync([new("user","第一輪 😀\n"),new("assistant","合成回覆"),new("user","第二輪")],default);
+        using var body=JsonDocument.Parse(capture.Body!);Assert.Equal("/api/generate",capture.Url!.AbsolutePath);Assert.True(body.RootElement.GetProperty("raw").GetBoolean());Assert.False(body.RootElement.TryGetProperty("messages",out _));Assert.False(body.RootElement.TryGetProperty("format",out _));
+        Assert.Equal("<|im_start|>user\n第一輪 😀\n<|im_end|>\n<|im_start|>assistant\n合成回覆<|im_end|>\n<|im_start|>user\n第二輪<|im_end|>\n<|im_start|>assistant\n",body.RootElement.GetProperty("prompt").GetString());
+        Assert.DoesNotContain("<|im_start|>system",body.RootElement.GetProperty("prompt").GetString());
+    }
     [Theory]
     [InlineData("model SENSITIVE_MODEL not found","model_missing")]
     [InlineData("SENSITIVE out of memory","provider_memory")]
@@ -82,10 +91,10 @@ public sealed class CaseConversationPayloadTests
         var transport=new Capture();var client=new OllamaClient(new HttpClient(transport){BaseAddress=new Uri("http://localhost:11434/")},Microsoft.Extensions.Options.Options.Create(settings),new CaptureLogger());
         var prompt=CaseChatPrompts.Get(AnalysisStage.IllnessCourse);
         await client.CaseFeedbackAsync([new("system",prompt),new("user","prior draft must stay in DB"),new("assistant","prior feedback must stay in DB"),new("user","current answer")],AnalysisStage.IllnessCourse,default);
-        using var payload=JsonDocument.Parse(transport.Body!);var messages=payload.RootElement.GetProperty("messages");
-        Assert.Equal(2,messages.GetArrayLength());Assert.Equal(prompt,messages[0].GetProperty("content").GetString());
-        Assert.Equal("user",messages[1].GetProperty("role").GetString());
-        using var current=JsonDocument.Parse(messages[1].GetProperty("content").GetString()!);
+        using var payload=JsonDocument.Parse(transport.Body!);var messages=WireMessages(payload.RootElement);
+        Assert.Equal(2,messages.Count);Assert.Equal(prompt,messages[0].Content);
+        Assert.Equal("user",messages[1].Role);
+        using var current=JsonDocument.Parse(messages[1].Content);
         Assert.Equal("current answer",current.RootElement.GetProperty("answerText").GetString());
         Assert.DoesNotContain("must stay in DB",transport.Body!);
     }
@@ -113,14 +122,14 @@ public sealed class CaseConversationPayloadTests
         const string original=" 😀55歲\nADL  ";
         await client.CaseFeedbackAsync([new("system",CaseChatPrompts.Get(AnalysisStage.Premorbid)),new("user",original)],default);
         using var payload=JsonDocument.Parse(transport.Body!);var root=payload.RootElement;
-        using var answerPayload=JsonDocument.Parse(root.GetProperty("messages")[1].GetProperty("content").GetString()!);
+        using var answerPayload=JsonDocument.Parse(WireMessages(root)[1].Content);
         Assert.Equal(original,answerPayload.RootElement.GetProperty("answerText").GetString());
-        Assert.Equal(2,root.GetProperty("messages").GetArrayLength());
+        Assert.Equal(2,WireMessages(root).Count);
         Assert.Contains("annotations",root.GetProperty("format").GetRawText());
         Assert.Equal("array",root.GetProperty("format").GetProperty("properties").GetProperty("annotations").GetProperty("type").GetString());
         Assert.Empty(logger.Messages);
         await client.ConversationAsync([new("user",original)],default);
-        using var raw=JsonDocument.Parse(transport.Body!);Assert.False(raw.RootElement.TryGetProperty("format",out _));Assert.Equal(1,raw.RootElement.GetProperty("messages").GetArrayLength());
+        using var raw=JsonDocument.Parse(transport.Body!);Assert.False(raw.RootElement.TryGetProperty("format",out _));Assert.Single(WireMessages(raw.RootElement));
     }
     [Fact]
     public async Task OmittedModelMeasurementsAreMarkedUnavailableInsteadOfMeasuredZero()
@@ -144,13 +153,13 @@ public sealed class CaseConversationPayloadTests
         var client = new OllamaClient(new HttpClient(transport) { BaseAddress = new Uri("http://localhost:11434/") }, Microsoft.Extensions.Options.Options.Create(options), logger, diagnostics, inspection);
         var reply = await client.ConversationAsync([new("user", "原始 human"), new("assistant", "原始 ai"), new("user", "下一輪")], default);
         using var raw = JsonDocument.Parse(transport.Body!);
-        Assert.Equal(new[] { "user", "assistant", "user" }, raw.RootElement.GetProperty("messages").EnumerateArray().Select(m => m.GetProperty("role").GetString()));
-        Assert.Equal(new[] { "原始 human", "原始 ai", "下一輪" }, raw.RootElement.GetProperty("messages").EnumerateArray().Select(m => m.GetProperty("content").GetString()));
+        Assert.Equal(new[] { "user", "assistant", "user" }, WireMessages(raw.RootElement).Select(m=>m.Role));
+        Assert.Equal(new[] { "原始 human", "原始 ai", "下一輪" }, WireMessages(raw.RootElement).Select(m=>m.Content));
         Assert.False(raw.RootElement.TryGetProperty("format", out _)); Assert.Null(reply.Thinking);
         await client.ConversationAsync([new("system", "server stage instructions"), new("user", "stage input")], default);
         using var stage = JsonDocument.Parse(transport.Body!);
-        Assert.Equal("server stage instructions", stage.RootElement.GetProperty("messages")[0].GetProperty("content").GetString());
-        Assert.Equal(2, stage.RootElement.GetProperty("messages").GetArrayLength());
+        Assert.Equal("server stage instructions", WireMessages(stage.RootElement)[0].Content);
+        Assert.Equal(2, WireMessages(stage.RootElement).Count);
         var expectedStageSampling=JsonSerializer.SerializeToElement(options.AssessmentSampling with{NumPredict=options.CaseFeedbackMaxTokens??options.AssessmentSampling.NumPredict});
         Assert.Equal(expectedStageSampling.GetRawText(), stage.RootElement.GetProperty("options").GetRawText());
         var sampling = raw.RootElement.GetProperty("options");
@@ -171,13 +180,20 @@ public sealed class CaseConversationPayloadTests
         Assert.DoesNotContain("SENSITIVE", error.ToString()); Assert.All(logger.Messages, m => Assert.DoesNotContain("SENSITIVE", m));
     }
 
+    private static IReadOnlyList<OllamaMessage> WireMessages(JsonElement root)
+    {
+        if(root.TryGetProperty("messages",out var messages))return messages.Deserialize<OllamaMessage[]>()!;
+        return System.Text.RegularExpressions.Regex.Matches(root.GetProperty("prompt").GetString()!,@"<\|im_start\|>(system|user|assistant)\n(.*?)<\|im_end\|>\n",System.Text.RegularExpressions.RegexOptions.Singleline).Select(m=>new OllamaMessage(m.Groups[1].Value,m.Groups[2].Value)).ToArray();
+    }
     private sealed class Capture : HttpMessageHandler
     {
-        public string? Body;
+        public string? Body;public Uri? Url;
         public string Response = """{"message":{"role":"assistant","content":"plain reply","thinking":"private thinking"},"done_reason":"stop"}""";
         public HttpStatusCode Status = HttpStatusCode.OK;
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
-        { Body = await request.Content!.ReadAsStringAsync(ct); return new(Status) { Content = new StringContent(Response) }; }
+        { Body = await request.Content!.ReadAsStringAsync(ct);Url=request.RequestUri;var response=Response;
+            if(request.RequestUri!.AbsolutePath.EndsWith("/generate")&&Status==HttpStatusCode.OK){var json=System.Text.Json.Nodes.JsonNode.Parse(response)!;json["response"]=json["message"]?["content"]?.GetValue<string>();json.AsObject().Remove("message");response=json.ToJsonString();}
+            return new(Status) { Content = new StringContent(response) }; }
     }
     private sealed class CaptureLogger : ILogger<OllamaClient>
     {

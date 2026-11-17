@@ -14,8 +14,9 @@ public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions
     private readonly CaseChatOptions settings = options.Value;
     private readonly OllamaOptions modelSettings = model.Value;
 
-    private sealed class Entry(Guid course, Guid actor, DateTimeOffset now)
+    private sealed class Entry(Guid course, Guid actor, DateTimeOffset now,CaseChatModelChoice? choice)
     {
+        public CaseChatModelChoice? Choice {get;}=choice;
         public Guid Course { get; } = course;
         public Guid Actor { get; } = actor;
         public ConversationBufferMemory Memory { get; } = new(new ChatMessageHistory());
@@ -26,7 +27,7 @@ public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions
         public bool Removed { get; set; }
     }
 
-    public Guid Create(Guid course, Guid actor)
+    public Guid Create(Guid course, Guid actor,CaseChatModelChoice? choice=null)
     {
         lock (gate)
         {
@@ -34,25 +35,32 @@ public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions
             if (entries.Count >= settings.MaxRawSessions || entries.Values.Count(e => e.Actor == actor) >= settings.MaxRawSessionsPerUser)
                 throw new CaseChatException(429, "暫存對話數已達上限，請清除舊對話後再試。");
             var id = Guid.NewGuid();
-            entries.Add(id, new Entry(course, actor, clock.GetUtcNow()));
+            entries.Add(id, new Entry(course, actor, clock.GetUtcNow(),choice));
             return id;
         }
+    }
+
+    public CaseChatModelChoice? GetChoice(Guid course,Guid actor,Guid id)
+    {
+        lock(gate){RemoveExpired();return Find(course,actor,id).Choice;}
     }
 
     public async Task<RawChatReply> Send(Guid course, Guid actor, Guid id, string content, IOllamaClient provider, CancellationToken ct,Func<CancellationToken,Task>? authorizeCompletion=null)
     {
         Entry entry;
+        CaseChatOptions callSettings;OllamaOptions callModelSettings;
         List<OllamaMessage> messages;
         lock (gate)
         {
             RemoveExpired();
             entry = Find(course, actor, id);
+            callSettings=entry.Choice?.Limits??settings;callModelSettings=entry.Choice?.Options??modelSettings;
             if (entry.Busy) throw new CaseChatException(409, "上一則訊息仍在處理中，請稍後再試。");
             if (string.IsNullOrWhiteSpace(content)) throw new CaseChatException(400, "請輸入訊息。");
-            if (content.Length > settings.MaxMessageCharacters) throw new CaseChatException(413, "訊息超過長度上限。");
+            if (content.Length > callSettings.MaxMessageCharacters) throw new CaseChatException(413, "訊息超過長度上限。");
             messages = entry.Memory.ChatHistory.Messages.Select(m => new OllamaMessage(m.Role == MessageRole.Ai ? "assistant" : "user", m.Content)).ToList();
             messages.Add(new("user", content));
-            CaseChatBudget.EnsureFits(messages, settings, modelSettings);
+            CaseChatBudget.EnsureFits(messages, callSettings, callModelSettings);
             ct.ThrowIfCancellationRequested();
             entry.Busy = true;
             entry.LastActivity = clock.GetUtcNow();
@@ -71,8 +79,8 @@ public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions
                     throw;
                 }
             }
-            if (string.IsNullOrWhiteSpace(result.Content) || result.Content.Length > settings.MaxResponseCharacters)
-                throw new CaseChatException(502, "模型回覆為空或超過長度上限，請重試。",new("reply_size",$"模型回覆長度 {result.Content?.Length??0} 字元；需為非空白，且不超過 {settings.MaxResponseCharacters} 字元。"));
+            if (string.IsNullOrWhiteSpace(result.Content) || result.Content.Length > callSettings.MaxResponseCharacters)
+                throw new CaseChatException(502, "模型回覆為空或超過長度上限，請重試。",new("reply_size",$"模型回覆長度 {result.Content?.Length??0} 字元；需為非空白，且不超過 {callSettings.MaxResponseCharacters} 字元。"));
             lock (gate)
             {
                 linked.Token.ThrowIfCancellationRequested();
@@ -82,7 +90,7 @@ public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions
                 entry.Memory.ChatHistory.AddMessages([Message.Human(content), Message.Ai(result.Content)]).GetAwaiter().GetResult();
                 entry.Metrics.Add(ChatPerformanceMetrics.Clean(result.Metrics));
                 entry.LastActivity = clock.GetUtcNow();
-                return new(id, entry.Memory.ChatHistory.Messages.Select((m,index) => new RawChatMessage(m.Role == MessageRole.Ai ? "assistant" : "user", m.Content,m.Role==MessageRole.Ai?entry.Metrics[index/2]:null)).ToArray(), modelSettings.Model);
+                return new(id, entry.Memory.ChatHistory.Messages.Select((m,index) => new RawChatMessage(m.Role == MessageRole.Ai ? "assistant" : "user", m.Content,m.Role==MessageRole.Ai?entry.Metrics[index/2]:null)).ToArray(), callModelSettings.Model);
             }
         }
         catch (OperationCanceledException) { throw; }

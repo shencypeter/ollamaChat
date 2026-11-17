@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace AiTeachingAssistant.Services;
 
-public sealed partial class CaseAnalysisChat(NpgsqlDataSource source,IOllamaClient provider,IOptions<OllamaOptions> modelOptions,IOptions<CaseChatOptions> chatOptions,TimeProvider clock)
+public sealed partial class CaseAnalysisChat(NpgsqlDataSource source,IOllamaClient provider,IOptions<OllamaOptions> modelOptions,IOptions<CaseChatOptions> chatOptions,TimeProvider clock,ICaseChatModels? models=null)
 {
     private static readonly JsonSerializerOptions PerformanceJson=new(JsonSerializerDefaults.Web);
     private static void Add(NpgsqlCommand cmd,params object[] values){foreach(var value in values)cmd.Parameters.AddWithValue(value);}

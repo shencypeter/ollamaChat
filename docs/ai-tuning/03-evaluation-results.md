@@ -1,5 +1,22 @@
 # 四階段回歸與行為評估
 
+## 2026-11-17 短Raw循環反證與Omni協定修正
+
+使用者回報短Raw也循環，因此不可再將問題限定於B長文。以下為全新合成短句，無真實學生答案或正式DB寫入：
+
+| Omni封包 | 結果 |
+| --- | --- |
+| 原api/chat | 512 output tokens，length，主要句重複14次 |
+| 原chat加repeat_penalty1.15（未採用） | 512／length，主要句重複9次 |
+| api/generate raw=true，明確Qwen user／assistant分隔 | 23／stop，約0.2秒，正常單句 |
+| 同generate另加stop（未採用） | 同樣23／stop |
+
+最終只Omni採Qwen角色格式，Raw不加app system；Stage教授原文保留。真正C# Provider Raw兩輪各23／stop（第二輪prompt63tokens），合成五段2125字B prompt4103／response166／stop、完整JSON且無機械循環。這證實該合成流程改善，不宣稱消除所有生成循環或臨床錯碼。
+
+長B新增機械呈現守門及最多一次feedback-only重整，保留第一輪annotations，無前次草稿／壞評語，Bv5；mock確認最多兩次、仍循環明確失敗、量測合計及正式DB不保存垃圾assistant。不是自動評分或語意正確性判定。原三profile不改，模型細碼、時點及語意仍需教師核對；舊版本評估保留。
+
+初步其他模型容量探針的user JSON採預設escaping，與正式UnsafeRelaxed序列化不同，故不將其token數當產品預算證據或據以放寬其他profiles。完整後端406、Vue301、Chrome32及VS含Vue通過，隔離schema清除；7173已部署。詳[選模／循環修正](../ollama/model-selection.md)。
+
 ## 2026-11-17 B回饋v4修正及剩餘限制
 
 保留教授完整TeachingInstructions與原文驗證，只對正式課內B追加ABCD／子碼層級及四個全合成時點對照。B的outputRequirements改為有問題才修改，不再強制每次提出改錯；schema以annotations在前、feedback在後，引導先分類再寫評語，仍是一次HTTP請求、相同欄位與驗證。未採用臨時ChatML、raw generate、簡化教授規則或兩次模型呼叫方案，未修改遠端模板。A/C/D、Studio、Raw與四份模型profile保持。B版本為professor-four-phase-20261117-b-v4，其他階段仍v3。

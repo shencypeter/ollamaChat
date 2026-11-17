@@ -81,6 +81,7 @@ builder.Services.AddHttpClient<IOllamaClient,OllamaClient>((services,client)=>
 });
 builder.Services.AddScoped<IChatSessionStore,ChatSessionStore>();builder.Services.AddScoped<IMemoryOrchestrator,LangChainMemoryOrchestrator>();
 builder.Services.AddScoped<OllamaRequestInspection>();
+builder.Services.AddScoped<ICaseChatModels,CaseChatModels>();
 builder.Services.AddSingleton<IMarkdownRenderer,MarkdownRenderer>();builder.Services.AddSingleton<OllamaPayloadDiagnostics>();
 var app=builder.Build();
 app.UseExceptionHandler(error=>error.Run(async context=>

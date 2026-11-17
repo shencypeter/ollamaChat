@@ -1,5 +1,15 @@
 # 中山醫學大學個案分析 AI 助教系統規格
 
+## 2026-11-17 教師選模、B長文評語與Omni協定修正（現行）
+
+教師／本課授權TA可從「本次聊天模型」下拉選四個既有profile，預設沿環境設定；只影響本人，學生／學生POV不能指定。正式新回合保留草稿與歷史，用新requestId比較模型；重試仍用原實際模型及提示版本。user／assistant沿既有model_name保存實際tag，每輪顯示；沒有Migration，不宣稱保存主機、模型digest或完整參數快照。Raw選模需確認並清空舊暫存，session只留設定快照，送出重新授權，不入DB／正式統計。
+
+Omni短Raw也循環，故不是只有B或長文。合成對照：原api/chat達512tokens／length、重複14次；單加repeat_penalty仍循環。僅Omni改ConversationTransport=qwen-chatml-generate，共用HTTP服務送api/generate、raw=true與明確Qwen角色分隔；Raw只含user／assistant，無應用System Prompt，完整LangChain多輪仍在。其他三profile／抽樣／遠端Modelfile不改。實際payload彈窗顯示真正prompt及JSON。
+
+B原文>=1000字時，若回饋有機械循環或大量箭頭編碼配對，最多一次feedback-only重整；送本次作答及有效分類參考，不送壞評語／舊稿，保留首輪annotations。再失敗不保存assistant，教師可看安全原因。B提示版本v5、A/C/D仍v3，舊B失敗不可冒用新版重試，需新提交；舊資料不重寫。兩次呼叫效能合計並標示ProviderCalls=2，正式往返仍1，不是臨床正確性判定。
+
+驗證：完整隔離DB406/406、036→039升級與舊資料指紋保持，測試schema刪除；Vue301/301、桌面／390 Chrome32/32、標準VS含Vue建置通過。合成實際Provider Raw1／Raw2均23tokens／stop、無循環，B2125字prompt4103／response166／stop、完整JSON且無機械重複，不等於教學品質驗收。已修頁籤切換與立即選模競爭及唯讀Raw載入狀態。唯一7173正常bin/Debug PID7332／qwen25-omni，bundle index-CaiDGwMW.js、/courses200、匿名AI401；重啟清Raw、DB歷史保留。保留dirty、未提交推送，其他模型原容量限制保留。細節見docs/ollama/model-selection.md。
+
 ## 2026-11-17 頁籤、失敗診斷及輸入預算
 
 五個聊天模式採頁籤；有權限者另有學生紀錄頁籤。aria選取／tabpanel關聯、左右/Home/End手動焦點與Enter／Space啟用，保留未存提醒；手機用橫向捲動，不推擠頁面。

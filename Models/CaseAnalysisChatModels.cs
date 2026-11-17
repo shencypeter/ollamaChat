@@ -8,12 +8,18 @@ public sealed class CaseChatInput
 {
     public Guid RequestId {get;set;}
     public Guid? RevisesMessageId {get;set;}
+    [StringLength(32)] public string? ModelProfile {get;set;}
     [Required,StringLength(8000,MinimumLength=1)] public string Content {get;set;}="";
 }
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class RawChatInput
 {
     [Required,StringLength(8000,MinimumLength=1)] public string Content {get;set;}="";
+}
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class CaseChatModelSelection
+{
+    [StringLength(32)] public string? ModelProfile {get;set;}
 }
 public sealed record CaseChatStatistics(int StudentMessages,int AssistantReplies,int RoundTrips,DateTimeOffset? LastActivityAt,int RevisionCount=0);
 public sealed record CaseChatMessage(Guid Id,string Role,string Content,int Sequence,string Status,Guid? ReplyTo,string? ModelName,string? PromptVersion,DateTimeOffset CreatedAt,RequestMetrics? Metrics=null,Guid? RevisesMessageId=null,IReadOnlyList<CaseTextAnnotation>? Annotations=null);

@@ -30,6 +30,50 @@ beforeEach(()=>{
  })
 })
 const capture=text=>({promptVersion:'captured-v3',requests:[{purpose:'feedback',url:'http://model.test/api/chat',payload:{model:'captured-model',messages:[{role:'system',content:'實際系統提示'},{role:'user',content:text}],format:{type:'object'},options:{temperature:0.2}}}]})
+const modelProfiles=[{key:'llama3',label:'IAN02 Llama3',modelName:'llama3.1:8b'},{key:'qwen',label:'IAN02 Qwen3',modelName:'qwen3:8b'},{key:'breeze',label:'Taipei Breeze',modelName:'ycchen/breeze-7b-instruct-v1_0'},{key:'qwen25-omni',label:'Taipei Qwen2.5 Omni',modelName:'rockn/Qwen2.5-Omni-7B-Q4_K_M:latest'}]
+function enableModelSelection(){config.canReview=true;config.canChooseModel=true;config.modelProfiles=modelProfiles;config.defaultModelProfile='qwen25-omni'}
+it.each(['teacher','ta','student','preview','disabled'])('guards model choices by current course role and student POV (%s)',async role=>{
+ enableModelSelection();if(role==='preview')experience.student=true;if(role==='disabled')config.canChooseModel=false
+ const v=mount(CaseAnalysisChat,{props:{course:{id:'c',courseRole:role==='preview'||role==='disabled'?'teacher':role}}});wrappers.push(v);await flushPromises()
+ const allowed=['teacher','ta'].includes(role);expect(v.find('[data-model-select]').exists()).toBe(allowed)
+ if(allowed){expect(v.get('[data-model-select]').element.value).toBe('');expect(v.findAll('[data-model-select] option')).toHaveLength(5)}
+ else expect(v.text()).not.toContain('IAN02 Llama3')
+ expect(api.mock.calls.find(([p,o])=>p.endsWith('/raw/sessions')&&o?.method==='POST')[1].body).toBeUndefined()
+})
+it('keeps formal history and draft on model changes, resets ambiguous request identity and displays stored round models',async()=>{
+ enableModelSelection();history={activeSessionId:'s',sessions:[{id:'s',status:'active',messages:[{id:'old-u',role:'user',content:'saved original',status:'completed',modelName:'llama3.1:8b'},{id:'old-a',role:'assistant',replyTo:'old-u',content:'saved feedback',modelName:'llama3.1:8b'}]}]}
+ const v=view();await flushPromises();await mode(v,'premorbid');await v.get('[data-model-select]').setValue('qwen');await send(v,'comparison answer')
+ const first=api.mock.calls.filter(([p,o])=>p.endsWith('/premorbid/messages')&&o?.method==='POST').at(-1)[1].body
+ expect(first.modelProfile).toBe('qwen');expect(v.get('[data-current-model]').text()).toContain('qwen3:8b');expect(v.get('[data-round="old-u"]').text()).toContain('llama3.1:8b');expect(v.get('.from-assistant [data-message-model]').text()).toContain('llama3.1:8b')
+ api.mockRejectedValueOnce(new TypeError('ambiguous failure'));await send(v,'same draft');const ambiguous=api.mock.calls.filter(([p,o])=>p.endsWith('/premorbid/messages')&&o?.method==='POST').at(-1)[1].body
+ const callsBefore=api.mock.calls.length;await v.get('[data-model-select]').setValue('llama3');await flushPromises();expect(api.mock.calls).toHaveLength(callsBefore);expect(v.get('textarea').element.value).toBe('same draft');expect(v.text()).toContain('saved feedback')
+ await v.get('form').trigger('submit');await flushPromises();const changed=api.mock.calls.filter(([p,o])=>p.endsWith('/premorbid/messages')&&o?.method==='POST').at(-1)[1].body;expect(changed.requestId).not.toBe(ambiguous.requestId);expect(changed.modelProfile).toBe('llama3')
+ await v.get('[data-model-select]').setValue('');await send(v,'default answer');expect(api.mock.calls.filter(([p,o])=>p.endsWith('/premorbid/messages')&&o?.method==='POST').at(-1)[1].body).not.toHaveProperty('modelProfile')
+})
+it('retries a saved failure with its original model and submits a new comparison under the selected model',async()=>{
+ enableModelSelection();history={activeSessionId:'s',sessions:[{id:'s',status:'active',messages:[{id:'failed-u',role:'user',content:'failed answer',status:'failed',modelName:'llama3.1:8b'}]}]}
+ const v=view();await flushPromises();await mode(v,'premorbid');await v.get('[data-model-select]').setValue('qwen');await v.get('[data-action="retry-message"]').trigger('click');await flushPromises()
+ expect(api.mock.calls.find(([p])=>p.endsWith('/failed-u/retry'))[1].body).toEqual({modelProfile:'llama3'})
+ await send(v,'failed answer');expect(api.mock.calls.filter(([p,o])=>p.endsWith('/premorbid/messages')&&o?.method==='POST').at(-1)[1].body.modelProfile).toBe('qwen')
+})
+it('confirms Raw model changes, preserves canceled or failed disposal, and binds only creation to the new model',async()=>{
+ enableModelSelection();const v=view();await flushPromises();await send(v,'Raw original');await v.get('textarea').setValue('Raw draft')
+ window.confirm.mockReturnValueOnce(false);await v.get('[data-model-select]').setValue('qwen');await flushPromises();expect(v.get('[data-model-select]').element.value).toBe('');expect(v.get('textarea').element.value).toBe('Raw draft');expect(rawId).toBe(1)
+ api.mockRejectedValueOnce(new Error('dispose failed'));await v.get('[data-model-select]').setValue('qwen');await flushPromises();expect(v.get('[data-model-select]').element.value).toBe('');expect(v.text()).toContain('Raw original');expect(v.get('textarea').element.value).toBe('Raw draft')
+ await v.get('[data-model-select]').setValue('qwen');await flushPromises();expect(rawId).toBe(2);expect(v.get('textarea').element.value).toBe('');expect(v.text()).not.toContain('Raw original');expect(api.mock.calls.filter(([p,o])=>p===base+'/raw/sessions'&&o?.method==='POST').at(-1)[1].body).toEqual({modelProfile:'qwen'})
+ await send(v,'new Raw');expect(api.mock.calls.filter(([p])=>p.endsWith('/raw-2/messages')).at(-1)[1].body).toEqual({content:'new Raw'})
+})
+it('labels Raw replies with the actual session response model when messages omit their own model metadata',async()=>{
+ enableModelSelection();const v=view();await flushPromises();await v.get('[data-model-select]').setValue('qwen');await flushPromises()
+ api.mockResolvedValueOnce({sessionId:'raw-2',modelName:'actual-session-model',messages:[{role:'user',content:'test'},{role:'assistant',content:'actual reply'}]});await send(v,'test')
+ expect(v.get('.from-assistant [data-message-model]').text()).toBe('模型：actual-session-model');await v.get('[data-action="performance"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('modelName')).toBe('actual-session-model')
+})
+it('ignores model selection while inference is pending and clears it on role or POV changes',async()=>{
+ enableModelSelection();const v=view();await flushPromises();await mode(v,'premorbid');await v.get('[data-model-select]').setValue('qwen');let finish
+ api.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve}));await v.get('textarea').setValue('pending');await v.get('form').trigger('submit');expect(v.get('[data-model-select]').attributes('disabled')).toBeDefined()
+ const select=v.get('[data-model-select]').element;select.value='llama3';select.dispatchEvent(new Event('change'));expect(select.value).toBe('qwen');finish(empty());await flushPromises()
+ experience.student=true;await flushPromises();expect(v.find('[data-model-select]').exists()).toBe(false);expect(v.get('[data-current-model]').text()).toContain('test-model');experience.student=false;await flushPromises();expect(v.find('[data-model-select]').exists()).toBe(false)
+})
 it('uses keyboard-focusable tabs with a linked selected panel and preserves raw departure confirmation',async()=>{
  const v=view(true);await flushPromises();const list=v.get('[role="tablist"]'),tabs=list.findAll('[role="tab"]');expect(tabs).toHaveLength(5);expect(tabs[0].attributes('aria-selected')).toBe('true');expect(v.get('[role="tabpanel"]').attributes('aria-labelledby')).toBe(tabs[0].attributes('id'))
  await tabs[0].trigger('keydown',{key:'ArrowRight'});expect(document.activeElement).toBe(tabs[1].element);expect(tabs[1].attributes('aria-selected')).toBe('false');expect(rawId).toBe(1)
@@ -40,7 +84,7 @@ it.each([true,false])('shows safe failure diagnostics and a failed-request dialo
  config.canReview=staff;config.canInspectRequests=staff;const v=view();await flushPromises();await mode(v,'illnessCourse');
  api.mockRejectedValueOnce(Object.assign(new Error('模型暫時無法回覆'),{status:502,diagnostic:{code:'provider_http',reason:'模型服務回傳 HTTP 503。',upstreamStatus:503},requestInspection:capture('合成失敗作答')}));await send(v,'合成失敗作答')
  expect(v.find('[data-failure-diagnostic]').exists()).toBe(staff);expect(v.find('[data-action="failed-request"]').exists()).toBe(staff);expect(v.get('textarea').element.value).toBe('合成失敗作答')
- if(staff){await v.get('[data-action="failed-request"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toEqual(capture('合成失敗作答'));experience.student=true;await flushPromises();expect(v.find('[data-failure-diagnostic]').exists()).toBe(false)}
+ if(staff){await v.get('[data-action="failed-request"]').trigger('click');expect(v.getComponent(ChatPerformanceDialog).props('requestInspection')).toEqual(capture('合成失敗作答'));expect(v.getComponent(ChatPerformanceDialog).props('modelName')).toBe('captured-model');experience.student=true;await flushPromises();expect(v.find('[data-failure-diagnostic]').exists()).toBe(false)}
 })
 it.each(['raw','premorbid'])('shows a reply placeholder while %s inference is pending and clears it on success or failure',async(key)=>{
  const v=view();await flushPromises();if(key!=='raw')await mode(v,key)
@@ -96,6 +140,22 @@ it('drops captures synchronously on account or student-experience changes and ig
  experience.student=false;auth.user={id:'new-user'};await v.vm.$nextTick();expect(v.getComponent(ChatPerformanceDialog).props('open')).toBe(false)
 })
 afterEach(()=>{wrappers.forEach(v=>v.unmount());wrappers=[];vi.restoreAllMocks()})
+it('locks model changes while leaving Raw and waits for cleanup before selecting a phase',async()=>{
+ config.canChooseModel=true;config.canReview=true;config.modelProfiles=[{key:'llama3',modelName:'llama3.1:8b'}]
+ const v=view();await flushPromises();let finish
+ api.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve}))
+ await v.get('[data-mode="premorbid"]').trigger('click')
+ expect(v.get('[data-model-select]').element.disabled).toBe(true)
+ finish(null);await flushPromises()
+ expect(v.get('[data-mode="premorbid"]').attributes('aria-selected')).toBe('true')
+ expect(v.get('[data-model-select]').element.disabled).toBe(false)
+})
+it('finishes loading when returning to Raw on a read-only course',async()=>{
+ config.canChat=false;const v=view();await flushPromises();await mode(v,'premorbid');await mode(v,'raw')
+ expect(v.get('[data-mode="raw"]').attributes('aria-selected')).toBe('true')
+ expect(v.text()).not.toContain('載入對話中')
+ expect(api.mock.calls.some(([p,o])=>p.endsWith('/raw/sessions')&&o?.method==='POST')).toBe(false)
+})
 it('checks only the paired original against the active B stage inside the feedback bubble without rewriting AI praise',async()=>{
  config.classifications=[{code:'A1a',phase:'A',label:'年齡'}]
  history={activeSessionId:'s',sessions:[{id:'s',status:'active',messages:[{id:'u',role:'user',content:'55歲',status:'completed'},{id:'a',role:'assistant',replyTo:'u',content:'原有 AI 讚美文字',annotations:[{annotationId:'age',start:0,end:3,text:'55歲',codes:['A1a'],status:'unverified'}]},{id:'u2',role:'user',content:'另一版',status:'completed'},{id:'a2',role:'assistant',replyTo:'u2',content:'舊回饋',annotations:null}]}]}
