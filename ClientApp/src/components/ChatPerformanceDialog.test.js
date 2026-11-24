@@ -1,7 +1,8 @@
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import ChatPerformanceDialog from './ChatPerformanceDialog.vue'
+import {speedScaleMaximum} from '../utils/performanceSpeedScale'
 
 it('shows actual generate prompt safely and discloses combined repair calls',async()=>{
   const prompt='<|im_start|>user\n<script>literal text</script><|im_end|>\n<|im_start|>assistant\n',payload={model:'qwen-test',prompt,raw:true,stream:false,options:{num_ctx:16384}}
@@ -10,9 +11,30 @@ it('shows actual generate prompt safely and discloses combined repair calls',asy
   await wrapper.get('[data-tab="statistics"]').trigger('click');expect(wrapper.get('[data-provider-calls]').text()).toContain('模型呼叫 2 次');wrapper.unmount()
 })
 
+beforeEach(() => {speedScaleMaximum.value=200})
 afterEach(() => { document.body.innerHTML = ''; vi.restoreAllMocks() })
 const row = (wrapper, label) => wrapper.findAll('dl > div').find(r => r.find('dt').text() === label)?.find('dd').text()
 describe('chat performance dialog', () => {
+  it.each([[0,200],[128.41,200],[160,200],[180,250],[200,250],[210,300],[250,350],[320,400]])('shows measured speed %s with a rounded maximum %s and headroom',async(speed,maximum)=>{
+    const wrapper=mount(ChatPerformanceDialog,{props:{open:true,metrics:{tokensPerSecond:speed}}});await nextTick()
+    const meter=wrapper.get('[role="meter"]')
+    expect(meter.attributes('aria-valuemin')).toBe('0');expect(meter.attributes('aria-valuemax')).toBe(String(maximum));expect(meter.attributes('aria-valuenow')).toBe(String(speed))
+    expect(meter.attributes('aria-valuetext')).toContain(`${speed.toFixed(2)} tok/s`);expect(parseFloat(meter.get('[data-speed-fill]').element.style.width)).toBeCloseTo(speed/maximum*100,3)
+    expect(row(wrapper,'生成速度')).toBe(`${speed.toFixed(2)} tok/s`)
+    expect(wrapper.get('[data-speed-scale]').text()).toContain(`${maximum} tok/s`);expect(wrapper.find('[data-speed-overflow]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('keeps the expanded comparison scale across slower replies and dialog instances',async()=>{
+    const first=mount(ChatPerformanceDialog,{props:{open:true,metrics:{tokensPerSecond:320}}});await nextTick()
+    expect(first.get('[role="meter"]').attributes('aria-valuemax')).toBe('400')
+    await first.setProps({open:false});await first.setProps({metrics:{tokensPerSecond:128.41},open:true})
+    expect(first.get('[role="meter"]').attributes('aria-valuemax')).toBe('400')
+    const second=mount(ChatPerformanceDialog,{props:{open:true,metrics:{tokensPerSecond:20}}});await nextTick()
+    expect(second.get('[role="meter"]').attributes('aria-valuemax')).toBe('400');first.unmount();second.unmount()
+  })
+  it.each([null,{}, {tokensPerSecond:Infinity},{tokensPerSecond:-1},{tokensPerSecond:0,availableFields:[]}])('does not show an unmeasured speed as a zero-filled gauge (%j)',async metrics=>{
+    const wrapper=mount(ChatPerformanceDialog,{props:{open:true,metrics}});await nextTick();expect(wrapper.find('[role="meter"]').exists()).toBe(false);wrapper.unmount()
+  })
   it('opens directly on the request tab when requested by course staff',async()=>{
     const wrapper=mount(ChatPerformanceDialog,{attachTo:document.body,props:{open:true,canInspectRequests:true,initialTab:'request'}});await nextTick();await nextTick()
     expect(wrapper.get('[data-tab="request"]').attributes('aria-selected')).toBe('true')

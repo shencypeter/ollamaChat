@@ -96,6 +96,8 @@ public sealed record OllamaHealthResult(bool Online, string Message, IReadOnlyLi
 
 internal sealed class OllamaChatRequest
 {
+    [JsonPropertyName("think"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Think { get; init; }
     [JsonPropertyName("model")]
     public string Model { get; init; } = string.Empty;
 
@@ -115,7 +117,10 @@ internal sealed class OllamaChatRequest
 public sealed record OllamaMessage(
     [property: JsonPropertyName("role")] string Role,
     [property: JsonPropertyName("content")] string Content,
-    [property: JsonPropertyName("thinking"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Thinking = null);
+    [property: JsonPropertyName("thinking"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Thinking = null)
+{
+    [JsonIgnore] public IReadOnlyList<CaseClassificationRuleDefinition>? CaseRules {get;init;}
+}
 
 internal sealed class OllamaChatResponse
 {

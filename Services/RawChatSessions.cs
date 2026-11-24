@@ -9,6 +9,7 @@ namespace AiTeachingAssistant.Services;
 // Server-process memory only. Each random ID belongs to exactly one course/user.
 public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions> options, IOptions<OllamaOptions> model) : BackgroundService
 {
+    private const string LanguageInstruction = "Respond in the language of the user's current message, unless they explicitly request another response language. For Chinese responses, use Traditional Chinese (Taiwan, zh-TW), not Simplified Chinese (zh-CN).";
     private readonly object gate = new();
     private readonly Dictionary<Guid, Entry> entries = [];
     private readonly CaseChatOptions settings = options.Value;
@@ -21,6 +22,7 @@ public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions
         public Guid Actor { get; } = actor;
         public ConversationBufferMemory Memory { get; } = new(new ChatMessageHistory());
         public List<RequestMetrics> Metrics {get;}=[];
+        public List<string> Models {get;}=[];
         public CancellationTokenSource Lifetime { get; } = new();
         public DateTimeOffset LastActivity { get; set; } = now;
         public bool Busy { get; set; }
@@ -45,7 +47,7 @@ public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions
         lock(gate){RemoveExpired();return Find(course,actor,id).Choice;}
     }
 
-    public async Task<RawChatReply> Send(Guid course, Guid actor, Guid id, string content, IOllamaClient provider, CancellationToken ct,Func<CancellationToken,Task>? authorizeCompletion=null)
+    public async Task<RawChatReply> Send(Guid course, Guid actor, Guid id, string content, IOllamaClient provider, CancellationToken ct,Func<CancellationToken,Task>? authorizeCompletion=null,CaseChatModelChoice? requestChoice=null)
     {
         Entry entry;
         CaseChatOptions callSettings;OllamaOptions callModelSettings;
@@ -54,11 +56,15 @@ public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions
         {
             RemoveExpired();
             entry = Find(course, actor, id);
-            callSettings=entry.Choice?.Limits??settings;callModelSettings=entry.Choice?.Options??modelSettings;
+            var choice=requestChoice??entry.Choice;
+            callSettings=choice?.Limits??settings;callModelSettings=choice?.Options??modelSettings;
             if (entry.Busy) throw new CaseChatException(409, "上一則訊息仍在處理中，請稍後再試。");
             if (string.IsNullOrWhiteSpace(content)) throw new CaseChatException(400, "請輸入訊息。");
             if (content.Length > callSettings.MaxMessageCharacters) throw new CaseChatException(413, "訊息超過長度上限。");
-            messages = entry.Memory.ChatHistory.Messages.Select(m => new OllamaMessage(m.Role == MessageRole.Ai ? "assistant" : "user", m.Content)).ToList();
+            // Language only: no teaching prompt, role, or phase context. Keep the
+            // instruction out of LangChain history, but include it in preflight.
+            messages = [new("system", LanguageInstruction)];
+            messages.AddRange(entry.Memory.ChatHistory.Messages.Select(m => new OllamaMessage(m.Role == MessageRole.Ai ? "assistant" : "user", m.Content)));
             messages.Add(new("user", content));
             CaseChatBudget.EnsureFits(messages, callSettings, callModelSettings);
             ct.ThrowIfCancellationRequested();
@@ -89,8 +95,9 @@ public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions
                 // A failed human draft stays with the caller for a clean retry.
                 entry.Memory.ChatHistory.AddMessages([Message.Human(content), Message.Ai(result.Content)]).GetAwaiter().GetResult();
                 entry.Metrics.Add(ChatPerformanceMetrics.Clean(result.Metrics));
+                entry.Models.Add(callModelSettings.Model);
                 entry.LastActivity = clock.GetUtcNow();
-                return new(id, entry.Memory.ChatHistory.Messages.Select((m,index) => new RawChatMessage(m.Role == MessageRole.Ai ? "assistant" : "user", m.Content,m.Role==MessageRole.Ai?entry.Metrics[index/2]:null)).ToArray(), callModelSettings.Model);
+                return new(id, entry.Memory.ChatHistory.Messages.Select((m,index) => new RawChatMessage(m.Role == MessageRole.Ai ? "assistant" : "user", m.Content,m.Role==MessageRole.Ai?entry.Metrics[index/2]:null,entry.Models[index/2])).ToArray(), callModelSettings.Model);
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -139,6 +146,7 @@ public sealed class RawChatSessions(TimeProvider clock, IOptions<CaseChatOptions
         entry.Lifetime.Cancel();
         entry.Memory.Clear().GetAwaiter().GetResult();
         entry.Metrics.Clear();
+        entry.Models.Clear();
         if (!entry.Busy) entry.Lifetime.Dispose();
     }
 

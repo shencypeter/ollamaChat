@@ -1,0 +1,34 @@
+{
+  "version": "phase-writing-guide-20261120-v1",
+  "sourceNote": "本指引依既有四階段架構及一般臨床個案分析原則整理，並非教授教材的逐項摘錄，尚待與原始教材核對。供撰寫及 AI 形成性回饋參考，不代表臨床內容已驗證。",
+  "stages": [
+    {
+      "key": "premorbid", "phase": "A", "title": "病前功能", "englishTitle": "Premorbid Functioning",
+      "description": "描述個案在疾病發生之前的生活狀態及功能表現，建立後續功能比較的基準。",
+      "topics": ["基本背景、教育程度及職業經歷", "利手（慣用手）", "日常生活自理能力", "認知功能與學習能力", "人格特質及情緒表現", "人際關係與社會適應", "休閒活動及生活習慣"],
+      "writingFocus": "建立個案病前的功能基準（Baseline），而非描述目前的疾病症狀。",
+      "coreQuestion": "個案生病以前是什麼樣子？"
+    },
+    {
+      "key": "illnessCourse", "phase": "B", "title": "疾病病程", "englishTitle": "Course of Illness",
+      "description": "依照時間順序，描述疾病發生、發展及治療的歷程。",
+      "topics": ["疾病發生時間及背景", "初期症狀與表現", "就醫及診斷歷程", "手術、藥物及其他治療", "症狀與功能的變化", "復發、併發症及目前疾病狀態"],
+      "writingFocus": "建立清楚的時間軸，區分疾病發生前後的變化，避免沒有證據的因果推論。",
+      "coreQuestion": "個案經歷了什麼？"
+    },
+    {
+      "key": "functionalAssessment", "phase": "C", "title": "功能評估結果", "englishTitle": "Functional Assessment Results",
+      "description": "整合個案目前的功能狀態、臨床觀察及相關評估結果。",
+      "topics": ["注意力", "記憶力", "語言能力", "執行功能", "知覺及動作功能", "情緒與行為表現", "日常生活及職業功能", "心理衡鑑或其他測驗結果"],
+      "writingFocus": "不只是羅列測驗結果，而是說明評估結果所反映的功能表現，以及對實際生活可能造成的影響。",
+      "coreQuestion": "個案現在的功能如何？"
+    },
+    {
+      "key": "psychosocial", "phase": "D", "title": "心理社會條件", "englishTitle": "Psychosocial Conditions",
+      "description": "分析個案所處的生活環境，以及可能影響其適應、治療與復健的心理社會因素。",
+      "topics": ["家庭結構及家庭支持", "人際關係及社會支持", "工作環境與經濟條件", "心理壓力及因應方式", "疾病認知與治療態度", "環境中的支持因素及阻礙因素"],
+      "writingFocus": "區分客觀事實、個案主觀感受及撰寫者的合理推論。",
+      "coreQuestion": "哪些心理及環境因素影響個案？"
+    }
+  ]
+}

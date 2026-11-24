@@ -16,6 +16,18 @@ public sealed class CaseFeedbackTextTests
         Assert.False(CaseFeedbackText.RequiresRepair("已區分病前及住院時點。請核對原始資料的時間標記；目前沒有獨立病歷可供核實。"));
         Assert.False(CaseFeedbackText.RequiresRepair("同一術語可在不同事件出現。第一段的時間清楚；第二段仍應標出來源。"));
     }
+    [Fact] public void RepairRetainsScopeFindingsAndDoesNotAssumeEveryCrossPhaseCodeIsMisplaced()
+    {
+        var request=CaseFeedbackText.RepairRequest("合成跨階段作答",[
+            new("past",0,2,"病前",["A2a"],"純病前作答","misplaced"),
+            new("background",2,4,"影像",["B3"],"必要背景","unverified")]);
+        Assert.Contains("必要背景不算錯置",request[0].Content);
+        Assert.Contains("目前及實際階段",request[0].Content);
+        using var data=JsonDocument.Parse(request[1].Content);
+        var annotations=data.RootElement.GetProperty("recognizedAnnotations");
+        Assert.Equal("misplaced",annotations[0].GetProperty("Status").GetString());
+        Assert.Equal("unverified",annotations[1].GetProperty("Status").GetString());
+    }
     [Fact] public async Task LongBRepairKeepsAnnotationsAndNeverResendsOldDraftsOrTheBrokenFeedback()
     {
         var wire=new QueueWire(Envelope(new{annotations=Annotations,feedback=Loop}),Envelope(new{feedback="已按時間整理本次處置。請核對原始病歷的日期與來源；目前無法核實案例事實。"}));
@@ -23,6 +35,7 @@ public sealed class CaseFeedbackTextTests
         Assert.Equal(2,wire.Requests.Count);Assert.All(wire.Requests,r=>{Assert.DoesNotContain("OLD_DRAFT_MARKER",r);Assert.DoesNotContain("OLD_ASSISTANT_MARKER",r);});
         using var repair=JsonDocument.Parse(wire.Requests[1]);var messages=repair.RootElement.GetProperty("messages");Assert.Equal(2,messages.GetArrayLength());
         using var data=JsonDocument.Parse(messages[1].GetProperty("content").GetString()!);Assert.Equal(Original,data.RootElement.GetProperty("answerText").GetString());Assert.DoesNotContain("循環評語內容",messages[1].GetProperty("content").GetString());
+        Assert.Contains("個案經歷了什麼？",messages[0].GetProperty("content").GetString());Assert.Contains("因果推論",messages[0].GetProperty("content").GetString());Assert.Contains("尚待與原始教材核對",messages[0].GetProperty("content").GetString());Assert.Contains("不能據此判定學生遺漏",messages[0].GetProperty("content").GetString());
         using var body=JsonDocument.Parse(reply.Content);Assert.Equal(JsonSerializer.Serialize(Annotations),body.RootElement.GetProperty("annotations").GetRawText());Assert.DoesNotContain("循環評語內容",body.RootElement.GetProperty("feedback").GetString());
         Assert.Equal(2,reply.Metrics.ProviderCalls);Assert.Equal(20,reply.Metrics.PromptTokens);Assert.Equal(14,reply.Metrics.ResponseTokens);Assert.DoesNotContain("loadDurationNanoseconds",reply.Metrics.AvailableFields!);
     }
@@ -38,7 +51,8 @@ public sealed class CaseFeedbackTextTests
         var wire=new QueueWire(Envelope(new{annotations=Array.Empty<object>(),feedback=Loop}));
         await Client(wire).CaseFeedbackAsync([new("system","test"),new("user",new string('測',length))],stage,default);Assert.Single(wire.Requests);
     }
-    private static OllamaClient Client(QueueWire wire)=>new(new HttpClient(wire){BaseAddress=new Uri("http://model.test/")},Microsoft.Extensions.Options.Options.Create(new OllamaOptions{CompactCaseFeedback=true,CaseFeedbackMaxTokens=4096}),NullLogger<OllamaClient>.Instance);
+    // Match Omni's deployed context and CJK estimate for this long-answer fixture.
+    private static OllamaClient Client(QueueWire wire)=>new(new HttpClient(wire){BaseAddress=new Uri("http://model.test/")},Microsoft.Extensions.Options.Options.Create(new OllamaOptions{CompactCaseFeedback=true,CaseFeedbackMaxTokens=4096,CjkContextTokensPerCharacter=2,AssessmentSampling=new(){NumCtx=16384}}),NullLogger<OllamaClient>.Instance);
     private static string Envelope(object content)=>JsonSerializer.Serialize(new{message=new{role="assistant",content=JsonSerializer.Serialize(content)},done_reason="stop",prompt_eval_count=10,eval_count=7,eval_duration=1000000000});
     private sealed class QueueWire(params string[] responses):HttpMessageHandler
     {

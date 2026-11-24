@@ -1,8 +1,9 @@
 using AiTeachingAssistant.Models;
 namespace AiTeachingAssistant.Services;
 
-// Model protocol only. Raw passes user/assistant messages as-is and gains no
-// implicit application system prompt or memory. Stage supplies its own system.
+// Model protocol only: serialize supplied system/user/assistant roles as-is.
+// Raw supplies a language-only instruction; Stage supplies its teaching system.
+// This transport adds no implicit prompt or memory.
 public static class QwenConversationPrompt
 {
     public static string Render(IReadOnlyList<OllamaMessage> messages)

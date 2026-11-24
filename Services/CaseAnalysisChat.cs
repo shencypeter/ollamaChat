@@ -47,15 +47,15 @@ public sealed partial class CaseAnalysisChat(NpgsqlDataSource source,IOllamaClie
         await using(var cmd=new NpgsqlCommand("INSERT INTO audit_events(actor_user_id,entity_type,entity_id,action,metadata) VALUES($1,'courses',$2,'course.case_analysis_setting',jsonb_build_object('enabled',$3::boolean))",conn)){Add(cmd,actor,course,enabled);await cmd.ExecuteNonQueryAsync(ct);}
         await tx.CommitAsync(ct);
     }
-    public async Task<CaseStageHistory> History(Guid course,Guid actor,string stage,CancellationToken ct)
+    public async Task<CaseStageHistory> History(Guid course,Guid actor,string stage,CancellationToken ct,CaseHistoryQuery? page=null)
     {
         stage=AnalysisStageCatalog.Get(Stage(stage)).Key;var access=await Access(course,actor,false,ct);
-        return await ReadHistory(course,actor,stage,access.Practice,ct);
+        return page?.Paged==true?await ReadHistoryPage(course,actor,stage,access.Practice,page,ct):await ReadHistory(course,actor,stage,access.Practice,ct);
     }
     public async Task<CaseStageHistory> ReviewHistory(Guid course,Guid actor,Guid student,string stage,CancellationToken ct)
     {
         stage=AnalysisStageCatalog.Get(Stage(stage)).Key;if(!(await Access(course,actor,false,ct)).CanReview)throw new CaseChatException(403,"你沒有本課個案分析紀錄的查閱權限。");
-        return await ReadHistory(course,student,stage,false,ct);
+        throw new CaseChatException(403,"學生 AI 分析草稿僅供本人查閱；請改由正式提交紀錄審閱作業。");
     }
     private async Task<CaseStageHistory> ReadHistory(Guid course,Guid student,string stage,bool practice,CancellationToken ct)
     {
@@ -67,8 +67,8 @@ public sealed partial class CaseAnalysisChat(NpgsqlDataSource source,IOllamaClie
         var messages=sessions.ToDictionary(s=>s.Id,_=>new List<CaseChatMessage>());
         if(sessions.Count>0)
         {
-            await using var cmd=new NpgsqlCommand("SELECT session_id,id,role,content,sequence_number,CASE WHEN response_status='pending' AND lease_until<=$2 THEN 'failed' ELSE response_status END,in_reply_to,model_name,prompt_version,created_at,performance_metrics,revises_message_id,annotations FROM case_analysis_messages WHERE session_id=ANY($1) ORDER BY sequence_number",conn);Add(cmd,sessions.Select(s=>s.Id).ToArray(),clock.GetUtcNow());
-            await using var r=await cmd.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))messages[r.GetGuid(0)].Add(new(r.GetGuid(1),r.GetString(2),r.GetString(3),r.GetInt32(4),r.GetString(5),r.IsDBNull(6)?null:r.GetGuid(6),r.GetString(7),r.GetString(8),r.GetFieldValue<DateTimeOffset>(9),r.IsDBNull(10)?null:JsonSerializer.Deserialize<RequestMetrics>(r.GetString(10),PerformanceJson),r.IsDBNull(11)?null:r.GetGuid(11),r.IsDBNull(12)?null:JsonSerializer.Deserialize<CaseTextAnnotation[]>(r.GetString(12),PerformanceJson)));
+            await using var cmd=new NpgsqlCommand("SELECT m.session_id,m.id,m.role,m.content,m.sequence_number,CASE WHEN m.response_status='pending' AND m.lease_until<=$2 THEN 'failed' ELSE m.response_status END,m.in_reply_to,m.model_name,m.prompt_version,m.created_at,m.performance_metrics,m.revises_message_id,m.annotations,CASE WHEN m.role='user' THEN m.trashed_at ELSE parent.trashed_at END,m.rule_version,m.rule_snapshot FROM case_analysis_messages m LEFT JOIN case_analysis_messages parent ON parent.id=m.in_reply_to AND parent.role='user' WHERE m.session_id=ANY($1) ORDER BY m.sequence_number",conn);Add(cmd,sessions.Select(s=>s.Id).ToArray(),clock.GetUtcNow());
+            await using var r=await cmd.ExecuteReaderAsync(ct);while(await r.ReadAsync(ct))messages[r.GetGuid(0)].Add(new(r.GetGuid(1),r.GetString(2),r.GetString(3),r.GetInt32(4),r.GetString(5),r.IsDBNull(6)?null:r.GetGuid(6),r.GetString(7),r.GetString(8),r.GetFieldValue<DateTimeOffset>(9),r.IsDBNull(10)?null:JsonSerializer.Deserialize<RequestMetrics>(r.GetString(10),PerformanceJson),r.IsDBNull(11)?null:r.GetGuid(11),r.IsDBNull(12)?null:JsonSerializer.Deserialize<CaseTextAnnotation[]>(r.GetString(12),PerformanceJson),r.IsDBNull(13)?null:r.GetFieldValue<DateTimeOffset>(13),r.IsDBNull(14)?null:r.GetInt32(14),r.IsDBNull(15)?CaseClassificationRules.Defaults:JsonSerializer.Deserialize<CaseClassificationRuleDefinition[]>(r.GetString(15),PerformanceJson)));
         }
         await tx.CommitAsync(ct);
         return new(sessions.Select(s=>new CaseChatSession(s.Id,stage,s.Status,messages[s.Id],Statistics(messages[s.Id],s.Last))).ToArray(),sessions.Where(s=>s.Status=="active").Select(s=>(Guid?)s.Id).FirstOrDefault());

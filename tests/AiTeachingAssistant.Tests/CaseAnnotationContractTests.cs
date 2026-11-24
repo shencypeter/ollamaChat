@@ -5,6 +5,29 @@ namespace AiTeachingAssistant.Tests;
 
 public class CaseAnnotationContractTests
 {
+    [Theory]
+    [InlineData(false,false)]
+    [InlineData(true,false)]
+    [InlineData(false,true)]
+    [InlineData(true,true)]
+    public void CompactAndStandardSchemasPermitLateClauseEvidenceWithinTheSameBound(bool compact,bool annotationsFirst)
+    {
+        var facts=Enumerable.Range(1,128).Select(i=>$"合成片段{i}肌力可評估").ToArray();
+        var original=string.Join("，",facts);
+        var schema=CaseAnnotationContract.SchemaFor(compact,annotationsFirst,original);
+        var annotations=schema.GetProperty("properties").GetProperty("annotations");
+        Assert.Equal(128,annotations.GetProperty("maxItems").GetInt32());
+        var fields=annotations.GetProperty("items").GetProperty("properties");
+        Assert.Equal(compact?160:16000,fields.GetProperty("text").GetProperty("maxLength").GetInt32());
+        Assert.Equal(compact?80:200,fields.GetProperty("explanation").GetProperty("maxLength").GetInt32());
+        Assert.Contains(facts[127],fields.GetProperty("text").GetProperty("enum").EnumerateArray().Select(e=>e.GetString()));
+        var entries=JsonSerializer.SerializeToElement(facts.Select(text=>new{text,occurrence=0,codes=new[]{"C2"},explanation="合成測試",status="unverified"}));
+        var validated=CaseAnnotationContract.Validate(original,entries);
+        Assert.Equal(128,validated.Count);
+        Assert.Equal(facts[127],validated[^1].Text);
+        Assert.Equal(original.IndexOf(facts[127],StringComparison.Ordinal),validated[^1].Start);
+    }
+
     [Fact] public void ExplicitQuoteOccurrenceResolvesExactUtf16WithoutGuessingAnOffset()
     {
         const string original="😀55歲；55歲";
@@ -39,7 +62,7 @@ public class CaseAnnotationContractTests
         Assert.Empty(CaseAnnotationContract.Validate("原文",Entries()));
         Assert.Empty(CaseAnnotationContract.Validate("原文",JsonSerializer.SerializeToElement("bad")));
         Assert.Empty(CaseAnnotationContract.Validate("原文",Entries(new{start="0",end=2,text="原文",codes=new[]{"A1a"}})));
-        Assert.Equal(48,CaseAnnotationContract.Validate("55歲",Entries(Enumerable.Range(0,100).Select(_=>Ann(0,3,"55歲")).ToArray())).Count);
+        Assert.Equal(128,CaseAnnotationContract.Validate("55歲",Entries(Enumerable.Range(0,200).Select(_=>Ann(0,3,"55歲")).ToArray())).Count);
     }
     [Fact] public void FeedbackEnvelopeKeepsTextAndDiscardsBadAnnotations()
     {

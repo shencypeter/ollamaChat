@@ -21,6 +21,7 @@ import {auth,loadSession} from './composables/auth'
 import {experience,bindExperience,setStudentExperience,setCourseExperience} from './composables/experience'
 import {api,resetCsrf} from './api'
 import './style.css'
+import './theme.css'
 import {safeReturnPath} from './utils/returnPath'
 import {APP_NAME} from './utils/branding'
 const router=createRouter({history:createWebHistory(),routes:[

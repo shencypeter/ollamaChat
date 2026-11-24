@@ -72,3 +72,38 @@ for(const staff of [false,true])test(`${staff?'teacher':'student'} dashboard, po
  await page.goto(`/courses/${course.id}/units/u1`);await expect(page.getByRole('heading',{name:'觀察與證據',exact:true})).toBeVisible()
  expect(errors).toEqual([]);await context.close()
 })
+
+// Check actual browser-composited colors, rather than blessing a palette by name.
+async function contrast(locator, border=false){
+ return locator.evaluate((element,border)=>{
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d',{willReadFrequently:true})
+  const rgba=color=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=color;ctx.fillRect(0,0,1,1);return [...ctx.getImageData(0,0,1,1).data]}
+  const blend=(fg,bg)=>fg.slice(0,3).map((channel,i)=>channel*fg[3]/255+bg[i]*(1-fg[3]/255))
+  const chain=[];for(let node=border?element.parentElement:element;node;node=node.parentElement)chain.push(node)
+  let background=[255,255,255];for(const node of chain.reverse())background=blend(rgba(getComputedStyle(node).backgroundColor),background)
+  const style=getComputedStyle(element),foreground=blend(rgba(border?style.borderTopColor:style.color),background)
+  const luminance=rgb=>rgb.map(value=>{value/=255;return value<=.04045?value/12.92:((value+.055)/1.055)**2.4}).reduce((sum,value,i)=>sum+value*[.2126,.7152,.0722][i],0)
+  const a=luminance(foreground),b=luminance(background);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05)
+ },border)
+}
+
+for(const width of [1440,390])for(const theme of ['light','dark'])test(`functional theme contrast and form boundaries at ${width}px in ${theme}`,async({page})=>{
+ await page.setViewportSize({width,height:1000});await page.addInitScript(theme=>localStorage.setItem('portal-theme',theme),theme);await fixtures(page,true)
+ await page.goto('/');await expect(page.getByRole('heading',{name:'我的授課',exact:true})).toBeVisible()
+ const panel=page.locator('.portal-panel').first()
+ expect(await panel.locator('summary').evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe(await panel.evaluate(el=>getComputedStyle(el).backgroundColor))
+ expect(await contrast(panel.locator('.panel-title'))).toBeGreaterThanOrEqual(4.5)
+ expect(await contrast(panel.locator('.panel-intro .muted'))).toBeGreaterThanOrEqual(4.5)
+ await page.evaluate(()=>{document.activeElement?.blur();window.scrollTo({top:0,behavior:'instant'})});await page.screenshot({path:`test-results/theme-dashboard-${width}-${theme}.png`,fullPage:true})
+ await page.goto('/courses');await expect(page.getByRole('heading',{name:'我的授課',exact:true})).toBeVisible()
+ if(width===390)await page.getByRole('button',{name:'開啟選單',exact:true}).click()
+ const sidebar=page.getByRole('navigation',{name:'工作區導覽',exact:true})
+ for(const link of [sidebar.locator('a.selected'),sidebar.getByRole('link',{name:'我的學習歷程',exact:true})])expect(await contrast(link)).toBeGreaterThanOrEqual(4.5)
+ if(width===390)await page.getByRole('button',{name:'關閉選單',exact:true}).click()
+ await page.getByRole('button',{name:'建立課程',exact:true}).click()
+ const form=page.locator('.form-surface')
+ for(const element of [form.getByRole('button',{name:'儲存課程',exact:true}),form.getByLabel('課程名稱',{exact:true}),page.locator('.term-filters .field-hint')])expect(await contrast(element)).toBeGreaterThanOrEqual(4.5)
+ expect(await contrast(form.getByLabel('課程名稱',{exact:true}),true)).toBeGreaterThanOrEqual(3)
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+ await page.evaluate(()=>{document.activeElement?.blur();window.scrollTo({top:0,behavior:'instant'})});await page.screenshot({path:`test-results/theme-course-form-${width}-${theme}.png`,fullPage:true})
+})

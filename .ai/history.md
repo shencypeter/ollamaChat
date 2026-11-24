@@ -1,4 +1,518 @@
+## 2026-11-24 共用錯誤紅框跟隨撰寫區
+
+使用者仍見「模型暫時無法回應」紅框於上方。檢查7173已提供前輪新bundle，發現推論catch已在下方卡片，但startRaw／loadStage等共用report仍走固定頁首error-box。CaseAnalysisChat以showComposerError判斷目前有可見撰寫區，將共用紅框放textarea及字數列下方；沒有可見composer時保持頁首fallback。兩處互斥、原教師診斷與失敗封包保護保持，不改模型或API。
+
+新增模型初始化失敗及推論失敗後歷程刷新失敗兩測試，先驗下方notice缺失而失敗；修復後111相關Vue通過。6Chrome通過（新增1440淺／390深的初始化紅框bounds與無重複、既有4師生錯誤診斷／重試），手機深色截圖已視檢；Vite及diff check通過，既有chunk>500KB警告保持。只用合成API，不呼叫模型／寫資料。static index-C_3y-H-w.js／index-D-YehcAR.css已供唯一7173，原PID14664不重啟、不清Raw。無後端／Migration／Prompt／模型改動，未commit/push；agents及規格同步。
+
+## 2026-11-24 Omni正式輸出8192與下方回覆失敗卡
+
+使用者回報正式回饋output_limit且希望中斷顯示於composer下方，並確認為Taipei Qwen2.5 Omni 7B。檢查現行formal5120／Raw512／context32768後，僅Configuration/Ollama/qwen25-omni.json正式輸出改8192；不改其他三profile、Raw額度、教學Prompt版本、當輪原文或DB歷史策略。CaseAnnotationContract.EnsureComplete及OllamaClient在length錯誤加入數字額度／可用eval_count，缺數明說未提供；不接受部分JSON、不洩漏provider本文。
+
+AiReplyWaiting新增terminal failed與failure slot，停止timer／spinner／carousel controls，保留教授圖卡並顯示未完成。CaseAnalysisChat將送出／重試錯誤與當次診斷／失敗請求快照交給下方卡片，避免必須捲頁首；一般載入／CRUD錯誤仍頁首。卡內原作答保留、就地重試沿既有failedDraft路徑，教師診斷／payload沿原授權；新請求、模型／模式切換及清除重設。錯誤只留當頁，不存聊天／log／storage。
+
+先紅：profile測試期望8192實際5120、length診斷缺數值、Vue缺failed卡；修正後105聚焦後端（含4profile×4phase完整prompt／2125字及缺eval_count）、109Vue、8Chrome通過。Chrome1440／390師生驗卡內錯誤、無頁首重複、停止動畫、權限及相同requestId重試恢復，另覆蓋RawEnter／pending；桌面淺色及手機深色截圖已視檢。3隔離DB測試通過：不發布部分正式回饋、原失敗作答重試不虛增往返、教師診斷授權；非空036→043升級／rerun與資料指紋保持，測試schema已刪除。未重跑無關全套。
+
+以獨立合成661字／66片段、實際完整A階段system經現有OllamaClient測Omni，無DB／歷史。5120額度：27.47秒、input4111／output3160／stop；8192額度：25.36秒、input4111／output3164／stop；兩者皆經全部片段結構檢查。沒有重現使用者原文截斷，也未重送或保存該原文／模型本文；只記數值，不作臨床品質或必然修復保證。提高額度留餘裕，仍可能遇length／逾時／分類不可靠。
+
+正常VS含Vite建置通過（既有>500KB chunk警告）、diff check通過。只重啟唯一7173同bin，PID14664，courses200／匿名API401；bin非秘密設定確認formal8192／Raw512／context32768，static index-B7EwF-Ce.js／index-B6oflx8_.css。Raw暫存清除、正式歷史保持，無Migration、未commit/push。agents／規格／Ollama及輪次文件同步，保留舊額度時間脈絡。
+
+## 2026-11-24 分類頁籤所有字母加分類色徽章
+
+使用者先要求藍點改字母，隨即補充其他A等亦須徽章。PhaseAnnotatedAnswer將所有可見分類phase字母改對應色白字徽章，中文字不填色，避免字母重複；目前階段以該字母徽章細外圈／title及原aria-label指示，移除藍點及文案。底線仍標瀏覽tab，跨分類選取不變，目前未提及的stage不製造假tab。
+
+原角色／頁籤測試增所有字母徽章檢查先紅後綠，49Vue通過；6Chrome（B混合分類1440／390淺深4＋跨頁籤2）驗所有徽章實色／白字、目前外圈不漂移、aria、原文／多選／fallback與無新增請求。Vite／diff check通過，桌面與手機截圖已視檢。static index-C_nglg3B.js／index-Cd4Y5nbL.css供7173，不重啟／清Raw、無後端／DB／Prompt／語意分類更動，未commit/push；規格／agents／標註UI同步。
+
+## 2026-11-24 移除範例徽章數字1
+
+使用者更正只要D而非D1；範例改A／B／C／D，不改色彩／目前階段依據／文章內真實代碼。同步既有測試，49Vue、2Chrome桌面淺／手機深及Vite／diff check通過。static index-CG0cDsgW.js／index-Cgusnev-.css供7173，不重啟／清Raw、無後端／DB／Prompt改動，未commit/push；規格與agents同步。
+
+## 2026-11-24 編碼徽章範例改隨目前階段
+
+依使用者要求，把PhaseAnnotatedAnswer固定A1／category-A範例改為currentPhase的首碼及同色（A1藍、B1琥珀、C1紫、D1玫紅），無stage維持原A1 fallback，裝飾aria-hidden與頁籤可及名稱不變。舊測試增加四phase切換先在B1預期失敗，改後49元件測試全過；原兩Chrome分句流程改核對B1與實際琥珀白字，1440淺／390深2/2，Vite／diff check通過，桌面範例截圖已視檢。只更新7173 static index-CjyZ3Y0L.js／index-Dn85U33t.css，不重啟／清Raw，無API／DB／Prompt／分類變更，未commit/push；規格與agents同步。
+
+## 2026-11-24 將階段指引移到核心問題下方
+
+依截圖將教師phase-guide的描述／topics／writingFocus包為內容區，桌面對齊右欄問題，手機同問題縮排；表頭改「階段／核心問題與撰寫指引」。學生單階段內容、資料來源、Prompt及原生details不動。既有Chrome增實際文字左緣及上下位置驗證，先重現桌面／手機兩項不符，再修為4師生1440／390全過；103Vue、Vite與diff check通過，截圖已視檢。7173 static index-D2vJDsVH.js／index-B1O_tgjl.css，無重啟／Raw清除／DB／API改動，未commit/push，規格與agents同步。
+
+## 2026-11-24 分類區文案與高亮按鈕寬度精簡
+
+使用者要求重寫ABCD分類及縮短按鈕寬度。將標題與可及region改作答分類標註，縮短階段說明與legend-hint，保留原文模式文字、臨床非驗證與未標註不代表錯誤提醒。主legend-codes移除所有容器／手機的固定欄grid，改flex自然寬度／換行，最長100%並可斷行、最小高度44px，保留選中✓預留，避免選取時寬度跳動；說明dialog的多欄grid不變。
+
+既有元件測試加新標題／短說明檢查先紅後綠，49標註＋103聊天＋22正式共174Vue通過。原Chrome改驗實際compact短鈕<140px、所有按鈕不超容器且高度>=44，不再用等寬欄數作驗收；保留說明dialog 3／2／1欄與證據、選取、hover、原文／徽章測試，1440／1024／390淺深共8/8通過，截圖已視檢。Vite／diff check通過，static index-CEIYq4HM.js／index-QbdXrYNr.css供7173，不重啟／清Raw、無後端／DB／Prompt／分類語意改動，未commit/push；agents／規格／標註UI同步。
+
+## 2026-11-24 移除教師本人AI測試的未正式提交提醒
+
+使用者確認自己是教授帳號後要求不顯示未正式提交。CaseFormalSubmissions以非review＋教師／TA或isPractice條件不渲染正式提交區，CaseAnalysisChat正式交件引導僅給非practice實際學生；保留教學練習說明。教師審閱學生的正式快照、空狀態／退回及學生提交流程不變，不以隱藏介面改後端授權。
+
+新教師／TA兩項檢查先紅後綠，CaseAnalysisChat103＋CaseFormalSubmissions22共125Vue通過。既有Chrome補個人teacher view無正式區／提醒、學生仍有正式區，連學生提交→teacher review→退回完整流程，師生1440／390共6/6通過。Vite／diff check通過；只更新7173 static index-ClxCPL1-.js／index-ncOD_3sK.css，不重啟／清Raw、無API／DB／Prompt更動，未commit/push；規格與agents同步。
+
+## 2026-11-24 Raw新增語言指示，中文偏好zh-TW
+
+使用者要求Raw依提問語言回覆、中文優先臺灣繁體。明確將原無應用system模式改為language-only instruction：Respond in the language of the user's current message, unless they explicitly request another response language. For Chinese responses, use Traditional Chinese (Taiwan, zh-TW), not Simplified Chinese (zh-CN).
+
+RawChatSessions.Send先放唯一system，再接完整LangChain history及當次user，原CaseChatBudget計入此指示；成功後仍只把user／assistant加入buffer。換模型／換語言不遺失歷史、不把system當聊天回傳，不用profile全域強制中文prompt；A–D與其版本完全不改。QwenChatML transport註解及效能dialog文案明確標語言-only、不再稱Raw無system，四profile設定與低層provider行為保持。
+
+新增4模型實際wire mock＋budget測試共5項先紅（缺system／舊預檢可過）後綠；更新原Raw序列檢查以涵蓋system並保留完整buffer／隔離／清除／失敗／容量測試。84相關後端通過，含兩輪換語言、exact角色順序、唯一指示、Omni generate ChatML、無全域prompt、A–D原system不受影響。4隔離DB測試確認Raw不建立session／message或正式統計、選模記憶、完成前授權及學生拒絕；非空升級036→043／rerun指紋通過，schema已刪。24 dialog Vue、正常VS含Vite、diff check通過，無介面流程變更，未跑無關完整套件或真實模型語言品質驗證。
+
+只停止已驗明7173舊PID31388，同bin/Debug重啟PID36420，courses200／匿名API401，static index-DEoMdYjt.js／index-DL59iGy8.css；Raw暫存清空、正式DB歷史不動。無新Migration／模型設定修改，未commit/push；agents、規格、Ollama及個案流程同步。本節取代先前Raw完全無應用system的現行效力，舊記錄留作時間脈絡。
+
+## 2026-11-24 教師階段說明與核心問題合併
+
+依使用者截圖合併重複區塊：教師／TA每個native details summary含階段中英名稱及coreQuestion，桌面雙欄、650px以下上下排列；詳細描述／topics／writingFocus在原row下展開，刪除教師底部重複table，學生原單階段與四核心問題表保留。仍共用stage-guidance.json、不改其內容／System Prompt，預展目前階段及原說明限制保留。
+
+先於既有三角色Vue流程加合併檢查，教師／TA兩項因舊table存在失敗；實作後103/103通過。四既有Chrome師生1440淺／390深通過，含核心問題收合仍可讀、Enter展開／收合、學生不變、草稿及零新增請求；截圖已視檢。Vite與diff check通過，static index-CDFFRM79.js／index-ZkweeFXR.css供7173，不重啟／清Raw、無Migration／API／授權變更，未commit/push；規格與agents同步。
+
+## 2026-11-24 功能頁籤新增Lucide圖示
+
+依截圖要求，以已安裝@lucide/vue的PencilLine／ClipboardCheck／MessagesSquare為作答／回饋／AI對話測試加入17px裝飾SVG，不裝FontAwesome；保留文字、鍵盤、可及名稱及權限。相關103Vue、原4Chrome師生桌面／手機（補圖示數及aria-hidden驗證）、Vite及diff check通過，桌面已視檢。static index-BPZ_ANmJ.js／index-OjgOwlXe.css供7173，無重啟／Raw清除／後端／DB／Prompt改動，未commit/push；規格與agents同步。
+
+## 2026-11-24 僅Raw新增預設關閉的Enter傳送
+
+依使用者要求新增Raw-only原生checkbox role=switch，標示Enter傳送且預設off；開啟顯示Shift+Enter換行。狀態只在Vue記憶體，不寫storage，重整off。鍵盤處理先判Raw／開關，再排除Shift／Ctrl／Meta／Alt、IME組字狀態／isComposing／229；未修飾Enter preventDefault，repeat不送，其他走原send guards與重試。A–D無開關且Enter維持換行，不改API／授權／模型／Prompt。
+
+兩個Vue流程先因缺開關而失敗、實作後相關103/103通過，涵蓋off／modifier／IME／repeat／防雙送／formal隔離／新頁off。兩Chrome1440淺色／390深色驗實際Enter換行、Shift換行、IME不送、按Enter僅一個合成Raw請求、A–D不送及reload關閉；首輪因Playwright預設dismiss原Raw離開警告而未切頁，測試補明確accept後2/2，未改離開保護。Vite與diff check通過、手機開關截圖已視檢。static index-DIrj1uEv.js／index-IGV6GYEa.css供唯一7173，無重啟／清Raw／Migration，未commit/push；規格與agents同步。
+
+## 2026-11-24 階段頁籤只將字母包為分類色徽章
+
+依使用者截圖，CaseAnalysisChat phase tabs拆為字母badge與中文span，僅A／B／C／D使用theme分類深色底白字。完整aria-label及原文字空白保留，選取／路由／鍵盤／中文樣式不變。首輪101測試有1項發現字母中文空白遺失，補顯式空白後101通過；原2Chrome預覽流程加入四徽章色／白字／中文透明及accessible name檢查，1440淺色／390深色2/2通過，Vite與diff check通過、桌面截圖視檢。靜態index-B5AaW4p6.js／index-Dewg2_Hr.css已供7173，不重啟或清Raw，無後端／DB／API／Prompt變更，未commit/push；規格與agents同步。
+
+## 2026-11-24 捨棄Teams配色與強化功能對比
+
+使用者要求各頁功能有更明確視覺區分，後補充ABCD亦可改色。檢查既有App／style.css／PortalPanel／課程與個案分析CSS，原紫色同時用於導覽、按鈕、原文及選取。新增獨立theme.css集中light／dark語意色，保留既有Vue與排版；main原style後載入，style.css只保留排版與字型基礎。深藍導覽／明確selected列、青綠實心執行按鈕、有框替代按鈕、panel標頭與資料body分色、輸入框邊界、表格斑馬紋；原文暖底、AI綠底、composer藍灰底。scope內硬碼紫色同步改tokens，危險按鈕深紅底與深色錯誤文字亮紅分離。
+
+ABCD使用藍#1d4ed8／琥珀#9a5b05／紫#7c3aed／玫紅#be185d，深色outline／underline用#93c5fd／#fcd34d／#c4b5fd／#f9a8d4。徽章／選中白字及✓、未選外框、混合選取、文字代碼／ARIA、目前階段藍點、hover與圖例保持；參考標題亦沿分類色。不改分類內容、Prompt、模型、授權或DB。
+
+154相關Vue通過；Chrome初版12及補充7通過後，最終23/23涵蓋師生Dashboard／grades／unit、教師學生預覽、原文完全保留與四分類徽章、跨分類選取、局部hover／tooltip／legend、作答／回饋切換及草稿／copy。新增4個1440／390×light／dark實際composited對比檢查，代表性標題／提示／nav／主操作／input text>=4.5、input border與外層>=3、無橫向溢位。Vite build及diff check通過；現有500KB chunk提醒保留。初次轉換腳本cwd錯誤而未執行，修正至repo root後重build；新對比測試getByLabel參數語法修正後7及最終23成功，不為測試改業務流程。未重跑無關完整測試，不宣稱全站WCAG驗收。
+
+人工視檢1440淺色首頁／作答、390深色課程表單／B回饋，截圖皆使用合成API fixtures，不寫DB或使用真實答案。唯一7173仍PID31388，courses／CSS200、匿名API401；新bundle index-Bopz87Kt.js／index-BQzxVR6L.css，沒有重啟或清Raw。無Migration、未commit/push，其他未提交成果保留；agents／規格／標註UI同步。
+
+## 2026-11-23 Qwen3 provider timeout 診斷與修正
+
+使用者提供Qwen3實際封包並補充早上增加token預算。只解析長度／選項：system2583字、本輪answer745字、66slots、num_ctx32768／num_predict4096，沒有歷史或think欄。預設短合成請求64輸出token全用於thinking、無content；think=false回3tokens。66欄合成256token探測預設亦無content、think=false開始產生JSON，兩者約29–33秒；這是刻意限輸出，非分類完整性驗證。正式規模但全替換為無敏感合成片段的compact／think=false請求最後340.68秒、input4067／output2793／stop、66欄全部回填、thinking0。原180秒不足以容納此實測，不宣稱重現原使用者逾時或模型語意正確。
+
+唯讀Ollama0.40.16 show列Qwen3 thinking能力；32K載入footprint9.62GiB、VRAM4.01GiB，可能有記憶體與速度代價，未推定確切硬體／GPU offload率。官方thinking控制文件確認省略think採模型預設。未修改遠端Modelfile或服務log策略，不把應用端不儲存當基礎設施無留存。
+
+僅qwen profile改Think=false、既有compact格式及HTTP600秒；其餘三profile不受本次修改。OllamaOptions／wire nullable Think只在指定時送出；timeout診斷使用實際HttpClient.Timeout且不帶敏感例外。pending lease原只覆蓋一／兩次呼叫，修為分類＋有界重試2次，B長文含可選評語修復3次，加30秒；不增加實際呼叫數。
+
+先紅：兩個mock/profile測試缺think／秒數、DB lease預期1230實得630；後綠73聚焦payload／容量／模型／評語／inspection＋1隔離DB lease（A1230秒、B1830秒），非空036→043升級與rerun指紋保留、group_test schema已刪。正常VS含Vite build及diff check通過；無前端行為變更，未重跑無關Vue／Chrome／完整後端。唯一7173已重啟PID31388，courses200／API401，新bin四profile核對，static維持index-DSVpev3x.js／index-eR4FEaQw.css；Raw暫存清空、持久化歷程不動。無新Migration、未commit/push。600秒仍為有界等待，長文與負載可能繼續逾時，品質需人工核對。
+
+## 2026-11-23 學生作答預覽可讀與測試範圍精簡
+
+使用者要求教師學生POV可開作答、看各階段要求，但input disabled並回教學模式做模型測試；另問是否需500–600tests。稽核舊readonly同時阻擋tab與整個form，故CaseAnalysisChat分離studentPreview／canViewWriting與readonly。預覽預設write、保留四階段student guidance與分類參考、停用input／submit且send/retry內仍拒preview；不改後端、Prompt或學生作答權。教學練習提示在preview隱藏，另給預覽說明及原生同課view=teaching連結，沿原router／experience權限還原，不在學生POV直接開測試模型。
+
+新單一Vue流程先失敗再修復，一個case走四phase、頁籤往返、學生指引、禁用輸入／submit、禁止model／Raw／維護，模擬繞過input也不POST。相關101/101，Chrome1440教師預覽淺色／390深色2/2（全部階段、零mutation、返回教學Raw可選模）、Vite／diff check通過，手機disabled樣式截圖已視檢。沿現有fixture補真實X-Portal-View唯讀flags，不用UI隱藏替代API。此UI-only未重跑完整後端／全Vue／全Chrome；上次515／460／81完整結果留其歷史脈絡。
+
+唯讀盤點後端52個測試來源檔／515 runner案例、前端70檔，總數包含參數化角色／模型／階段與平台其他功能。未以降數刪除有用保障，新增npm test:case-chat與test:e2e:case-preview、docs/testing.md及README分層指引；實跑新指令101約4.5秒、Chrome2約2.5秒。一般sandbox discovery受loopback限制，改唯讀提升後列項完成，未執行DB寫入或改測試結果。
+
+只更新7173 static index-DSVpev3x.js／index-eR4FEaQw.css，原PID35924／courses200，不重啟／清Raw，無Migration、後端／模型配置改動，未commit/push。規格、權限、交接同步。
+
+## 2026-11-23 依使用者要求啟動7173
+
+唯讀確認7173無listener／HTTP000後，以既有bin/Debug app在Development隱藏啟動，固定https://localhost:7173。新PID35924，/courses HTTP200。沒有重建、修改程式／資料或開啟第二環境；agents執行狀態同步。
+
+## 2026-11-23 AI回饋歷程fetch按鈕每次五筆
+
+使用者要求fetch append5且只按鈕觸發，非infinite scroll。稽核發現舊stage GET與所有mutation都傳整段歷史，故新增可選分頁DTO／HistoryPage partial與route query，連Send／Retry／trash/restore一起有界；不指定paged仍保留舊API。SQL先以created_at／session排序／sequence穩定排名，再套model／trash／before，LIMIT6僅lookahead IDs，body只取前5份user及同session reply；同repeatable-read metadata提供全部模型／總數／實際active尾筆，session統計仍完整。無Migration、原文／快照／模型與Prompt不改。
+
+Vue沿api(fetch)明確button續載、ID合併去重、保留選取與草稿；先紅後綠驗5→10→餘數、捲動不fetch、失敗重試、雙擊鎖定、過期model頁取消。獨立review再驗出並修復：selected trash清filter、併發新首頁與舊prefix gap、完成／idempotent回覆不在前五、filter外失敗沒走retry、修改來源#N漂移、還原舊項錯選。加入有界owner-scoped Target直查（不自動掃頁）／focused prefix重設／失敗刷新帶本次request／捕獲revisionParentNumber，另補filterGET失敗回復、晚到restore generation guard及還原維持model。新回歸先失敗再修，最終review無其他可行動問題。
+
+完整隔離DB515/515（含新增4項paging測試）、非空036→043升級／rerun與指紋通過並刪schema；Vue460/460；Chrome81/81及最終分頁2/2（1440教師淺色／390學生深色、filter/trash、錯誤重試、併發完成目標）通過；VS含Vite與diff check通過。最初重用舊compiled upgrade helper錯套到043造成039指紋假失敗，確認是舊helper未分段，重建當前source後升級通過，未改Migration或正式DB；跨課程拒絕沿原404，測試不擅改成403。截圖已視檢，去除截圖時固定nav遮罩不改產品UI。
+
+只重啟已驗明唯一7173的bin/Debug，PID11408→28444，courses200、匿名paged history401，index-zB-ie8v_.js／index-C6LzIue2.css。Raw暫存因重啟清空，持久化歷史不改，未建立平行埠／儲存、未commit/push。同步規格／權限／輪次與短plan，保留舊全載歷程設計的時間脈絡。
+
+## 2026-11-23 全profile context與byte預算修正
+
+使用者回報預檢UTF8 14056/48000、估token14056/12288、context16384／output4096，未呼叫模型。稽核為三舊profile context16K＋CJK3近似byte計數，CaseChat外層仍預設12KB；Omni已CJK2／24KB但亦16K。show唯讀核對Llama131072／Qwen3 40960／Breeze與Omni32768後採共同32K，不取消guard。四profile分別增num_ctx32768／CaseChat48000、三profile模板overhead16補512以與Omni一致；不改CJK係數、num_predict、ChatML／chat、system合併、重申、抽樣或Prompt，原文／DB歷史／Raw隔離不動。
+
+四profile同14KB尺寸、輸出仍預留、模型選擇載入與full wrapper測試先確認舊配置10項失敗，再修設定。四phase×四profile驗2125字85分句（含重複slot文字）、完整課內prompt／原文與num_ctx，Raw三則無system及原輸出額度。首版測試誤把GeneralChat enum納入stage，改明確四階段，未改產品。相關47通過；最終可執行後端426通過／85條件DB略過（無DB邏輯變更，不另建schema），標準VS含Vite與diff check通過，保留既有chunk提醒。
+
+兩主機四模型bounded1-token合成實測皆接受num_ctx32768，input tokens依序Llama3033／Qwen3 3026／Breeze6021／Omni3026；done_reason length是刻意num_predict1，僅證傳輸／容量，不證正式JSON或分類品質，無真實答案／DB寫入。Local與相關環境容量無覆寫。只終止已驗明7173舊PID26768，建置後同bin/Debug重啟PID11408，courses200／匿名API401，bin四份容量核對正確；Raw暫存清除、持久化資料不改，無Migration或第二埠／環境。規格／Ollama同步，未commit/push。
+
+## 2026-11-23 分類modal改為單項表單
+
+使用者澄清要逐項選擇編輯，而非一次列全分類輸入欄。重用同一modal/API：預設精簡分區清單→單項表單→儲存返回清單。分類列不掛input／textarea；返回取消以savedData還原，成功以伺服器回傳版本為準，焦點回原列，既有expectedVersion／409與權限隔離保留。新增分類也經單項設定才儲存；既有分類不可移除，舊規則與快照不變。
+
+新增單項隔離／取消不夾帶／payload其他項目相同測試先失敗再修復，調整原多項暫存測試為單項新增取消與保存身分保護；Vue449/449、Vite、Chrome1440／390深色2/2及diff check通過。Chrome驗清單零textarea、單項僅兩個textarea、返回還原、Esc／焦點、儲存回清單、新規則下輪使用／舊回覆快照保持；桌面清單與手機單項截圖已視檢。首次load完成不移焦新增按鈕，原header初始焦點維持。只更新7173 index-Pfpdydt9.js／index-DV5yUXLi.css，不重啟／清Raw，無DB／Migration／後端／API／Prompt更動，未commit/push。規格、交接與標註UI同步並保留前次modal設計時間脈絡。
+
+## 2026-11-23 教師分類說明清單移入modal
+
+依使用者要求，原CaseClassificationRules頁內details改為單一紫色編輯入口＋native dialog，重用全部既有欄位／增減／驗證與版本API。沿專案dialog風格，新增有名稱的modal、原生背景隔離、可見控制的Tab循環、回入口焦點、固定header/footer與可捲內容。關閉／Esc還原最近接受的規則並清新增欄；取消GET遞增generation／abort避免遲到覆寫，重開新controller。PUT期間不允許關閉，避免不明儲存結果；permission/course/user切換仍立即清除。舊snapshot、AI prompt配置及授權不改。
+
+先改modal可見性／取消／新分類／晚回應／保存中保護測試確認失敗，再實作；另用失敗測試抓出重開沿用已abort的signal並修正。Chrome首輪顯示native modal末端Tab會移至body，沿既有dialog方式補顯式focus循環後桌面1440／手機390深色皆2/2，含取消不PUT、重開還原、儲存版本與下一輪採新規則／舊回饋快照不改；截圖已視檢。Vue全448/448、Vite與diff check通過，既有bundle大小警告保持。普通sandbox無法讀取loopback，改唯讀提升檢查確認7173仍200、PID26768與新static index-CPiil10V.js／index-CIkHRmNG.css；沒有重啟或清Raw。UI-only無DB／Migration／後端變更，未跑無關後端，未commit/push；規格、交接、分類UI同步。
+
+## 2026-11-23 ABCD分類收進徽章模式
+
+使用者要求把ABCD工具放入分類徽章頁籤。PhaseAnnotatedAnswer原已同annotation-panel，新增badgeMode&&hasAnnotations可見性，plain不再顯示分類工具／空提示；外部legacy Teleport host同樣hide，保留DOM及原state操作。hide-all切原文並聚焦tab，原mode watcher清選取、預覽與定義／dialog，無孤立tooltip。原文copy及撰寫定義參考保持。
+
+新單元測試先失敗再修復，驗同panel／plain隱藏／badge顯示／hover清除／焦點；舊phase tab可見性測試明確切徽章。Vue全444/444、Vite、Chrome相關14/14與完整78/78、diff check通過，1440淺色原文／徽章與390深色徽章截圖已視檢。新增Chrome首次選到較新source而比對原稿，改明確選原稿；舊互動測試在plain直接按現已隱藏的分類（含合併徽章測試末尾hide-all），改先啟徽章，原文斷言及分類／證據檢查保留，沒有為測試改產品預設。UI-only，7173提供index-BIQdpuRV.js／index-BEP4FGGE.css，無重啟／Raw清除、後端／DB／API／Prompt／模型改動，不跑無關後端；規格、輪次、標註UI同步，未commit/push。
+
+## 2026-11-23 扁平回饋歷程與已用模型篩選
+
+使用者釐清Raw如Teams多輪，但正式instructor feedback應一份作答／回饋為一項，不再以多版本房間分層，並將select改模型篩選。稽核確認既有DB已可精確配對user與reply且後端允許同人同課同階段跨session completed revision來源，因此採API既有history的純前端投影，不移資料或改服務。新增caseFeedbackHistory按日期／舊缺日期穩定順序編號，reply只在owner session配對，歷史model回覆優先／request fallback／unknown保守顯示，篩選前定#N。移除session／restart UI，closed歷史不再鎖composer，active尾筆retry限制保留；diagnostic/trash鍵沿真實owner。
+
+新紅綠測試含跨房間同模型／單房間不同模型、退役／NULL模型、單份配對、全域編號、篩選不改草稿或下一模型／request body、closed copy跨房間ancestry、新結果跨篩選揭露、僅trash模型空詳情。原7項舊導覽測試改驗模型與統一歷程，不移除正式快照／草稿／權限意圖。Vue443/443、Vite、Chrome全76/76及diff check通過，獨立read-only review無可行動問題。新completion測試先遇jsdom缺scrollIntoView，補測試stub而不改產品。新Chrome起初以getByLabel精確選取含options文字的label無法定位，改用實際可存取combobox名稱；keyboard測試選無AI的歷史attempt後要求next-stage造成等待，改回選有feedback來源，保留取消離開斷言。桌面／手機淺深截圖已視檢無溢位。
+
+只在既有7173提供新static index-0PXAQKoZ.js／index-DYWbBA_F.css，courses200／受保護API401，PID26768保持，無重啟／Raw記憶清除。無DB／Migration／後端／API／Prompt／模型設定改動，不跑無關後端測試。維護規格、權限、輪次及短plan同步，未commit/push，保留先前對話房間設計的歷史脈絡。
+
+## 2026-11-20 四階段通用撰寫指引與評閱提示
+
+使用者提供A–D四段說明／面向／撰寫重點與核心問題對照，註明並非原始教材摘錄；後續「一起改」明確擴至教師、學生、AI。新增同源stage-guidance.json及CaseStageGuidance.vue，教師／TA可查四段、預展目前段，學生composer看目前段，兩者均有核心問題表與未核對來源聲明。Raw隱藏、學生POV無教師區，點閱不改草稿或發請求。C# CaseWritingGuidance從embedded resource讀同份JSON，CaseChatPrompts user.outputRequirements帶當前指引，不把整理稿當事實／必填表，不新增分類或變更停用碼。原教授system全文與課內規則不動，A/C/D版本v8、Bv10；無新DB／API／Migration。
+
+獨立review指出B長篇評語重整會漏新指引，補失敗wire測試後在RepairRequest可信system追加相同B指引。新增完整wrapper容量預檢；測出B2125字受重複user指令擠壓，精簡B重複user敘述（原system仍完整），AI引用省略已重複的一般B描述，核心問題／全部面向／撰寫重點保持，四階段Omni2125字實際wrapper皆通過，未調profile/context/token預算。Brepair fixture改用已部署Omni16384／CJK2，與過往跳過wrapper預檢的預設估算分開，未放鬆產品限制。
+
+503DB後端（含新指引／四階段容量／Brepair與原文隔離）、436Vue、非空升級rerun、Chrome9及VS含Vite通過；測試schema刪除。新Chrome起初選view後填隱藏composer，確認是測試步驟而非產品問題，明確選write後9/9。1440教師與390深色學生指引截圖視檢正常，keyboard／role／無多請求／草稿保持通過。真實Omni既有合成66分句以新指引正常stop，input4116/output3677，65非空唯一標註至末744/745，所有slot回填且容許空碼；不宣稱分類品質或臨床正確。無合成答案或回覆新增DB，文件只記統計。
+
+7173已重啟PID26768，bundle index-Bzzk7Ace.js／index-mHeLbH0X.css，courses200／受保護API401，Raw暫存因重啟清空，歷史及正式快照不重寫；新作答才使用新版。NuGet probe脆弱性查詢仍暫不可連線（快取相依可建置）；Vite既有大bundle提醒。更新agents、規格、Ollama、維護／輪次及評估；保留前決策時間脈絡，未commit/push。
+
+## 2026-11-20 複製操作靠右與移除重複刪除入口
+
+依使用者調整，actions slot加靠右flex容器，窄寬換行仍靠右；一般round-heading的「移至垃圾桶」移除，只保留trashView還原。側欄卡片X、取消確認、配對回覆trash／restore、closed session、pending／正式提交保護、草稿保持等既有流程不變，相關測試改走選取卡片X。
+
+新增操作排列斷言先紅後綠；相關Vue130/130、Vite、Chrome7項trash／closed／卡片保護及3項1440／1024／390按鈕right-bound幾何／分類通過，合計10/10。1440淺色與390深色截圖已視檢，複製在右、無重複垃圾桶文字、未溢位。diff check通過；7173更新index-CndzKNyp.js／index-G2Ca_jsR.css，僅static不重啟／清Raw、不改DB／API／Prompt／模型、不跑無關後端，未commit/push。同步agents、規格與輪次，保留舊時間脈絡。
+
+## 2026-11-20 紫色完成按鈕與輪播狀態整合
+
+使用者希望「AI已回覆」入口紫色且留在carousel效果內。AiReplyWaiting新增completed／resultHref／resultLabel及view-result事件，父層以同一元件從等待切完成，原avatar／輪播指示線保留，完成圖示、紫底白字連結取代打字／spinner／提示控制。完成停timer，新請求清pause重播；未假裝真實token streaming。parent沿既有latest-result事件導向、#N、版本選取、history捲頂、smooth／reduced-motion捲動與focus；狀態卡不算聊天歷史，failure無完成入口。
+
+新completed lifecycle測試先紅後綠，再補「先暫停→完成→下一輪」重現paused殘留並修復。相關Vue86/86、Vite、Chrome4/4（1440Raw／390正式完成卡及兩尺寸workspace跳轉）通過；新增確認紫色白字／無spinner／完整狀態線與原跳轉，桌面淺色與手機深色截圖已視檢、無溢位。僅static更新7173：index-EXuKRheX.js／index-uzDMnNJ2.css，不重啟／清Raw、無DB／API／Prompt／模型修改；不跑無關後端，未commit/push。更新agents、規格、輪次文件，保留前版時間脈絡。
+
+## 2026-11-20 長文分類中止根因與有界分句傳輸
+
+使用者合成全階段範例745字／66分句的舊回覆到332字停止；唯讀統計與同模型重現均48原始／48保存，24唯一位置碼組，單一手術碼同位置重複24次。input2774/output3160、stop，排除這輪token截斷與前端漏失。僅提高上限128實測仍因迴圈用完5120而length，故未以提高token額度當修復。
+
+長文32–128有界分句改用固定欄位schema，模型逐一回碼（允許空）後精確還原原文位置的舊annotations陣列；無語意自動補標。缺漏／重複／未知欄拒收。短文機械重複另有一次fresh retry；原碼集合／狀態及不同出現位置保留區別，重試不帶舊稿或壞回覆，效能合計呼叫。正式上限128、Studio獨立保留48，四profile／Raw／正式5120不改，新A/C/Dv7／Bv9提示快照版本。真實Omni同範例新66筆／66唯一位置、末744/745（末標點不標）、input3964/output3905/stop，不是碼正確性驗收。
+
+043新增相容CHECK升級，保留role／array／NULL及歷史trigger。非空042含48筆歷史升043、rerun、原資料指紋／trigger相同、49／128筆持久化、129及user標註拒絕通過；正式public已套，七表指紋不變。新增失敗測試先紅後綠，495DB後端、432Vue、Chrome68及VS含Vite通過。獨立review無可行動問題，補四profile長文及壞slots測試。NuGet脆弱性來源暫無法連線僅probe警告、正式VS建置成功；Vite既有大bundle提醒。合成原文與回覆未寫入文件或新增DB學習紀錄。
+
+追加UI steering：ABCD工具改位學生文章下，移除parent前置Teleport host，元件inline工具／無標註提示與history側欄保持。DOM順序單元先失敗後修復，Chrome幾何改為answerBottom<=categoryTop，桌面／手機與淺深色互動通過；1440淺色及390深色完整截圖已視檢，工具在文章下、欄位換行與對比正常。只有7173更新，PID27164，bundle index-H9-uCcCN.js／index-CmBP1hjR.css；courses200、API401，Raw暫存因後端重啟清除，不動持久化歷史，未commit/push。同步規格、Ollama、分類UI、評估及維護文件，保留舊決策的時間脈絡。
+
+## 2026-11-20 原文純文字／選分類自動徽章（現行）
+
+使用者要求原文固定純文字，分類啟用選取時自動切徽章，避免沒有代碼的底線。PhaseAnnotatedAnswer 沿原 underline key 保持caller相容；只有 badgeMode 渲染 annotated spans／references，且原文 spans 不再 role=button 或處理hover／focus／click。emphasize與showAll有選碼時切badges，sync mode watcher在顯式plain清篩選，hideAll真正回plain；取消最後一碼／取消全部選取保持badge但無持續底線。徽章局部hover／focus／說明dialog、ABCD色／引用快照／run合併／文字copy均保持。PhaseAlignmentNotice同步plain未顯示標註文案。
+
+新增自動切換／嚴格plain／show-hide流程測試先紅後綠；更新既有14項對舊無代碼span的假設，說明操作改走badge，來源比對移除呈現的badge文字、選取只計有underlinePhases者，沒有刪證據測試。Vue全432/432、Vite與diff check通過；獨立read-only review無可行動發現。Chrome新增驗收整合於原測試（總數68不變），targeted26/26、compact2/2及最終full68/68皆exit0，1440淺色／390深色的選取與嚴格原文截圖已視檢，無溢位或可行動問題。7173 /courses200已供 index-BAo8G1w5.js／index-mXH6VVv2.css。Chrome適配中修正CancelAll在legend外的定位、notice舊文案及既有compact測試在resize後直接讀到舊座標，後者改expect.poll仍要求實際viewport範圍，沒有為測試修改產品定位。僅前端、不重啟／清Raw、無DB／API／Prompt／模型改動、不跑無關後端，未提交推送。規格、標註UI、輪次與既有短plan同步。
+
+## 2026-11-20 撰寫參考只顯示標題、滑入看定義（現行）
+
+依使用者澄清，CaseCategoryReference 移除常駐完整定義卡片，改為可換行的「代碼 — 標題」小按鈕；ABCD 階段展開與目前階段預設保持。滑鼠移入／鍵盤聚焦才顯示定義 tooltip，滑出延遲關閉；點選或 Enter／Space 可將焦點移入說明以捲動長內容，Escape 關閉後返回原標題且不重開，外部指標／焦點與離開作答也會關閉。
+
+Tooltip 以 Teleport 到 body 避免容器裁切，依視窗定位、必要時可內捲；僅提示框保留長文的必要捲動，標題列自然換行。Parent visible prop 防止作答切回饋時彈出內容殘留；stage／規則變更及 unmount 清除提示與監聽器。沿原 categoryDefinitions 與課內說明，仍只供閱讀，不改草稿／AI 提示／DB。
+
+既有教師／學生參考整合測試先驗標題仍包含完整定義而失敗，改為hover／focus／Escape、HTML安全輸出及明確aria-describedby。獨立read-only review發現body tooltip對鍵盤長文不可直達，先補失敗測試，再以 click／native Enter 可移焦與Esc防重開修正；未留其他可行動問題。最終Vue431/431（chat82）、Vite、Chrome相關9/9與diff check通過。Chrome含1440／390淺深、鼠標離開收起、鍵盤／點選、260px短視窗長課內定義：Enter聚焦提示、PageDown確實捲動、Escape返回原標題；作答切回饋無殘留、草稿／API次數不變。桌面標題列與手機提示截圖已視檢。
+
+7173供 index-B6pcSby0.js／index-Cnul1_59.css，僅static、不重啟／清Raw、無API／DB／模型／Prompt改動，不跑無關後端，未提交推送。規格／標註UI同步；此節取代前一版常駐說明的顯示方式。
+
+## 2026-11-20 作答區下方的分類定義參考（現行）
+
+A／B／C／D 作答的 composer 下方提供「分類定義參考」。各階段使用原生可展開區塊，預設展開目前作答階段（該階段沒有啟用分類時開第一個可用階段），可同時展開其他階段。每項顯示代碼、名稱與完整短定義；寬處三欄／中寬兩欄／手機單欄，以頁面正常捲動、不新增內層捲軸。
+
+沿課程當前啟用分類及 categoryDefinitions 共用說明，課內 description 優先，原碼原名稱才套既有閱讀定義；自訂或更名而缺說明時如實顯示未提供，不將舊定義誤套新碼。內容以 Vue 文字輸出，不信任 HTML。只供閱讀，不推算提及、不修改原稿／選碼／送出內容、不發 AI 或其他查閱請求。作答／回饋切換保留草稿，回饋與 Raw 不顯示此參考；唯讀無 composer 時也不顯示。
+
+新增 CaseCategoryReference.vue，CaseAnalysisChat 在 form 後以 writing v-show 顯示，沿現有結構保持元件。教師／學生兩項新整合測試先紅後綠，涵蓋實際 DOM 順序、目前階段展開、原定義／課內覆寫／改名缺定義、停用分類排除、HTML安全輸出、切回饋隱藏與草稿／請求不變。中途 detached mount 的 jsdom 樣式快取使 isVisible 與實際 display:none 不一致，確認 DOM 後將可見性測試掛到 document.body，沒有以產品改動繞過。
+
+Vue全431/431（chat82）、Vite及Chrome相關9/9通過；Chrome增強既有workspace案例，確認參考在整個form下方、原生summary鍵盤可展開B、說明可讀、未改草稿或發請求，並驗Raw／rules及角色流程。1440淺色／390深色完整畫面已視檢，diff check通過。7173供 index-DbP--17r.js／index-BZ8ytDJ5.css，僅static、不重啟／清Raw、無DB／API／模型／Prompt修改，不跑無關後端，未提交推送。規格／標註UI同步。
+
+## 2026-11-20 未提及分類分區／ABCD換行（現行）
+
+PhaseAnnotatedAnswer 底部按實際作答 stage 分為「本階段未提及」與「其他階段未提及」，每階段獨立 p 行、保留頓號／定義控制。本階段無缺項顯示「無」，其他空階段省略，所有項目已提及時隱藏整區；未知 stage 僅逐階段列「未提及」。切分類 tab 不改本階段的歸屬，修改 props.stage 才變動。選碼、原文／徽章、hover／focus／點選說明均不改，無 API／DB／Prompt／模型修改。
+
+兩項既有測試先重現無分區／行標記，再改至元件47/47；驗切分類頁籤不誤改目前階段、變更stage／空階段／unknown與all-mentioned。Chrome9/9（定義桌面／手機、ABCD行bounds、多選及B淺深）與Vite／diff check通過，1440淺色／390深色截圖已視檢。7173供 index-BXUt-W6y.js／index-BwzGF1L3.css，僅static、不重啟／清Raw、不跑無關後端，未提交推送。規格與標註UI同步。
+
+## 2026-11-20 工作區在上、分析階段在下（現行）
+
+最上層依序為「作答／回饋／AI 對話測試」，作答與回饋下層共用 A 病前功能／B 疾病病程／C 功能評估結果／D 心理社會條件。AI 對話測試時不顯示階段列；沿既有角色限制只提供本課教師／TA測試，學生不因改版取得 Raw 或指定模型權限。教師「正式提交與統計」改為標題旁工具入口，其批閱以相同下層階段頁籤切換，不再重複階段 select。
+
+同階段作答與回饋只改顯示狀態，保留草稿、正式元件、所選作業與回饋；跨階段維持所選上層工作區，沿原離開確認清除未送草稿。離開 Raw 仍確認、清除暫存並隔離上下文；從 Raw 返回時開啟最近的正式階段與明確選取的作答／回饋。初次教師仍沿原測試預設、學生沿原 A 階段／有歷程查看預設。完成連結與複製作答仍分別導向回饋及作答。
+
+兩層各有獨立 tablist／tabpanel／ARIA 關聯；方向鍵與 Home／End 只移焦，Enter／Space 才切換，避免移焦即清除 Raw。手機導覽各自橫向捲動。階段 AI 請求期間上層停用；Raw pending 仍可確認離開並隔離遲到回覆。無 API、資料庫、模型或 Prompt 修改。
+
+新增層級／Raw返回階段測試先紅後綠，既有 helper 改走可見的上層入口再切下層；Vue 全429/429、Vite、Chrome targeted15/15（含Raw位置及手機分類view狀態）與獨立read-only review兩次通過（含form移動，未發現可行動問題），最終完整Chrome68/68、exit0；diff check通過。桌面作答與手機回饋的新兩層畫面已視檢，Raw桌面1440／手機390上下位置補驗2/2，截圖已視檢；上層三tab順序及訊息在輸入框上方皆正確。首輪瀏覽器舊測試仍依自動切換空階段與上層狀態的假設，先調整兩個workspace斷言；後發現手機的fixture從A切C後仍在作答，修helper在明確要求檢閱時先點上層回饋，multiselect／badge回歸恢復，未改產品來迎合舊假設。舊測試預期空階段自動跳作答，依本次「保持上層狀態」改為維持回饋；鍵盤改手動選取及正式審閱入口改button。7173 /courses200提供 index-CN-zKKOx.js／index-B3qSXk2g.css，僅static更新，不重啟／清Raw、不開其他port、不跑無關後端，未commit/push。規格、輪次及既有短plan同步。
+
+使用者追加：AI 對話測試的聊天訊息置於上方，輸入框放在下方；採真實 DOM 閱讀順序（先 log 再 form），保留輸入框下方等待／完成提示。A／B／C／D 作答／回饋仍以原 v-show 分離且保留元件與草稿。既有 Raw 單元先驗失敗再移動 form，桌面／手機 Chrome 增加訊息位於輸入框上方的 bounds 驗證。
+
+
+
+## 2026-11-20 已提及分類：未選外框／選取填色（現行）
+
+已辨識分類及全類按鈕預設透明底、ABCD分類色外框與文字；選取畫底線後才填分類色、白字與勾選。取消後回外框；部分選取的大類以虛線外框表示，不填色。深色主題外框／文字沿既有亮分類色，選取填色沿既有白字對比色。顯示／隱藏全部、取消選取與copy等操作保持平台紫色；未提及文字列、徽章、hover定義與底線互動不變。
+
+PhaseAnnotatedAnswer僅局部CSS與hint，更新既有Chrome外觀斷言（含mixed及ABCD色）未新增測試模組。Vue47/47、Chrome相關7/7（1440／1024／390，淺深及多選／B）、Vite及diff check通過，桌面外框與手機深色填色截圖已視檢。7173新bundle index-DWIj2eqn.js／index-BtfCM8Zl.css，無後端／API／Migration／Prompt／模型修改、不重啟／清Raw，不跑無關後端或全套測試，未提交推送。規格與標註UI同步。
+
+## 2026-11-20 分類頁籤與未提交版本右上角移除
+
+使用者先要求將A／C／D分類標題改水平tabs及真實階段藍點，再要求每張未提交作答右上×先確認再刪除。沿既有可還原trash流程，沒有永久刪除：parent依正式快照analysisMessageId保護所有歷史來源，含returned；學生正式metadata讀取成功前不提供刪除。pending的X停用，busy全部停用；唯讀／POV不提供。刪未選卡保留選版與草稿，原source被移除才清連結但保留文字；版本號不重編、formal snapshot／統計保持。分類tab只列mentioned groups，預設current或first，切換不清跨phase分類選取；ARIA／方向鍵／HomeEnd／手機內部水平nav保持。
+
+SetAttemptTrashed在與SubmitFormal相同stage lock內檢查任何正式來源，回409且不寫trash audit。SubmitFormal仍排除trashed source，race只允許一方成功；舊版已trash正式來源可還原。測試先重現正式來源／已退回可刪及並行兩方成功三個失敗，再修guard；新增3backend cases，原returned test改409。授權獨立group_test schema內479/479與非空036→042 migration／rerun指紋通過，finally清schema。無新增migration或修改public資料。
+
+新parent X兩case先失敗再修；list11、parent79、formal20皆過，全Vue428/428。獨立review發現focus在busy解除前被disabled控制忽略，已移finally解除busy並nextTick後還原焦點，補Chrome nativefocus斷言，focused90/90通過；其餘鎖／metadata／權限／恢復無發現。Chrome首輪65/68通過，三項既有B色彩檢查直接evaluate讀到CSS transition中間值；改retrying toHaveCSS仍精確比對同一色，不改產品樣式，targeted B4/4及新phase／X4/4通過。最終完整Chrome68/68、exit0（1440／390含X位置、取消、選版／草稿、busy／pending／readonly、legacy restore、原生焦點與階段tab／藍點／跨phase選取），diff check通過。1440／390分類tab及X截圖已視檢：dot標真正stage、所選tab獨立、手機nav內捲／body無overflow，X在未提交卡右上、pending停用、formal隱藏。
+
+初次標準VSbuild受原7173 PID24040鎖exe失敗（隔離環境process檢查不可見），提升唯讀檢查確認listener與exactpath後只停止該程序，重跑標準VS含Vue成功。恢復同7173 PID16224，實際/courses200、新bundle index-DEvx0Jp2.js／index-BR_B5i4H.css、正確API匿名401；首次誤用/config不存在route為404，後以真正GET base驗401。未開其他環境；Raw memory因restart釋放、正式DB歷史保留。規格／交接／輪次／標註UI／權限及既有短plan同步，保留舊決策時序、未commit/push。
+
 # 開發歷程與決策紀錄
+
+## 2026-11-20 下拉選版改為平面#N版本清單
+
+使用者要求移除dropdown行為，黑色標題改#7、日期作副標題，避免7次分析卻又出現原始／第二次修改的雙重計數。新增RevisionHistoryList取代Select元件及其測試，原生ul/li/button全部常駐、無重複selected摘要或內捲、aria-current單一選取及單一Tab入口，方向鍵／Home／End同時選取與移焦，busy停用。標題使用theme文字色，保留淺深可讀性。
+
+CaseAnalysisChat沿既有conversation內round ordinal產生#N/date，未因trash改編；所選heading與latestlink同步#N，copy以#N來源說明，刪除僅用於UI的revisionLabel祖先計數與已無用途的roundPicker.resetScroll。保留後端revisesMessageId、immutable歷史、正式version、native對話紀錄與日期diff及作答／查看狀態。沒有資料遷移或重新呼叫模型。
+
+以新native-list6項測試對舊dropdown重現全紅後實作，最終fullVue419/419（含chat77及list6）通過。Chrome更新常駐按鈕／#N日期／keyboard／latest及trash編號期望，targeted9/9與full64/64皆exit0。Vite、diff check與獨立read-only review通過，桌機／手機常駐與日期清單已視檢。7173 /courses200核對index-DHybl6E9.js／index-DNeZEX71.css，未重啟、不清Raw、無API／DB／Prompt／模型變動、不跑無關後端、未提交推送。規格／交接與feedback-rounds同步。
+
+## 2026-11-20 下拉歷程自然展開，不再多層捲動
+
+使用者指出已是下拉選單，不需要其中垂直捲軸。移除RevisionHistorySelect的320px／40vh上限與overflow，history rail取消sticky／viewport高度限制／overflow，讓全部選項自然展開並使用頁面捲動；保留原收合／ARIA／鍵盤／日期／ID及完成連結。未更動分類長說明或雙欄diff的必要內捲。
+
+更新既有Chrome測試，不再注入80px maxHeight製造內捲，改驗options與rail皆maxHeight none／overflowY visible、完整高度、選版及latest focus。Picker Vue6/6、Chrome4/4、Vite及diff check通過，1440展開圖已視檢。7173 /courses200供index-D_RtCZYg.js／index-DxXxR4w1.css，未重啟／清Raw、無API／DB／模型／Prompt改動、不跑無關後端與fullsuite、未提交推送；規格／交接／feedback-rounds同步。
+
+## 2026-11-20 作答／查看分頁籤及分類圖例重複說明合併
+
+使用者指出編輯與閱讀疊在一起，確認採同頁「作答／查看回饋」兩個頁籤。建立[短設計與驗證計畫](../docs/superpowers/plans/2026-11-20-case-workspace-modes.md)，以既有CaseAnalysisChat本地state分離，不建新路由／後端。Write為單欄editor／model／send／waiting／ready，view才顯示session／round／formal／分類／原文與AI回饋。既有紀錄預設查看，空階段作答，關閉／垃圾桶／readonly停用write。本地tab切換保留draft、revisionParent、模型與正式child狀態且不request；跨mode／session／離頁仍沿原確認。Send/retry留write，完成連結才轉view／選當次round／reset清單／聚焦reply；copy在確認替換後轉write聚焦。Raw、教師正式審閱與正式來源相符／發布權限不變。
+
+實作中使用者追加截圖顯示三張相同C5說明。PhaseAnnotatedAnswer改本地legendEntries：以完整codes集合（排序比較）／status／explanation精確合卡，保存每段不同引用，start/end/text相同occurrence去重，位置不同相同字串保留。不同完整分類或評語／警示保留分卡；寬度依實際卡數，三個相同C5為一張352px含三quote。原始標註、DB、模型輸出、badge-run與底線不重算或刪除，不用文字近似／語意判斷。
+
+新workspace兩項先失敗，再修至fullVue416；dedupe兩項先失敗，再修至最終Vue419/419，相關chat77及annotation/helper53通過。獨立review未發現workspace可行動缺陷；root核對dedupe不改來源。Browser加2個雙狀態及2個去重1440／390情境，原60項adapt visible state。首輪舊helper在async Raw cleanup／stage loading時提早跳過localtab，修為等待focused outer mode選取及formal tabs可見，targeted12/12後最終full64/64、exit0。驗草稿／assignment保留、busy／readonly、keyboard／ARIA、manual latest／copy、完整正式流程、原圖例3種viewport與一張三quote，所有截圖已視檢。Vite及diff check通過，僅既有chunk警告。沒有以隱藏元素操作代替使用者流程。
+
+7173中途可供初版bundle，最後確認無listener／AiTeachingAssistant程序且curl拒連；依單環境授權用既有Debug exe／Development／--urls https://localhost:7173 hidden恢復PID24040，不重建後端、不開替代port。/courses200核對最終index-DBQYjJ3B.js／index-LJeSfA8j.css，匿名case API401。無API／DB／模型／Prompt／migration修改、不重跑無關後端、未提交推送。三持久化文件、輪次／標註說明與短計畫同步。
+
+## 2026-11-20 操作按鈕沿用平台紫色
+
+使用者要求將剛新增的blue primary改purple action。先核對style.css既有.button.primary為#5b5fc7、hover #4a4eb3（不直接採dark --accent，避免淺紫白字），局部套用分類／show-hide／取消與copy的background／border／mixed outline；保留selected phase色＋✓、目前階段藍標題與所有annotation色。說明改紫底，更新原Chrome顏色斷言。相關1440／1024／390、淺深、多選與B跨phase Chrome7/7、Vite／diff check通過。最新index-BxfGzycd.js／index-D7myIkL0.css，僅靜態色彩，不重啟、不清Raw、無API／DB／Prompt／模型／權限修改，未跑無關後端與unit、未提交推送。規格／交接與標註UI同步。
+
+## 2026-11-20 移除分析選單三行重複資訊
+
+使用者截圖反白分析完成／階段／尚未正式提交三行，要求刪除。CaseAnalysisChat roundOptions改為date title＋原分析次數／revisionLabel單行，觸發器及每個選項共用，未改通用picker元件；刪掉已無用途roundSubmission helper。原訊息狀態、正式快照、審閱及上方對話選單狀態保持。更新既有unit期望與Chrome的trigger／option一行details斷言；相關Vue82/82、1440／390 Chrome2/2、Vite及diff check通過。最新index-BtRKXXYP.js／index-BNoU3jhk.css；僅前端、不重啟、不清Raw、無API／DB／模型／Prompt或權限更動、未提交推送，規格／交接／輪次文件同步。
+
+## 2026-11-20 提升分類操作按鈕對比
+
+使用者要求以Bootstrap primary風格加強可點操作。PhaseAnnotatedAnswer局部分類選取、show／hide、取消選取與copy按鈕改primary #0d6efd白字，hover深藍，兩theme一致；selected沿ABCD色並加✓，mixed白色虛線保留。原文徽章、未提及文字及其定義提示不變，沒有套件／全站CSS、API／DB／Prompt／模型變更。說明文案同步新狀態，CSS規則置於通用button樣式之後避免cascade覆寫。
+
+先更新既有Chrome顏色期望，重現舊surface白底失敗；實作後Vue42/42、相關Chrome9/9與Vite成功，涵蓋desktop1440／1024／mobile390、淺深、selected顏色＋✓／取消／mixed、原文字線與定義。Primary白字計算對比4.50:1，手機深色截圖已視檢，diff check乾淨。7173供index-6bjM_rVM.js／index-DxCADvJH.css，不重啟／清Raw、不跑無關後端、未提交推送。規格／交接與標註說明同步。
+
+## 2026-11-20 分類可操作性排序與定義閱讀
+
+使用者先要求可點選分類在前、未提及改中文CSV，接著澄清仍需學習定義，最終指定滑鼠移入顯示意義（利手＝慣用手）。PhaseAnnotatedAnswer將已辨識及父碼保留在原階段按鈕，空階段不顯示；未辨識碼集中底部頓號文字列，僅供定義閱讀，不套用底線／aria-pressed。分類多選／預設無線／原文徽章／hover及正式快照沿用，不因UI重算AI分類。
+
+新增categoryDefinitions.js，從既有docs/ai-tuning/01-professor-rubric.md整理短閱讀提示，不是keyword分類或新增醫療判斷；課內／歷史snapshot description優先，原碼原名稱才用預設，改名或新碼缺定義明示未提供，安全文字輸出。兩類控制均有hover／focus tooltip，手機可點未提及文字。提示viewport定位、Escape／外部關閉、長文可內捲，keyboard聚焦時不因指標移走而消失，與原文annotation hint互斥。
+
+先以新測試重現缺少compact列與定義tooltip，後實作；read-only審查指出focus自動捲動關閉提示、兩種tooltip並存、長文不能捲及focused tip mouseleave消失，各補red／green回歸後修正。Vue全415/415，最後custom label不誤用default補驗42/42。Chrome首輪兩案例仍用已選A1a取neutral底色，修正fixture斷言來源；最終全60/60（含1440／390定義、新增260px高視窗長文內捲、focus／mouse離開保留，與原58項AI／正式版本流程）通過。Vite成功、既有chunk警告保留，diff check通過。桌機與手機深色定義截圖已視檢；7173 /courses200核對index-D9MNvlsP.js／index-BdFAoRFZ.css。無API／DB／模型／Prompt／授權修改，不重啟、不清Raw、不跑無關後端、未提交推送；規格／交接與標註文件同步。
+
+## 2026-11-20 基準版本／比較版本標籤
+
+使用者指出兩側可自由選版，故將較早／較新改為「基準版本／比較版本」，同步選單文字、ARIA名稱、欄標題與差異圖例；diff演算法、日期、選取與資料保持。更新既有Vue／Chrome定位，相關Vue4/4、1440／390 Chrome2/2及Vite成功，產物index-CJXrYVHS.js／index-CFM5dvgS.css。無後端／DB／模型變更、不重啟、未提交推送；規格、交接與輪次文件同步。
+
+## 2026-11-20 寫作雙欄比較與日期版本選單
+
+使用者先要求inline diff改寫作導向左右兩欄，後追加分析修訂歷程改單一自訂選單、標題日期化。保留diffAnswers的有界LCS與fallback，只將equal／remove映射左欄、equal／add映射右欄；兩側各完整原文與段落，不合併讀文或加刪除線。對話框加寬至最多1280px，手機保留至少18rem雙欄，在focusable區域內水平scroll；標色含淺／深色，focus trap納入捲動區。
+
+新增RevisionHistorySelect，單一combobox觸發可換行日期與details清單，保留原分析ID／次數／新到舊、trash與draft狀態。方向鍵／Home／End移候選、Enter／Space選取，Escape／Tab／外部pointer／focus關閉並清listener；disabled／空選項及獨立ARIA IDs有測試。分析標題／正式快照與diff labels改原始紀錄日期，缺日期明示尚無紀錄；版號／狀態作次要資訊。既有加寬原生對話選單不變。完成連結適配resetScroll，不搶回覆焦點、不展開選單，草稿保持。
+
+先以舊合併diff重現3項失敗，再完成雙欄；picker6項新測試及整合回歸，全Vue411/411。Chrome全58/58（新增1440／390長文雙欄、保留Unicode與空白、各側標色、mobile內捲與keyboardfocus，既有正式版本比較／退回／privacy等亦過）。Vite成功、既有chunk>500KB警告保持；獨立read-only審查無可行動發現，另驗119項。桌機雙欄、手機右欄與日期選單截圖已視檢。7173 /courses200供index-DffxwRPS.js／index-Bt5xOGNf.css，不重啟、不清Raw、無API／DB／授權／Prompt／模型變動，不重跑無關後端、未提交推送。三持久化文件與輪次說明同步。
+
+## 2026-11-20 對話紀錄寬度脫離窄側欄
+
+使用者允許加寬或custom wrapping；選擇保留native互動、讓同一select跨工作區兩欄放上方，不擴大整個側欄或壓縮作答區。原label／option／ID與changehandler不變，移出formal rail後補formal條件防Raw顯示舊歷史。CSS最大52rem且100% viewport容器限制，未建新元件／依賴。
+
+Chrome先重現desktop210px不滿足閱讀寬度，移動後確認超600px且實際字型canvas完整label可容納；補合成完整timestamp，避免只驗未知日期placeholder。相關Vue76、Chrome6個情境及完整label兩viewport補驗2皆通過，涵蓋原性能／Diff、草稿選取保護及主區布局無水平overflow；Vite及diff check成功，desktop特寫已視檢。7173 /courses200核對index-w-bWWURn.js／index-DkzNE2P-.css，無後端／DB／模型變動、未重啟／未清Raw、不跑無關後端，未提交推送。三持久化文件與輪次說明同步。
+
+## 2026-11-20 對話紀錄顯示日期與版本狀態
+
+使用者要求select menu標籤為版本—date—依日期自動編號的倒序attempts—已提交或撰寫。先確認目標為對話紀錄後，只修改既有select的options與local computed排序，不另建輪次選單／共用工具，不修改其他正式版本／Diff選單。用每個session最早user createdAt（fallback既有lastActivityAt）排序，顯示舊到新序號但新到舊列出；缺日期不編造。status只依目前正式submitted且source在本session，AI分析完成仍撰寫。保留selectedSessionId與來源資料順序、readonly／confirmDeparture機制及原正式版號。
+
+新增一項聚焦測試先重現亂序舊options，驗三日期／number3..1／正式status、保留中間session選取與正式第7版不被重編。更新兩viewport既有學生流程檢查撰寫→正式已提交label；Vue405/405、相關Chrome5/5與Vite通過，diff check乾淨。產物index-iHvwmw5o.js／index-Cx1PvmaY.css；僅前端，無API／DB／模型／Prompt或服務重啟／Raw清除，未跑無關後端，未提交推送，三文件及回饋說明同步。
+
+## 2026-11-20 Hover短提示、點選圖例與2／3欄
+
+依使用者連續澄清，最終互動為hover保留原片段底線＋tooltip文字「點選開啟分類圖例」，click tag才開原完整說明；沒有tooltip內按鈕或導覽其他分類區。將PhaseAnnotatedAnswer原pinned旗標改ref、短hint和非模態legend分開，保留原quote／codes／explanation／clinical status及merged-run provenance。圖例卡片依viewport／entry數3／2／1欄，少量不留空白；主分類列表也以container queries改2／3欄，解掉先前left-rail殘留style在mainarea強制1欄的問題。
+
+既有hover全文測試改短hint→click檢查完整legend，保留Unicode／XSS／merge／分類／原文／焦點等回歸。先重現短hint差異；read-only review抓到source捲出viewport時top負值，補clamp；另先重現focus離開nonmodal後會攔其他dialog Escape，再以focusin自動dismiss修正。關閉／Escape回tag，outsidefocus維持目的地，不搶焦點；resize保持證據與正確寬度。小型提示不放可互動按鈕，ARIA description／expanded／controls分開。
+
+最終Vue404/404、Chrome全56/56（新增1440／1024／390三場景）、Vite及diff check通過，實際grid、局部preview／persistent filters、原文與merged證據、close／keyboard／outside政策、原效能／Diff與正式提交流程皆驗。首次Chromeoutside焦點期望太廣，改與既有nonmodal focus政策一致（只有close／Escape回trigger），診斷鍵盤測試移開pointer避免同時hover另一個icon的干擾；未修改診斷產品碼。靜態特寫已視檢，7173 /courses200核對index-CxLYHwSh.js／index-CCPweT5S.css。無後端／DB／模型／Prompt變更、不重啟／不清Raw、未提交推送；三文件、標註與輪次文件同步。
+
+## 2026-11-20 合併原文頁籤並加入A1範例
+
+依使用者截圖，預設無線使無／底線重複，合併成「原文」並保留selected-only underlines；編碼徽章title加同既有category-A藍底白字的A1範例。範例在tab內aria-hidden，讀屏名稱仍編碼徽章，不是可選類別、不產生原文標註／tooltip或copy內容。DOMkey underline保留，badge／hover／filter及兩tab keyboard切換不變，移除不可達none template分支。
+
+先更新既有元件測試重現三tab而非二tab失敗，實作後32元件通過；一項main-chat跨輪測試仍找none，改驗原文模式跨輪保留及無預設線。Vue全398/398、相關桌面／手機／淺深Chrome13/13、特寫2/2與Vite通過；CSS檢查A1白字／藍底，390dark特寫已視檢。7173 /courses200供index-B8cpv9eP.js／index-ZfveVGJu.css，只有static更新，不重啟／不清Raw。無DB／API／模型／Prompt改動，不跑無關後端；未提交推送，三持久化文件及標註說明同步。
+
+## 2026-11-20 11/19會議：正式提交、角色分離與分類篩選
+
+先讀附件／README／三持久化文件與Git、實際service／controller／Vue／Migration及測試，建立[差異表與plan](../docs/superpowers/plans/2026-11-20-case-formal-submissions.md)。既有四phase／Raw記憶／不可變AI歷史／Diff／trash已完成，缺正式快照與規則管理；教師全草稿存取需按新隱私政策收回。保留髒工作區所有既有變更，不提交推送。
+
+依parallel-agent skill分離annotation呈現、主UI／正式版本與分類規則實作，root整合正式後端／migration／部署。新041正式版有course/student/stage序列、來源AI與optional同課assignmentFK、immutable answer／feedback／annotations／model／prompt／rules快照、退回人／理由／時間。completed本人非practice來源才可確認，active course才寫；latest退回後新增版，requestID replay一致，跨來源409；review查出跨stage全域UUID競態與pool1 replay二次conn問題後，加request advisory鎖與讀envelope前釋放原連線，新增並行／pool1 regression。無自動分數，不把既有AI草稿回填正式版。
+
+分類Vue預設完全無線、多選ABCD／子碼與全顯／隱，未選不用互動span；hover inline badge只畫自身run，keyboardfocus同等、pointerleave恢復既有選取，保留合併與原文UTF16。主composer上移／長文resize、收合歷史、學生乾淨學習畫面，teacher review只正式版／聚合統計。正式版可Diff，退回後再分析並建立新版；private History API403且本人歷程不減。學生Raw／指定模型後端403，staff測試保留，TA grading/statistics獨立。
+
+042規則版本metadata與turn prompt／catalogsnapshot，透過JsonIgnore per-call metadata把啟用碼帶到provider schema與parser，無全域可變catalog、不改Raw provider本質與四profile差異。版本0沿原規則；新規則修改不重解舊分析，legacy DTO與新正式快照明確沿static defaults。重試用原system／規則，base版不同拒絕。review抓出.NET $接受末尾LF，改\A..\z並加LF／CRLF回歸；UI review抓出A7誤刪A70與關閉作業ID卡住重送，皆先重現再修。瀏覽器另抓出parent config更新導致規則編輯區重設，改多來源watch，保留儲存版本／成功提示。
+
+後端最終476/476、0略過；036→042非空升級／重跑／指紋及schema清除通過。Vue398/398、正常VS含Vue通過；Chrome53/53（桌機／手機、淺深色、多選與局部hover、完整正式版本／退回／再提交、新規則保留舊快照）皆通過。初次Chrome的並行build靜態檔清除、modal焦點還原測試等待亦已修正，穩定最終assets全套重跑成功，截圖已視檢。初次dotnet test sandbox IPC逾90秒中止，升權正常執行成功，未以略過測試代替；chunk>500KB既有警告非失敗。未用真實病例呼叫模型或宣稱分類品質改善，四profile HTTP Mock驗規則payload，真實臨床驗收仍需教授。
+
+Production public僅041／042 pending後套用，七表資料指紋一致、新正式表／ruleversions空、舊message rulemetadata NULL。7173核對project path後正常VS pipeline重啟PID12840→30356→17908，qwen25-omni保持；Raw清除，正式內容保存。/courses200、匿名AI401及Swagger三組新routes核對，bundle index-ieyN-WuW.js／index-1lDeOsds.css。未開其他環境、未seed正式學生作業，三文件、README、角色／五模式／回饋／Ollama／標註及交付說明同步，未提交推送。
+
+## 2026-11-19 查看最新回饋時讓輪次清單回到頂端
+
+使用者要求完成提示連結也捲動history panel，隨後確認指AI已完成回合的連結。擴充既有visitLatestResult，選最新round後重用相同auto／smooth設定將round-list捲至0，再沿原邏輯聚焦／捲到對應AI回覆。只於使用者點選時執行，不改草稿、Raw或歷史資料。
+
+既有completed-round兩種reduced-motion測試先重現scrollTo零呼叫失敗，實作後相關Vue71/71通過；既有1440／390 Chrome流程增加歷程捲底後點連結驗scrollTop=0，2/2成功。Vite成功，產物index-250qcTnD.js／index-BwZRl5dm.css；既有chunk警告非失敗。無後端／DB／模型變更或重啟，未提交推送，規格／agents與輪次說明同步。
+
+## 2026-11-19 自由 AI 聊天室提示文字
+
+使用者指定Raw說明改為「此為自由 AI 聊天室, 用來測試不同模型環境的回應. 可在允許長度內自由測試 AI 回應效能」，CaseAnalysisChat.vue原句精確替換。僅文案，Raw記憶／上限／不持久化／統計與模型選擇規則不改。Vite成功（既有chunk警告），輸出index-C7WgNFUm.js／index-5zGu9h-9.css；無後端或DB變更／重啟，未跑不相關測試、未提交推送，agents與規格同步。
+
+## 2026-11-19 診斷文字按鈕改側邊圖示，模型藏於 tooltip
+
+依使用者截圖將效能／Ollama請求改為AI回覆右側Gauge及CodeXml圖示，沿既有Lucide，不新增UI套件。獨立ReplyDiagnostics負責hover／focus tooltip、aria名稱與描述、Escape／leave清理及viewport定位；tooltip顯示當輪保存模型，舊metadata缺漏明示未記錄。效能dialog同樣不以目前環境模型猜歷史。後續依「hide model name from sent chat history」移除user與assistant的model footer，保留提交選擇、DB模型資料及診斷詳情；不更動原模型retry。
+
+先重現舊按鈕缺圖示／aria的測試失敗，再實作；初次Chrome手機回歸發現tooltip擋住自身icon，改空間不足時above／below並加bbox不相交斷言。獨立read-only review發現resize使用舊受限高度，補nextTick二次量測；新增short→tall單元測試，舊版本936>870失敗，修正後通過。清listener／timer、權限改變清tooltip、學生無request圖示及模型變更不混歷史均覆蓋。
+
+完整Vue356/356與Vite成功；完整Chrome50/50，最後resize及user footer修正後針對desktop/mobile、師生模型選擇／Raw／圖示8/8再次通過，390深色視檢。7173 /courses200核對index-5vN8HwJF.js／index-DzaaRmMN.css，匿名AI401；服務無重啟、不清Raw，不改API／DB／模型／Prompt，未跑無關後端或migration。chunk>500KB為既有警告。保留工作區既有變更、未提交推送，三持久化文件與輪次／Ollama dialog說明同步。
+
+## 2026-11-19 師生本人回合可移至垃圾桶及還原
+
+使用者要求trash bad attempts。選擇可還原soft trash、僅本人namespace，不抹除正式學習證據／統計；此設計假設已在進度明示。新增040 user-only trashed_at，history assistant繼承user flag；完整API保留all rows，UI正常view與diff過濾，提供垃圾桶及還原。學生formal與staff自己practice可管理，teacher review學生只讀，live pending禁整理，closed session在active course可整理。沒有永久刪除介面。
+
+workflow Access＋scope advisory lock後以session→message順序鎖定（與completion相同），owner／course／stage／practice及user role均核對。過期pending轉failed，晚到completion guard不接受；trash／restore相同目標狀態不重複audit。audit不寫作答，原immutable trigger保留。Retry／same-ID replay／new revision guard排除trashed來源，既有descendant FK／修訂計數保持。UI保留草稿、清被trash來源／request ID，清該輪payload capture與latest link，選留同session相鄰round；trash view不顯composer／copy／retry，還原最後一筆返回正常view。
+
+依parallel-agent skill分工frontend及root backend／migration／測試。新增owner三role／cross-scope／paired flag／stats／lineage／idempotent audit／pending／expired late reply／preview等六個DB Facts；首次測試attribute誤用不存在Theory，改用既有DB Fact迴圈，再重現缺method contract後實作。PortalSmoke驗036→037→038→039→040分階段升級及NULL default／data fingerprint／migration rerun。最終全後端449/449、Vue351/351、Chrome48/48、標準VS含Vue成功；Chrome四種師生desktop/mobile trash取消／確認／refresh／restore及closed／readonly，已視檢390 student screenshot。獨立安全與鎖序review無可行動問題。
+
+實際public schema確認僅040 pending後套用，前後message／session／course／grade完整資料指紋相同、原回合均NULL，不對真實學習內容做trash操作。部署前listener已由先前PID變成26464（專案bin/Debug、無額外URLargs），重新驗path／7173後停該process，用VS正常pipeline重建並於唯一7173啟動PID12840，qwen25-omni不變。/courses200／匿名AI401、bundle index-BV1Pf_QS.js及Swagger trash／restore routes核對，舊埠無listener；PowerShell缺MVC dependency的controller reflection無法解析，改由runtime OpenAPI確認，workflow／DTO reflection正常。Raw因重啟清除，正式歷史保留。原chunk警告非失敗，無模型／Prompt改動、未提交推送；更新三文件、roles、五模式、輪次及plan。
+
+## 2026-11-19 合併連續相同 inline badge
+
+使用者要求避免C1C1C1連續出現，遇C2再出C1需分開。先以C1三段／C2／C1與emoji原文重現5徽章而非3的失敗；新增純顯示helper annotationBadgeRuns，只接受既有驗證後segments，按完整code set（忽略順序）分run，標點／空白可跨，未標註實質文字或code set變更中斷。run以最後member的start定位badge，保留members及原annotation聯集，不改原segment／text／範圍。
+
+PhaseAnnotatedAnswer只在badge run末端輸出徽章，tooltip active按run查詢，保留每段說明／status，加入合併片段數提示。原underline邏輯、None純文字、左分類三態及copy保持；多碼需完整相同才合併，不能僅看共有C1。unit驗碼順序／未標 prose／中途分類／no mutation及tooltip警示。
+
+Vue340/340、Chrome43/43及Vite通過；新增1440淺／390深驗一個run一徽章、C2中斷、各說明及unsupported保留、Unicode原文完整、選碼仍強調每個原span、切underline五段及none／copy保持。手機深色已視檢，靜態審查無可行動問題。7173 /courses200核對index-CRBaJaqe.js／index-CSIb617G.css，僅前端靜態更新、不重啟／清Raw；無API／DB／Prompt／模型異動，不跑無關後端。原chunk提示非失敗，三文件及標註說明同步，未提交推送。
+
+## 2026-11-19 新增「無」標註頁籤
+
+使用者要底線／編碼徽章最左側加「無」。新增none與activeMode處理，保留underline預設；none render完整content文字而非隱藏互動span，因此無徽章／底線／outline或原文焦點入口。模式切換沿既有watch清tooltip，左側分類及選碼保留，切回可強調；none狀態／legend說明及PhaseAlignmentNotice改為標註隱藏／已選取，取消選取不誤稱顯示全部標註。
+
+先以none頁籤／純文字／清tooltip測試重現缺入口，再實作。更新原兩tab keyboard expectation為三tab，另驗none後換輪保持、無storage寫入及phase notice隱藏提示。Vue全337/337，後續文案及跨輪檢查相關90/90，Chrome41/41與Vite通過；Chrome桌面淺／390深驗三tab順序、Home到none、左右恢復底線／badge、exact原文及左工具存在，已檢視手機深色。
+
+7173 /courses200核對index-DUf17mVc.js／index-DSVzXY9V.css，只靜態更新、不重啟／清Raw，無後端／API／DB／Prompt／模型異動，未重跑無關測試。原chunk提示非失敗，同步三持久化文件及標註說明，未提交推送。
+
+## 2026-11-19 分類置左、歷程在其下
+
+使用者從右側分類提案改為左側分類及下方revision history，採用最新要求；未實作原右欄提案。寫短plan後擴既有Chrome selected-category情境，先重現缺ABCD region，再將legend／selected-status透過選用Vue Teleport移到CaseAnalysisChat左側DOM ref target。原分類controller及source tabpanel繼續負責原文與強調，不複製互不相通狀態；standalone target為null仍inline，palette變數補到移動wrapper。新增有效annotation空狀態與提示位置文案，保留session／比較controls及分類各態。
+
+左feedback-rail先category-sidebar再原round-sidebar，右側response／AI不變；桌面240–280px、sticky top90、max-height100dvh-110可捲動，<=1050堆疊且解除rail高度／sticky。formal chat-log解除內部overflow，避免多層橫向限制；Raw原log不變。Vue既有paired-round測試補驗分類離開原作答、進左欄，切pending輪消失並顯空狀態。
+
+全Vue335/335、Chrome41/41及Vite通過；Chrome含1440分類左於答案、1024／390分類歷程在上、分類先於歷程，並回歸teacher/student模型／copy／readonly／原文annotation及Raw等。已檢視桌面淺與手機深截圖，獨立靜態審查無可行動問題。7173 /courses200核對index-CY3JHfu1.js／index-DiLuXeex.css，只有前端靜態更新，不重啟／清Raw，沒有API／DB／Prompt／模型修改，不跑無關後端。原chunk提示非失敗，未提交推送；更新三持久化文件、標註說明及plan。
+
+## 2026-11-19 未辨識圖例灰化停用
+
+使用者要求unmentioned有disabled look。新增native disabled與灰字／.55透明度／not-allowed游標，局部覆寫全站wait及pointer-events讓游標正確但不解除native停用；保留標籤與未辨識aria說明、更新legend。既有mentioned父碼／子碼可用及兩模式選取強調不變。
+
+先以未mentioned A3應disabled／父碼A1可用測試重現失敗，實作後相關Vue84通過；Chrome既有相關10案例驗整組B與C5disabled、opacity／游標、原生click不改選碼、mentioned外框與selected底色及淺深色桌面／390手機。Vite成功、手機深色已視檢、diff check通過。7173 /courses200供index-Cs22iH2l.js／index-Sgg0pc7Z.css，只靜態更新、不重啟／清Raw。無API／DB／Prompt／模型異動，未重跑無關後端，未提交推送；同步三文件及標註說明。
+
+## 2026-11-19 圖例改為 mentioned 外框／selected 色底
+
+使用者指出B沒有AI標註，並希望圖例辨識狀態與選取狀態分開。保留mentionedCodes及parent mapping，僅把category-mentioned改中性底與phase色border，category-mentioned[aria-pressed=true]才category色底白字；未辨識保持一般狀態，原文實心badge不改。深色外框沿phase較亮色、選取fill沿category原深色，保留focus-visible。刪多餘的通用pressed外框規則，legend-hint同步三態解釋。
+
+調整既有Chrome情境驗C1/C2 mentioned中性底有框，C1 selected填色、C2仍框；整個B未辨識均中性，再按C1恢復外框。先在舊bundle重現兩案例失敗；CSS修改後38案例通過，2案例同步讀background遇全站160ms transition而失敗。確認非狀態錯誤後用toHaveCSS重試等待過渡，針對兩案例復驗2/2通過；不修改全站動畫。相關Vue83/83及Vite通過，手機深色已視檢，diff check通過。
+
+只前端CSS／說明與既有E2E期望，沒有新業務行為；7173 /courses200核對index-Cgw0F7Es.js／index-ZwLPBCXo.css，不重啟或清Raw。原chunk提示非失敗，無後端／DB／Prompt／模型改動，未重跑無關測試，未提交推送。三份持久化文件及標註說明同步，舊決策保留時間脈絡。
+
+## 2026-11-19 分類選取：底線用實線框，徽章用局部底線
+
+依使用者C1例，原先共用虛線框改為按模式呈現：底線保留分類線並以solid outline強調匹配文字；徽章不加框，只在選碼相符文字畫其phase一條底線，其他同phase不同code不畫。保留完整徽章、多碼／父子碼匹配及toggle／clear／模式切換狀態，未改原文或分類演算法。
+
+先加C1／C2同phase及C1+A1a重疊案例，重現徽章模式缺所選底線，再改underlinePhases只在badge有選碼匹配時回所選phase；無匹配保留空style，underline模式仍全部phase原行為。emphasized class只用於underline，CSS dashed→solid。Vue334/334、Chrome40/40與Vite通過；新增1440淺／390深驗computed solid1px、badge匹配有線／不匹配無線／沒有框、所有徽章及原文保持、再按取消。已檢視手機深色。
+
+7173 /courses200核對index-BLAIWNoW.js／index-DVRD4xIQ.css；只靜態更新，無服務重啟／Raw清除，無API／DB／Prompt／模型更動，未重跑無關後端／migration。原chunk提示非失敗，三份持久化文件及標註說明同步，未提交推送。
+
+## 2026-11-19 標註模式頁籤與 primary 階段標題
+
+使用者截圖要求將底線／編碼徽章按鈕改頁籤、目前階段黃色改Bootstrap primary。保留共用displayMode與actions slot，新增唯一ID的tablist／tab／同tabpanel關聯、aria-selected及roving tabindex，ArrowLeft／Right／Home／End即時啟用並focus；copy不放進tablist。原文、分類legend、tooltip與readonly不變。刪過時黃底／黃字vars，phase-current兩theme固定#0d6efd白字，不改ABCD原色或全域accent／引入Bootstrap。
+
+先加鍵盤及panel linkage測試重現缺tablist，再實作並將既有mode assertions從aria-pressed改aria-selected。第一次CSS腳本cwd誤設ClientApp造成找不到檔案，未寫入任何CSS，改回repo root後執行成功。最終Vue333/333、Chrome38/38及Vite通過；Chrome驗1440／390淺深色、keyboard選模式／切輪保留／copy仍一般button、目前階段computed primary底白字及原文分類色不變，已檢視390深色截圖，獨立靜態審查無可行動問題。
+
+7173 /courses200供新index-ZjVKySyV.js／index-CHNX2RI6.css；僅靜態前端，不重啟服務、不清Raw，不重跑無關後端／DB。原chunk提示非失敗，無Prompt／模型／API／Migration異動，未提交推送。同步三份持久化文件及標註／輪次說明，保留先前決策時間脈絡。
+
+## 2026-11-19 解除 compact 8 筆限制並保留長文輸入相容
+
+使用者確認提高診斷出的annotation ceiling。先改compact schema／wire測試為48，重現3個失敗後改SchemaFor使用既有MaximumAnnotations48；保留compact各欄位長度／8codes／標註驗證及其他模型。新增4個compact／standard及annotationsFirst組合，包含enum有第48片段、Validate保留第48及不收第49筆。正式版本升A/C/D20261119-v6、B20261119-b-v8，舊資料不改。
+
+直接呼叫同provider的合成24分句回24筆、input2412／output2809／stop，末端184／185；為增加48筆輸出餘裕，先嘗試Omni正式輸出6144，full suite顯示會擋既有B2125字，故拒用此設定，選5120後該容量及全部回歸通過。Raw512、context16384、bytecap24000、其他profiles／抽樣／transport保持。正式payload測試另揭露既有JsonSerializer Deserialize與帶snake-case attributes的sampling不等於production binder，以及ConversationAsync不使用formal override的錯誤測試假設；改用ConfigurationBinder並分開驗ConversationAsync／CaseFeedbackAsync，不改provider呼叫行為。
+
+最終5120真實Omni合成48分句590字回48有效annotation，最末end589，input2743／output3253／stop，越過舊8筆且達末段。只用新編合成觀察，無真實學生內容／DB寫入；此為結構容量驗證，不聲稱臨床正確。最終完整隔離DB443/443、036→039指紋升級及schema移除，標準VS含Vue建置通過；靜態審查無需修正。未改前端，不重跑無關Vue／Chrome，bundle保持。新建ignored probe首次缺assets，正常restore後建置成功，無正式依賴新增。
+
+核對PID31272後唯一7173重啟正常bin/Debug PID5436、qwen25-omni不變，反射確認48／5120／512／16384及新版，/courses200／匿名AI401，舊埠無listener。Raw記憶清除、正式歷史保留，沒有Migration。同步三份持久化文件及Ollama／標註說明，未提交推送。
+
+## 2026-11-19 C 分句標註中止：查明 compact 8 筆上限
+
+使用者保留inline tags供檢查並詢問context。按systematic-debugging追查schema／profile／預算／保存metadata：Omni CompactCaseFeedback=true，schema annotations.maxItems=8（非compact48），compact quote160／explanation80。近期C回合metadata為574字／1698bytes、輸入2667tokens、輸出983tokens、stop，8筆code序列C1五筆／C2兩筆／C5一筆，最後annotation end104。此metadata對得上使用者描述，並非模型16,384 context或正式4,096輸出上限耗盡；分句粒度耗盡舊段落時代8筆限制。舊同長度回合6筆到476，僅作結構對照、不讀內容或作準確度比較。
+
+唯讀交易只選長度、token、finish、codes及offset，未選原文／姓名、未重送模型／改DB；首次string_agg JSON cast語法錯誤已回滾，修正後完成讀取並回滾。記錄待修compact名額與輸出預算，不以擴context當修正。本次使用者只請檢查，未改設定／程式、未建置測試或重啟服務；後續修正需合成資料測試與新prompt版本，舊回覆保持。
+
+## 2026-11-19 ABCD 跨階段核對與原作答複製
+
+使用者希望保留分句顯示但注意ABCD範圍，後續要求底線模式旁「copy to text area」方便重新跑模型。稽核既有prompt及PhaseAlignmentNotice已有錯置／背景例外，不重建功能；強化正式user.outputRequirements明確逐片段查全部ABCD及語意不確定性，原完整system規則、catalog、schema clause enum與四profile保持。正式版本由A/C/D v4→v5、Bv6→v7，已保存舊版本不改；system仍6284/7717/6497/6219 bytes。另發現B長文feedback-only repair原僅帶Text/Codes，漏掉Status；新增Status並要求保留錯置發現與必要背景例外，不重新分類或把跨階段一概判錯。
+
+UI用PhaseAnnotatedAnswer actions slot把既有修改入口搬到標註控制旁，命名「複製到輸入框」，無annotation時也顯示此入口；共用既有revision保護／來源與傳送流程，不新增自動提交。原字串含空白換行保留，不從帶badge的DOM抓字、不改Clipboard；有不同草稿先確認，成功聚焦編輯器及尊重reduced-motion捲動。pending／failed停用、review／唯讀隱藏，Raw不變。
+
+TDD先重現toolbar位置與聚焦缺口、四階段scope提醒缺口及repair Status遺失；測試均轉綠。舊pending測試調整為無標註但可見停用入口；Chrome初跑因仍找舊按鈕名稱卡住，停止後同步改名。最終Vue332/332、隔離DB438/438（036→039與其餘資料指紋保持，獨立schema已移除）、Chrome38/38及標準VS含Vue全部通過；手機深色控制已檢視，獨立靜態審查無可行動問題。未用真實學生答案或重跑模型品質比較，不將prompt測試冒稱可靠分類。
+
+核對PID41924後同7173正常build／重啟至PID31272，qwen25-omni預設保持，/courses200、匿名AI401、JS index-C7zGXJu-.js及新版本已核對，舊埠無listener。Raw暫存因重啟清除，正式DB歷史保留。無Migration或正式資料寫入，NU1900及chunk為原提示，未提交推送。同步三份持久化文件及輪次／五模式／Ollama說明。
+
+## 2026-11-19 中文／英文標點的分句級分類證據
+
+使用者希望不要每句都綁A1/A2/A3，範例是年齡及手術各有tag。先查renderer，已有任意exact span末端sup徽章，並無只處理中文句號的regex；根因模型回句／段大小text並綁多碼。新增14種標點的renderer原文／emoji／小數日期／tooltip測試，證實不需修改顯示演算法。初tooltip測試誤以為會顯示原文，依現有tooltip只顯示分類說明修正測試，未改UI擴大範圍。
+
+先加4profile實際wire新提示測試重現失敗，再改AnnotationOutputInstructions粒度。追加文字令A/C/D超6500 guard，僅壓縮重複的輸出格式文字（完整教授TeachingInstructions原樣），保留所有約束，最終A6284/B7717/C6497/D6219 bytes，既有6500／8500及12k／24k context不放寬。正式版本A/C/D professor-four-phase-20261119-v4、B professor-four-phase-20261119-b-v6。
+
+第一輪Omni6合成短例仍都把整份text作一個quote，提示文字不足，因此再寫wire enum失敗測試並新增CaseClauseEvidence：只從原始作答切標點分句，保護括號／引號、數值、小數、日期時間、千分位、常見縮寫與短欄位名稱冒號。對>=2個不同候選、總分句<=128、每句未超既有quote長度才在正式schema text加enum；其餘fallback原schema，不截文、不猜代碼。欄位／格式／8或48 annotations、8 codes、原驗證及重複occurrence契約保持。OllamaClient只對正式CaseFeedback傳本次原文，Raw／Studio／profile sampling及兩種transport保持，不建平行provider。舊回覆不重新分類，不把舊pipeline冒稱新版本retry。
+
+實際最終Omni6、IAN02 Llama2合成例均完整JSON且無一quote跨多個指定事實；英文／中文comma形成多個quote，括號內comma與3.5／18/30等保留。語意仍有明顯過度編碼，例如純年齡帶其他人口學碼，肌力帶其他功能碼；B短label:value保護後只標影像一段且加B5、漏手術／診斷。故只證實quote粒度改善，不宣稱每碼或覆蓋正確，沒有以程式重分碼／刪模型碼。結果只存忽略的合成probe檔，沒有讀出或重送真實學生答案、沒有正式DB聊天寫入。
+
+最終隔離DB433/433、036→039升級／指紋及舊metadata保持、schema finally清除；Vue331、Chrome標註原文／逐分句／淺深色1440與390共8通過，手機深色已檢視。fresh-context靜態審查無可行動問題。標準VS含Vue成功，原NU1900弱點來源及511.75KB chunk提示非失敗。確認PID46904為本專案後同7173更新正常bin/Debug PID41924／qwen25-omni，部署四stage version／bytes反射核對，/courses200／匿名AI401、舊埠無listener；bundle原index-D7wy7XLq.js不變（無前端production修改）。重啟清Raw、DB歷史保留，無Migration／正式資料修改／重建B。規格／交接／標註／Ollama／評估／計畫同步，保留dirty未提交推送。
+
+## 2026-11-18 等待教授位置及最新結果連結
+
+使用者要求把人工教授等待動畫放在textarea下方，完成後提供連結選最新回饋並動畫捲動；後補澄清以Bootstrap carousel indicators取代1/N計數。AiReplyWaiting移入composer，改短橫current高亮及整組可讀label，沒有新增Bootstrap或將示意當實際進度，原typewriter／pause／next／reduced-motion及清timer保持。
+
+CaseAnalysisChat新增本頁latestResult錨點與replyPending，Raw用session/index，正式用saved assistant ID且按requestId找到配對與輪次。成功／retry才記完成連結，點後nextTick恢復該round、focus preventScroll及scrollIntoView smooth／reduce用auto，保留草稿；切context／session／restart及新request清狀態，失敗不留成功連結。用獨立replyPending避免restart等管理操作假裝模型正在生成。不改任何API／DB／權限／Prompt／模型。
+
+先更新測試重現5個等待位置／完成link／carousel缺口；之後修正式pending fixture以真正送出requestId回傳，避免用不相符replyTo測成功。最終Vue317/317，Chrome全36/36：等待區在textarea之後、carousel current／pause／next、正常smooth及減少動態auto、舊輪選回最新、焦點／viewport、所有原模型／歷史／dialog／標註。已檢視390深色等待畫面，靜態審查無可行動問題。Vite成功，原511.75KB chunk提示非失敗；7173 /courses200供index-D7wy7XLq.js，無後端重啟／Raw清除，無後端變更故未跑後端／DB。三持久化文件及輪次說明同步，保留dirty，未提交推送。
+
+## 2026-11-18 速度量尺加動態餘裕
+
+使用者要求Ferrari式可增加最高刻度，最快值約在圓整上限80%。採最低200、速度／0.8後向上取50倍數，本頁已開啟回覆之最高刻度只增不減，讓慢機器在相同比例下比較；刷新重設，不加storage／DB。128.41仍用200，200用250、210用300、320用400。這是呈現刻度，不改測量或推論參數，也不新增圓形儀表。
+
+新增performanceSpeedScale.js共用numeric ref及觀察函式；只有dialog開啟且有有效量測才擴尺，動態刻度／aria一致，刪固定上限溢位提示。更新既有測試先重現6個動態及跨dialog比較失敗，再驗dialog24＋chat56共80通過；新增既有E2E中的桌面／390動態400→較慢仍400→refresh回200案例，連原dialog淺深色共8通過。已檢視390深色320/400畫面；Vite成功，原509.81KB chunk提示非失敗。7173 /courses200供index-DaOp2Jec.js，沒有後端重啟／Raw清除，無API／模型／DB或Migration修改，故不跑後端測試。規格／交接及dialog文件同步，保留dirty，未提交推送。
+
+## 2026-11-18 回覆效能速度條
+
+使用者要求只在效能dialog將生成速度視覺化，依本地觀察採0–200 tok/s固定刻度。ChatPerformanceDialog加role=meter、0／50／100／150／200標記，實際128.41填64.205%，超過上限滿格且保留真實數字與提示。缺值／availableFields未包含速度／非finite／負數不畫條；已量測0照實顯示。只有UI，不改服務量測／API／模型／DB或聊天頁其他區域。
+
+先加測試確認4個有量測案例缺meter失敗，再實作；覆蓋0、128.41、200、250及缺值／無效／未量測。dialog19＋chat56共75通過，既有Chrome輪次／效能案例加入實際bar比例斷言，1440淺色／390深色及原請求dialog共6通過，手機深色畫面已檢視。Vite成功，原509.67KB chunk提示非失敗。7173 /courses200供index-BHmRCc5y.js，無後端重啟／Raw清除，無後端變更故未重跑其測試。規格／交接及請求dialog文件同步，保留既有dirty，未提交推送。
+
+## 2026-11-18 草稿選單模型文字降噪
+
+使用者指出左側選稿的長模型名稱造成視覺雜訊。只刪CaseAnalysisChat.vue round-option內modelName小字，保留輪次／修訂標籤／提交狀態／日期、AI回覆訊息模型及效能dialog／DB metadata。更新既有Vue／Chrome「換模型保留歷史」斷言為sidebar不含tag、右側回覆仍含原模型；先驗Vue該斷言失敗，再刪一行。相關Vue56、既有Chrome教師／學生1440／390選模及輪次6、Vite通過，/courses200供index-COGjXA3f.js。無後端／模型／API／DB或Migration變更，沒有服務重啟／Raw清除，不跑無關後端回歸。原508.53KB chunk提示非失敗。交接／規格／輪次與模型文件同步，保留工作區，未提交推送。
+
+## 2026-11-18 師生每次提交選模
+
+使用者希望教授及學生可自行切Llama3、Breeze、兩種Qwen，已確認「One model per submission」。重用既有CaseChatModels白名單／scoped resolver，四份profile內容及全域預設不改；前端原教師頂部選單移至輸入區，標示本次回覆模型，實際學生可用，預覽仍唯讀。選模保留草稿／歷史／修訂來源，忙碌時鎖定；不新增多模型並送／比較引擎。原模型重試／新ID比較保持。
+
+後端Configuration只對active且enabled及非預覽開放選模，正式BeginTurn保留Access write檢查但移除teacher-only；user／assistant沿model_name保存每輪實際tag。Turn捕捉起始Practice布林，完成前比對目前角色，學生升權及教師降權均拒絕保存到不同種類歷程。全DB首次發現舊降權capture測試失敗：新403在Run原篩選外，雖未回封包但scope capture未清，改為所有當次錯誤重新驗角色並於非staff清除。學生仍無teacher request／diagnostic。
+
+RawChatInput新增選用ModelProfile，Send按當次profile解析provider及limits；Entry仍LangChain完整buffer，新增每pair模型tag暫存，回傳RawChatMessage.ModelName，不寫DB。不同模型沿同次user／assistant上下文，metadata不送模型，失敗的較小預算不裁字、不丟舊記憶、不污染下一模型。既有CreateRaw選模作session預設相容保留；新UI只在Send選模，切換不清空，clear／refresh／TTL不變。前端舊payload缺逐訊息tag時只補新pair，保留既有模型標籤。
+
+TDD：Vue先重現student不可選、選單未在form、Raw切模丟草稿4個失敗；隔離DB新增學生正式選模／白名單測試2個因403失敗後修改。最後隔離DB411/411（含選定模型／原模型retry、他人ID、退選／升降權、student controller Raw無DB及inspection、Raw混合模型完整history／limits）及036→039升級指紋通過、schema清除。Vue301、Chrome34／1440與390師生流程、標準VS含Vue成功，手機合成畫面已檢視；靜態審查無需修正。原NU1900弱點來源及508.62KB chunk提示非失敗，JS專案無獨立型別指令。
+
+透過同resolver唯讀health確認IAN02／Taipei online、四模型可用；初probe把Breeze無tag與server的:latest作字面比較誤判，修正probe alias比對，沒有改正式profile／health。僅驗連線及已安裝，不宣稱推論品質。核對PID7332後同7173部署正常bin/Debug PID46904，qwen25-omni default保持，bundle index-CjJH7E-c.js、/courses200／匿名AI401及舊埠無listener核對；重啟清Raw、正式歷史保留。無Migration及正式DB寫入／真實答案測試，未重建已刪B。同步規格、交接、Ollama、五模式及輪次文件，保留先前資料清理文件，未提交推送。
+
+## 2026-11-18 永久刪除個案分析課程 B（使用者明確確認）
+
+先釐清使用者要刪整門課，非B階段或對話。盤點發現「個案分析課程 B」原已封存，有63筆課程成績及其他關聯資料；使用者再明確確認永久刪除相關成績、作業、教材與分組並保留A。依此做單次資料維護，不修改一般API安全限制。
+
+交易限定B UUID f1e66c4e-7e87-4ca6-a46d-7431ac89e11c／代碼LEARN-101-246／115-1及原封存狀態，展開實際FK子資料；其餘課程展開範圍不得重疊，鎖定相關表確保一致性。保留帳號及既有稽核，新增actor為NULL的系統course.permanently_deleted紀錄，只存授權、ID與數量，不存敏感內容。刪除63筆course_grade_scores、48筆grades、4份assignments、4份report_assignments、48份submissions、15份report_submissions、348份answer_revisions、3份教材、3組與相關討論／互評／關聯紀錄。
+
+預演先遇暫存表AS語法及循環依賴，兩者均完整回滾；依實際有值的FK排序、沿既有DEFERRABLE current_revision語意處理，不停用constraint／trigger。最終完整回滾預演成功後執行正式交易；提交前53張關係表中所有非B資料指紋完全一致，B=0／A=1，稽核插入後提交。新連線再驗B與各course_id引用均為0、A保留，細節不輸出學生內容。無學生答案／教材另存備份，檔案本來存DB bytea，隨授權關聯列一起刪除。
+
+只有資料與三份持久化文件異動，無程式／Migration／模型變更、無建置測試或7173重啟需求，未提交推送。A為897f8770-8a65-49d7-9cac-904eb00dbe53，其四階段入口及既有歷史保留；不可將此例外解讀成允許一般UI強制刪除歷史課程。
 
 ## 2026-11-17 教師逐次選模與Omni聊天循環修正
 

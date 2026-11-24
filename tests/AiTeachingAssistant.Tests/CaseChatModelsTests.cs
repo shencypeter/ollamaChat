@@ -9,11 +9,11 @@ namespace AiTeachingAssistant.Tests;
 
 public sealed class CaseChatModelsTests
 {
-    [Fact] public async Task NamedProfilesUseIndependentClientsAndDoNotInheritActiveOmniLimits()
+    [Fact] public async Task NamedProfilesUseIndependentClientsAndOwnSettingsWithExpandedInputLimits()
     {
         var transport=new Clients();using var models=new CaseChatModels(new Host(),transport,NullLogger<OllamaClient>.Instance,new OllamaRequestInspection(new HttpContextAccessor()));
         var llama=models.Select("llama3");var omni=models.Select("qwen25-omni");
-        Assert.NotSame(llama.Choice.Options,omni.Choice.Options);Assert.Equal(12000,llama.Choice.Limits.MaxContextBytes);Assert.Equal(24000,omni.Choice.Limits.MaxContextBytes);
+        Assert.NotSame(llama.Choice.Options,omni.Choice.Options);Assert.Equal(48000,llama.Choice.Limits.MaxContextBytes);Assert.Equal(48000,omni.Choice.Limits.MaxContextBytes);Assert.Equal("chat",llama.Choice.Options.ConversationTransport);Assert.Equal("qwen-chatml-generate",omni.Choice.Options.ConversationTransport);
         await Task.WhenAll(llama.Provider.ConversationAsync([new("user","合成Llama請求")],default),omni.Provider.ConversationAsync([new("user","合成Omni請求")],default));
         Assert.Equal(new[]{llama.Choice.Options.Model,omni.Choice.Options.Model}.Order(),transport.Requests.Select(x=>x.Model).Order());Assert.Equal(2,transport.Requests.Count);Assert.All(transport.Requests,r=>Assert.Equal(1,r.Messages));
         Assert.Equal(4,models.Profiles.Count);var original=llama.Choice.Options.Model;llama.Choice.Options.Model="local test mutation";Assert.Equal(original,models.Select("llama3").Choice.Options.Model);

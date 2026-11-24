@@ -7,6 +7,18 @@ namespace AiTeachingAssistant.Tests;
 
 public sealed class CaseChatCapacityTests
 {
+    [Theory][InlineData("llama3")][InlineData("qwen")][InlineData("breeze")][InlineData("qwen25-omni")]
+    public void EveryProfileAcceptsTheReportedFourteenKilobyteInputAndStillReservesOutput(string profile)
+    {
+        var cfg=new ConfigurationBuilder().AddJsonFile(Path.Combine(AppContext.BaseDirectory,"Configuration","Ollama",profile+".json")).Build();
+        var model=cfg.GetSection("Ollama").Get<OllamaOptions>()!;
+        var limits=cfg.GetSection("CaseChat").Get<CaseChatOptions>()??new();
+        Assert.Equal(32768,model.AssessmentSampling.NumCtx);Assert.Equal(48000,limits.MaxContextBytes);
+        // Same UTF-8 input size as the report; synthetic content only.
+        CaseChatBudget.EnsureFits([new("system",new string('測',2000)),new("user",new string('x',7998))],limits,model,model.CaseFeedbackMaxTokens);
+        var overflow=Assert.Throws<CaseChatException>(()=>CaseChatBudget.EnsureFits([new("user",new string('x',33000))],limits,model,model.CaseFeedbackMaxTokens));
+        Assert.Equal("context_limit",overflow.Diagnostic!.Code);Assert.Contains("輸出預留=",overflow.Diagnostic.Reason);
+    }
     [Fact] public void ConfiguredOmniAcceptsFiveParagraphChineseProseOf2125CharactersWithoutHistory()
     {
         var cfg=new ConfigurationBuilder().AddJsonFile(Path.Combine(AppContext.BaseDirectory,"Configuration","Ollama","qwen25-omni.json")).Build();

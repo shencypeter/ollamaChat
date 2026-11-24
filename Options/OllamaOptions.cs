@@ -11,6 +11,8 @@ public sealed class OllamaOptions
     public bool RepeatAssessmentRequirements { get; set; } = true;
     [Range(1, 16384)] public int? CaseFeedbackMaxTokens { get; set; }
     public bool CompactCaseFeedback { get; set; }
+    // Omit unless a profile explicitly chooses the provider's thinking mode.
+    public bool? Think { get; set; }
     [Range(1,3)] public int CjkContextTokensPerCharacter { get; set; } = 3;
     [Range(16,4096)] public int ContextTokenOverhead { get; set; } = 16;
     [RegularExpression("^(chat|qwen-chatml-generate)$")] public string ConversationTransport {get;set;}="chat";

@@ -1,3 +1,5 @@
+> 2026-11-20 個案分析已區分AI私人分析與學生正式提交，教師預設只審閱正式快照並可退回；分類預設不畫底線、支援多選與徽章局部hover，教師可維護課內版本化分類。需套用041–042；完整行為、設計假設、API及Demo步驟見[11/19會議修正](docs/case-analysis-2026-11-19-corrections.md)。此節取代下方舊版教師可讀全部AI歷程／學生可選測試模型的現行行為。
+
 > 2026-11-17 教師／TA本人新回覆的效能彈窗新增「Ollama請求」，可看實際訊息、phase包裝、schema及options並複製payload。僅頁面暫存、無DB／log，學生及他人歷程不提供，舊回覆不重建。見[操作與驗證](docs/ollama/request-dialog.md)。
 
 > 2026-11-17 目前依使用者指定改用 Taipei `rockn/Qwen2.5-Omni-7B-Q4_K_M:latest`（Profile=qwen25-omni）；IAN02 Qwen3／Llama3及Taipei Breeze設定保留。Visual Studio可選`https-Taipei-Qwen25Omni`或原三個模型選項，停止後再F5，全部只用7173。詳見[模型切換](docs/ollama/README.md)；Omni Raw仍512，正式階段已改獨立4096預算與精簡JSON，輸出截斷會明確報錯並保留原作答可重試。分類／教學品質仍需核對。
@@ -121,6 +123,8 @@ Professors and teaching assistants can expand the read-only Ollama inspection pa
 AI portal requests remain standalone practice and do not yet create submissions, answer revisions, evaluation runs or official grades in PostgreSQL. Those workflows need course assignments/questions and rubric records first; no fake foreign-key records are inserted. Individual assignment authoring, publication, draft saving, revision history, immutable submission and staff review are now implemented for P0. P1 now adds optional submission revisions and comparison, reusable course rubrics, manual grade drafts and explicit feedback release. Group work and AI integration into actual submissions remain later phases. See [P1 teaching workflows](docs/p1-teaching.md). See [P0 delivery notes](docs/p0-assignments.md).
 
 ## Tests
+
+日常可先選受影響範圍，不必每次執行整套。AI作答介面使用`ClientApp`的`npm run test:case-chat`；教師學生預覽的桌面／手機流程使用`npm run test:e2e:case-preview`。完整回歸仍保留於合併／發布前執行；詳[測試分層與精簡原則](docs/testing.md)。
 
 ```powershell
 dotnet test tests/AiTeachingAssistant.Tests/AiTeachingAssistant.Tests.csproj

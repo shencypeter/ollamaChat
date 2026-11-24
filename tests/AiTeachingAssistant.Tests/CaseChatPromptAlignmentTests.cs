@@ -8,6 +8,34 @@ namespace AiTeachingAssistant.Tests;
 public sealed class CaseChatPromptAlignmentTests
 {
     [Theory]
+    [InlineData(AnalysisStage.Premorbid,"個案生病以前是什麼樣子？","利手（慣用手）")]
+    [InlineData(AnalysisStage.IllnessCourse,"個案經歷了什麼？","因果推論")]
+    [InlineData(AnalysisStage.FunctionalAssessment,"個案現在的功能如何？","實際生活")]
+    [InlineData(AnalysisStage.Psychosocial,"哪些心理及環境因素影響個案？","主觀感受")]
+    public void WritingGuideInActualReviewRequirementsIsProvisionalAndDoesNotInventCodes(AnalysisStage stage,string question,string focus)
+    {
+        var requirements=CaseChatPrompts.FeedbackRequirements(stage,2000);
+        Assert.Contains(question,requirements);Assert.Contains(focus,requirements);
+        Assert.Contains("尚待與原始教材核對",requirements);Assert.Contains("不是案例事實或必填清單",requirements);
+        Assert.Contains("不新增分類碼",requirements);Assert.Contains("不能據此判定學生遺漏",requirements);
+    }
+    [Theory]
+    [InlineData(AnalysisStage.Premorbid)]
+    [InlineData(AnalysisStage.IllnessCourse)]
+    [InlineData(AnalysisStage.FunctionalAssessment)]
+    [InlineData(AnalysisStage.Psychosocial)]
+    public void EverySubmissionChecksAllPhaseScopesWithoutForcingBackgroundIntoCurrentPhase(AnalysisStage stage)
+    {
+        var requirements=CaseChatPrompts.FeedbackRequirements(stage,2000);
+        Assert.Contains("逐片段檢查A/B/C/D",requirements);
+        Assert.Contains("不得只找目前階段",requirements);
+        Assert.Contains("保留真正分類",requirements);
+        Assert.Contains("必要背景不算錯置",requirements);
+        Assert.Contains("不確定就說待確認",requirements);
+        Assert.Contains("misplaced",requirements);
+    }
+
+    [Theory]
     [InlineData(AnalysisStage.Premorbid, "A1h", "A2c", "病前")]
     [InlineData(AnalysisStage.IllnessCourse, "B1d", "B2c", "最低完整GCS")]
     [InlineData(AnalysisStage.FunctionalAssessment, "C6", "C5", "效度")]

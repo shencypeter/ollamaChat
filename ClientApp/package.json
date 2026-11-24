@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:case-chat": "vitest run src/components/CaseAnalysisChat.test.js",
+    "test:e2e:case-preview": "playwright test studio-case-chat.spec.js --grep \"teacher student preview\""
   },
   "dependencies": {
     "vue": "^3.5.0",

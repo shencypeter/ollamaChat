@@ -4,6 +4,7 @@ namespace AiTeachingAssistant.Services;
 public static class StudioFeedbackContract
 {
     public const string Version="case-text-feedback-phase-v3";
+    private const int MaximumAnnotations=48;
     public static readonly string[] Stages=["premorbid","illnessCourse","functionalAssessment","psychosocial"];
     public static readonly JsonSerializerOptions Json=new(JsonSerializerDefaults.Web){Encoder=System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping};
     public static JsonElement Schema=>JsonSerializer.SerializeToElement(new{
@@ -12,7 +13,7 @@ public static class StudioFeedbackContract
             supportedPoints=new{type="array",items=new{type="object",additionalProperties=false,required=new[]{"point","evidence"},properties=new{point=new{type="string"},evidence=new{type="string"}}}},
             improvements=new{type="array",items=new{type="object",additionalProperties=false,required=new[]{"point","evidence","suggestion"},properties=new{point=new{type="string"},evidence=new{type="string"},suggestion=new{type="string"}}}},
             nextSteps=new{type="array",items=new{type="string"},minItems=1},
-            annotations=new{type="array",maxItems=CaseAnnotationContract.MaximumAnnotations,items=CaseAnnotationContract.AnnotationSchema}
+            annotations=new{type="array",maxItems=MaximumAnnotations,items=CaseAnnotationContract.AnnotationSchema}
         }
     });
     public static StudioFeedbackContent Parse(string text,string? originalAnswer=null)
@@ -27,7 +28,7 @@ public static class StudioFeedbackContract
             var core=JsonSerializer.SerializeToElement(root.EnumerateObject().Where(p=>p.Name!="annotations").ToDictionary(p=>p.Name,p=>p.Value),Json);
             var result=core.Deserialize<StudioFeedbackContent>(Json)??throw new JsonException();
             if(string.IsNullOrWhiteSpace(result.Summary)||result.SupportedPoints==null||result.Improvements==null||result.NextSteps==null||result.NextSteps.Count==0 || result.NextSteps.Any(string.IsNullOrWhiteSpace) || result.SupportedPoints.Any(x=>x==null||string.IsNullOrWhiteSpace(x.Point)||string.IsNullOrWhiteSpace(x.Evidence)) || result.Improvements.Any(x=>x==null||string.IsNullOrWhiteSpace(x.Point)||string.IsNullOrWhiteSpace(x.Suggestion)))throw new JsonException();
-            return result with{Annotations=root.TryGetProperty("annotations",out var entries)?originalAnswer==null?[]:CaseAnnotationContract.Validate(originalAnswer,entries):null};
+            return result with{Annotations=root.TryGetProperty("annotations",out var entries)?originalAnswer==null?[]:CaseAnnotationContract.Validate(originalAnswer,entries,maximumAnnotations:MaximumAnnotations):null};
         }catch(JsonException e){throw new InvalidOperationException("Invalid text feedback contract.",e);}
     }
     public static IReadOnlyList<OllamaMessage> Build(StudioCase c,StudioAnswer answer,string template)

@@ -3,10 +3,14 @@
     "Profile": "qwen",
     "BaseUrl": "http://IAN02:11434",
     "Model": "qwen3:8b",
-    "TimeoutSeconds": 180,
+    "TimeoutSeconds": 600,
+    "Think": false,
+    "CompactCaseFeedback": true,
     "MergeAssessmentSystemMessages": false,
     "RepeatAssessmentRequirements": false,
+    "ContextTokenOverhead": 512,
     "SystemPrompt": "所有回覆一律使用臺灣繁體中文（zh-TW），不得使用簡體中文（zh-CN）。",
-    "AssessmentSampling": { "Temperature": 0, "Seed": 42, "TopP": 0.9, "TopK": 40, "NumCtx": 16384, "NumPredict": 4096 }
-  }
+    "AssessmentSampling": { "Temperature": 0, "Seed": 42, "TopP": 0.9, "TopK": 40, "NumCtx": 32768, "NumPredict": 4096 }
+  },
+  "CaseChat": { "MaxContextBytes": 48000 }
 }

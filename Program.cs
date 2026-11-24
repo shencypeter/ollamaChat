@@ -149,6 +149,6 @@ app.Use(async(context,next)=>
 });
 app.MapControllers();
 app.MapFallback("/api/{**path}",context=>{context.Response.StatusCode=404;return context.Response.WriteAsJsonAsync(new{error="API endpoint not found."});});
-app.MapFallbackToFile("portal/index.html");
+app.MapFallbackToFile("portal/index.html"); 
 app.Run();
 public partial class Program { }

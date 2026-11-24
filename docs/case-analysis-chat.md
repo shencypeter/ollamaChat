@@ -1,4 +1,32 @@
+## 2026-11-24 Raw語言偏好（現行）
+
+Raw每次僅額外提供回覆語言system：使用當次提問語言，或明確指定的回覆語言；中文採臺灣繁體zh-TW。取代早期「無任何應用System Prompt」設定，仍不帶教學／階段／分類背景。它不進入LangChain聊天buffer或DB，但納入完整請求容量預檢；原暫存多輪、角色／Session隔離及正式A–D提示與統計保持。教師實際請求dialog可以核對語言指示；不是保證模型必定遵守。四profile保留相容設定，84聚焦後端＋4隔離DB＋24 dialog Vue及VS含Vite通過。
+
+2026-11-23 歷程：正式各階段改為單層「每份作答＋配對回饋」清單，跨全部已授權舊session，#N篩選前按日期定義。舊房間select改「模型篩選／全部模型」，取實際歷史reply.modelName、request fallback或未記錄模型，與下一次提交模型分離。移除restart/session導覽，closed completed可copy進當前作答，active尾筆retry及正式／角色保護保持。只改Vue投影、無DB／API／Prompt／模型設定變動，Raw仍獨立多輪。詳[輪次](feedback-rounds.md)。
+
+2026-11-20 撰寫指引：教師／TA「教師階段說明」可展開四階段全文及核心問題表；學生作答區可查當前指引與對照，Raw不顯示。共用Configuration/CaseAnalysis/stage-guidance.json，明示尚待原教材核對；正式AI及B評語重整帶當前面向／撰寫重點，不視為事實／必填清單或新分類。原system方法與課內規則保持，A/C/D新v8、Bv10，新作答生效、舊歷史不重寫。503後端、436Vue、Chrome9及VS建置通過；無新Migration。
+
+2026-11-20 容量修正紀錄：Migration043將正式annotations上限提高128，長文32–128有界分句由模型回固定slot並轉回原文範圍陣列，防止同處標註迴圈占滿輸出；模型仍負責語意分類，不強迫有碼。缺欄等結構不完整明確拒收，短文機械重複最多一次fresh重做，舊稿及壞回覆不再送模型。舊歷史不重寫；當時A/C/D提示v7、Bv9。ABCD分類工具位學生文章下，版本歷程側欄。模型配置、Raw及正式token額度不改；詳[評估](ai-tuning/03-evaluation-results.md)。
+
+2026-11-20 現行：AI分析與正式提交分離，教師不再讀學生全部AI逐輪草稿；舊紀錄本人仍可查。學生直接進A階段，Raw／模型測試限staff；課內規則版本實際影響後續schema／Prompt，舊歷史快照不變。Migration041–042及[交付／Demo](case-analysis-2026-11-19-corrections.md)取代下方較早可全草稿審閱／學生測試選模的現行效力。
+
 # 課程個案分析五模式：交付與維護
+
+## 2026-11-19 本人回合垃圾桶
+
+學生formal／教師與TA本人practice可將某輪及配對回覆移到垃圾桶，確認後從一般歷程與比較隱藏，可切垃圾桶還原。教師review其他學生仍只讀；trash保留歷史、revision祖先及正式統計，不是永久刪除。原始作答／模型／PromptVersion／效能／annotations不重寫，full History只新增可選trashedAt。
+
+POST `stages/{stage}/messages/{userMessage}/trash`／`restore`沿現有登入、學生POV、course Access和owner／stage／practice界線。Live pending409、expired可整理但不收晚reply，closed本人session在active課可整理；trashed不可重試或作新revision來源。040新增nullable user欄位，舊資料NULL，audit僅識別碼。詳[角色](role-permissions-spec.md)與[輪次](feedback-rounds.md)。449後端、351 Vue、48 Chrome及VS含Vue通過，040實際已套用且舊資料指紋保持，唯一7173部署。
+
+## 2026-11-19 保留分句並核對全部 ABCD
+
+正式每輪outputRequirements強化逐片段、完整脈絡的ABCD範圍檢查：不只找目前階段，保留實際碼，明確錯置才misplaced並說明目前及真正階段；必要背景與合理多碼保留，不確定待確認。B長文評語重整帶首輪Status避免漏掉錯置，不重分類。原分句候選、各profile及完整教授system保持，A/C/D prompt版本20261119-v5、B為20261119-b-v7；舊歷史不重寫，需新提交。僅為模型指令與狀態傳遞，不是準確率或臨床驗證。
+
+學生作答新增「複製到輸入框」，沿既有修訂流程，詳[回饋輪次](feedback-rounds.md)。438後端、332 Vue、38 Chrome及正常VS含Vue通過，唯一7173已更新，無Migration。
+
+## 2026-11-18 師生輸入區逐次選模
+
+教師／TA／實際學生均可在提交按鈕旁選一個既有模型；只影響本人下一次提交，正式回合沿model_name保存實際模型，retry仍需原模型／版本。Raw每次Send選模型、同一LangChain對話保留，切換不清草稿或history，各pair暫存模型標記，仍不入DB及正式統計。覆寫較早teacher-only及Raw切模清空說明；學生預覽仍唯讀，學生不取得教師診斷／請求彈窗。四profile與原有Prompt／容量均保持。DB411、Vue301、Chrome34與VS建置通過，唯一7173已更新；詳[操作／限制](ollama/model-selection.md)。
 
 ## 2026-11-17 教師模型比較與回饋循環修正
 

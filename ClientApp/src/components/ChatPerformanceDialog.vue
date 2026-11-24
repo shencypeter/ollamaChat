@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { X } from '@lucide/vue'
+import {speedScaleMaximum as speedMaximum,observePerformanceSpeed} from '../utils/performanceSpeedScale'
 
 const props = defineProps({
   open: Boolean,
@@ -37,6 +38,14 @@ let previousFocus = null, closeRequested = true
 const finite = value => typeof value === 'number' && Number.isFinite(value) && value >= 0
 const number = value => finite(value) ? String(value) : '未提供'
 const seconds = (value, divisor) => finite(value) ? `${(value / divisor).toFixed(2)} 秒` : '未提供'
+const speed = computed(() => {
+  const m = props.metrics
+  if (!m || Array.isArray(m.availableFields) && !m.availableFields.includes('tokensPerSecond')) return null
+  return finite(m.tokensPerSecond) ? m.tokensPerSecond : null
+})
+watch(() => props.open ? speed.value : null,value => { if(value!==null)observePerformanceSpeed(value) },{immediate:true})
+const speedPosition = computed(() => speed.value === null ? 0 : Math.min(speedMaximum.value, speed.value))
+const speedTicks = computed(() => [0,1,2,3,4].map(index=>speedMaximum.value/4*index))
 const rows = computed(() => {
   const m = props.metrics || {}
   const available = Array.isArray(m.availableFields) ? new Set(m.availableFields) : null
@@ -106,7 +115,12 @@ onBeforeUnmount(() => { closeRequested = true; hide() })
       <p v-if="promptVersion" class="muted">提示版本：{{ promptVersion }}</p>
       <p v-if="!metrics" role="status">此回覆未提供效能資料；較早的紀錄可能尚未記錄這些數據。</p>
       <template v-else>
-        <dl><div v-for="[label, value] in rows" :key="label"><dt>{{ label }}</dt><dd>{{ value }}</dd></div></dl>
+        <dl><div v-for="[label, value] in rows" :key="label" :class="{'speed-row':label==='生成速度'&&speed!==null}"><dt>{{ label }}</dt><dd>{{ value }}</dd>
+          <dd v-if="label==='生成速度'&&speed!==null" class="speed-gauge">
+            <div class="speed-meter" role="meter" :aria-label="`生成速度，刻度 0 至 ${speedMaximum} tok/s`" :aria-valuemin="0" :aria-valuemax="speedMaximum" :aria-valuenow="speedPosition" :aria-valuetext="`${speed.toFixed(2)} tok/s`"><span data-speed-fill :style="{width:`${speedPosition/speedMaximum*100}%`}"/></div>
+            <div class="speed-ticks" data-speed-scale aria-hidden="true"><span v-for="(tick,index) in speedTicks" :key="index">{{tick}}{{index===4?' tok/s':''}}</span></div>
+          </dd>
+        </div></dl>
         <p v-if="metrics.providerCalls>1" class="chat-performance-note" data-provider-calls>模型呼叫 {{metrics.providerCalls}} 次，包含一次評語重整；Token 與耗時為合計，正式回饋輪次仍為一次。</p>
         <p v-if="metrics.doneReason" class="muted">結束原因：{{ metrics.doneReason }}</p>
         <p class="chat-performance-note">往返時間為應用程式到模型服務的本次請求時間，不包含完整頁面與資料庫流程；模型耗時依本次回傳資料呈現。未提供的數值不推算為 0。</p>
@@ -121,7 +135,7 @@ onBeforeUnmount(() => { closeRequested = true; hide() })
             <h3>請求 {{ index+1 }}<span v-if="request.purpose"> · {{ request.purpose }}</span></h3>
             <p class="muted">端點：{{ request.url }}</p><p>實際模型：{{ request.payload?.model || '未提供' }}</p>
             <h4>訊息與提示詞</h4>
-            <template v-if="typeof request.payload?.prompt==='string'"><p class="chat-performance-note">完整 prompt（含模型角色標記）；Raw 不會因此增加應用程式 System Prompt。</p><pre tabindex="0" data-generated-prompt :aria-label="`請求 ${index+1} 完整 prompt`">{{request.payload.prompt}}</pre></template>
+            <template v-if="typeof request.payload?.prompt==='string'"><p class="chat-performance-note">完整 prompt（含模型角色標記）；Raw 僅加入回覆語言指示，不含階段教學提示詞。</p><pre tabindex="0" data-generated-prompt :aria-label="`請求 ${index+1} 完整 prompt`">{{request.payload.prompt}}</pre></template>
             <section v-for="(message,messageIndex) in request.payload?.messages||[]" :key="messageIndex" class="request-message"><h5>{{ messageIndex+1 }} · {{ message.role }}</h5><pre tabindex="0" :aria-label="`請求 ${index+1} 訊息 ${messageIndex+1}`">{{ typeof message.content==='string'?message.content:pretty(message.content) }}</pre></section>
             <template v-if="request.payload?.format!==undefined"><h4>回覆格式（format）</h4><pre tabindex="0" aria-label="回覆格式">{{ pretty(request.payload.format) }}</pre></template>
             <template v-if="request.payload?.options!==undefined"><h4>模型選項（options）</h4><pre tabindex="0" aria-label="模型選項">{{ pretty(request.payload.options) }}</pre></template>
@@ -140,6 +154,7 @@ onBeforeUnmount(() => { closeRequested = true; hide() })
 .chat-performance-panel{padding:20px;min-width:0;overflow-wrap:anywhere}
 header{display:flex;justify-content:space-between;align-items:center;gap:12px}h2{font-size:1.2rem;margin:0}header button{flex:none;min-width:44px;min-height:44px;padding:8px}
 dl{margin:20px 0;display:grid;gap:0}dl>div{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--border,#e2e8f0)}dt{color:var(--muted,#526176)}dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}.chat-performance-note{font-size:.88rem;color:var(--muted,#526176);line-height:1.6}
+dl>.speed-row{flex-wrap:wrap;row-gap:8px}.speed-gauge{flex-basis:100%;min-width:0;text-align:left}.speed-meter{height:12px;border-radius:6px;overflow:hidden;background:var(--line,#e2e8f0)}.speed-meter>span{display:block;height:100%;border-radius:inherit;background:var(--accent,#5b5fc7)}.speed-ticks{position:relative;height:1.3em;margin-top:5px;color:var(--muted,#526176);font-size:.75rem}.speed-ticks>span{position:absolute;white-space:nowrap;transform:translateX(-50%)}.speed-ticks>span:first-child{left:0;transform:none}.speed-ticks>span:nth-child(2){left:25%}.speed-ticks>span:nth-child(3){left:50%}.speed-ticks>span:nth-child(4){left:75%}.speed-ticks>span:last-child{right:0;transform:none}.speed-gauge>small{display:block;margin-top:5px}
 .inspection-tabs{display:flex;gap:8px;border-bottom:1px solid var(--border,#d7dce4);margin:16px 0}.inspection-tabs button{min-height:44px;padding:8px 16px;border:0;border-bottom:3px solid transparent;background:transparent;color:inherit;cursor:pointer}.inspection-tabs button[aria-selected=true]{border-bottom-color:var(--accent,#5b5fc7);font-weight:700}.request-detail{border-top:1px solid var(--border,#d7dce4);margin-top:20px;padding-top:4px}.request-detail h3,.request-json-heading h3{font-size:1rem}.request-detail h4{font-size:.94rem;margin:18px 0 8px}.request-message h5{font-size:.88rem;margin:12px 0 6px}pre{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;overflow:auto;max-height:340px;background:var(--surface-alt,var(--surface,#f5f7fa));color:inherit;border:1px solid var(--border,#d7dce4);border-radius:8px;padding:12px;font-size:.85rem;line-height:1.6;box-sizing:border-box;max-width:100%;tab-size:2}pre:focus-visible,.inspection-tabs button:focus-visible{outline:2px solid var(--accent,#5b5fc7);outline-offset:2px}.request-json-heading{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}.request-json-heading button{min-height:44px}
 @media(max-width:440px){.chat-performance-panel{padding:16px}dl>div{gap:10px}dt,dd{font-size:.9rem}}
 </style>

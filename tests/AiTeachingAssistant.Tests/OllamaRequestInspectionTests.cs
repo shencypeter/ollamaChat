@@ -14,7 +14,7 @@ public class OllamaRequestInspectionTests
     public async Task ExplicitCourseStaffCaptureContainsActualStageAndRawRequestsWithoutResponseOrPersistentDiagnostics(string courseRole)
     {
         var accessor=Context("Student");var experience=new LearnerExperience(accessor){CourseRole=courseRole};
-        var inspection=new OllamaRequestInspection(accessor,experience);var transport=new Capture();
+        var inspection=new OllamaRequestInspection(accessor,experience);var transport=new Capture{Content="{\"feedback\":\"合成回饋\",\"annotations\":[]}"};
         var client=new OllamaClient(new HttpClient(transport){BaseAddress=new Uri("http://localhost:11434/")},Microsoft.Extensions.Options.Options.Create(new OllamaOptions{Model="test-model"}),NullLogger<OllamaClient>.Instance,inspection:inspection);
         inspection.EnableConversationCapture(new(courseRole,"active",true,[]),CaseChatPrompts.Version);
         await client.CaseFeedbackAsync([new("system",CaseChatPrompts.Get(AnalysisStage.IllnessCourse)),new("user","合成目前作答")],AnalysisStage.IllnessCourse,default);
@@ -113,9 +113,9 @@ public class OllamaRequestInspectionTests
     }
     private sealed class Capture:HttpMessageHandler
     {
-        public string? Body;
+        public string? Body;public string Content="{}";
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct)
-        {Body=await request.Content!.ReadAsStringAsync(ct);return new(HttpStatusCode.OK){Content=new StringContent("""{"message":{"role":"assistant","content":"{}","thinking":"private synthetic reasoning"}}""")};}
+        {Body=await request.Content!.ReadAsStringAsync(ct);return new(HttpStatusCode.OK){Content=new StringContent(JsonSerializer.Serialize(new{message=new{role="assistant",content=Content,thinking="private synthetic reasoning"}}))};}
     }
 }
 

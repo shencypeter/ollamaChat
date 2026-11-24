@@ -11,7 +11,7 @@ using System.Text.Json;
 
 namespace AiTeachingAssistant.Tests;
 
-public class CaseAnalysisChatTests
+public partial class CaseAnalysisChatTests
 {
     [FormativeDatabaseFact] public async Task RepetitiveLongBFeedbackCannotEnterHistoryOrCompletedRoundStatistics()
     {
@@ -30,8 +30,10 @@ public class CaseAnalysisChatTests
             var result=CaseJson(action);Assert.DoesNotContain("SENSITIVE",result.ToString());
             Assert.Equal(role!="student",result.TryGetProperty("diagnostic",out var diagnostic));Assert.Equal(role!="student",result.TryGetProperty("requestInspection",out var capture));
             if(role!="student"){Assert.Equal("provider_http",diagnostic.GetProperty("code").GetString());Assert.Equal(503,diagnostic.GetProperty("upstreamStatus").GetInt32());Assert.Single(capture.GetProperty("requests").EnumerateArray());}
-            var rawId=h.Raw.Create(f.Course,actor);var rawError=CaseJson(await h.Controller.SendRaw(f.Course,rawId,new(){Content="合成Raw失敗診斷"},default));
+            var rawId=h.Raw.Create(f.Course,actor);var rawAction=Assert.IsAssignableFrom<ObjectResult>(await h.Controller.SendRaw(f.Course,rawId,new(){Content="合成Raw失敗診斷"},default));
+            Assert.Equal(role=="student"?403:502,rawAction.StatusCode);var rawError=CaseJson(rawAction);
             Assert.Equal(role!="student",rawError.TryGetProperty("diagnostic",out _));Assert.Equal(role!="student",rawError.TryGetProperty("requestInspection",out _));
+            Assert.Equal(role=="student"?1:2,h.Transport.Calls);
             await h.Raw.ClearAll(actor,default);
             var stored=await f.Sql("SELECT string_agg(content,'') FROM case_analysis_messages WHERE session_id IN (SELECT id FROM case_analysis_sessions WHERE course_id=$1 AND student_id=$2)",f.Course,actor);Assert.DoesNotContain("SENSITIVE",stored!.ToString());Assert.DoesNotContain("provider_http",stored.ToString());
         }
@@ -74,8 +76,9 @@ public class CaseAnalysisChatTests
             var replay=CaseJson(await h.Controller.Send(f.Course,"illnessCourse",request,default));
             Assert.False(replay.TryGetProperty("requestInspection",out _));Assert.Equal(1,h.Transport.Calls);
             var rawId=h.Raw.Create(f.Course,actor);
-            var raw=CaseJson(await h.Controller.SendRaw(f.Course,rawId,new(){Content="合成Raw作答"},default));
-            Assert.Equal(role!="student",raw.TryGetProperty("requestInspection",out inspection));
+            var rawAction=Assert.IsAssignableFrom<ObjectResult>(await h.Controller.SendRaw(f.Course,rawId,new(){Content="合成Raw作答"},default));
+            Assert.Equal(role=="student"?403:200,rawAction.StatusCode);var raw=CaseJson(rawAction);
+            Assert.Equal(role!="student",raw.TryGetProperty("requestInspection",out inspection));Assert.Equal(role=="student"?1:2,h.Transport.Calls);
             if(role!="student")
             {
                 var payload=inspection.GetProperty("requests")[0].GetProperty("payload");
@@ -146,7 +149,8 @@ public class CaseAnalysisChatTests
         var reply=history.Sessions.Single().Messages.Last();Assert.Equal(first,reply.ReplyTo);Assert.Single(reply.Annotations!);Assert.Equal(2,reply.Annotations![0].Start);
         f.Provider.Feedback="""{"feedback":"第二版回饋。","annotations":[{"start":0,"end":3,"text":"56歲","codes":["A1a"],"explanation":"年齡","status":"unverified"}]}""";
         await f.Workflow.Send(f.Course,f.Student,"premorbid",new(){RequestId=Guid.NewGuid(),Content="56歲",RevisesMessageId=first},default);
-        var persisted=await f.Workflow.ReviewHistory(f.Course,f.Teacher,f.Student,"premorbid",default);
+        Assert.Equal(403,(await Assert.ThrowsAsync<CaseChatException>(()=>f.Workflow.ReviewHistory(f.Course,f.Teacher,f.Student,"premorbid",default))).StatusCode);
+        var persisted=await f.Workflow.History(f.Course,f.Student,"premorbid",default);
         Assert.Equal(new[]{"55歲","56歲"},persisted.Sessions.Single().Messages.Where(m=>m.Role=="assistant").Select(m=>m.Annotations!.Single().Text));
         await Assert.ThrowsAsync<PostgresException>(()=>f.Sql("UPDATE case_analysis_messages SET annotations='[]'::jsonb WHERE id=$1",reply.Id));
         Assert.Empty((await f.Workflow.History(f.Course,f.Peer,"premorbid",default)).Sessions);
@@ -270,7 +274,10 @@ public class CaseAnalysisChatTests
         var send=f.Workflow.Send(f.Course,f.Student,"psychosocial",new(){RequestId=Guid.NewGuid(),Content="待回覆時退選"},default);await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await f.Sql("UPDATE course_members SET status='inactive' WHERE course_id=$1 AND user_id=$2",f.Course,f.Student);release.TrySetResult();
         Assert.Equal(404,(await Assert.ThrowsAsync<CaseChatException>(()=>send)).StatusCode);
-        var historical=await f.Workflow.ReviewHistory(f.Course,f.Teacher,f.Student,"psychosocial",default);Assert.Equal("failed",Assert.Single(historical.Sessions.Single().Messages).Status);
+        Assert.Equal(403,(await Assert.ThrowsAsync<CaseChatException>(()=>f.Workflow.ReviewHistory(f.Course,f.Teacher,f.Student,"psychosocial",default))).StatusCode);
+        Assert.Equal("failed",await f.Sql("SELECT response_status FROM case_analysis_messages m JOIN case_analysis_sessions s ON s.id=m.session_id WHERE s.course_id=$1 AND s.student_id=$2 AND m.role='user'",f.Course,f.Student));
+        Assert.Equal(0L,await f.Sql("SELECT count(*) FROM case_analysis_messages m JOIN case_analysis_sessions s ON s.id=m.session_id WHERE s.course_id=$1 AND s.student_id=$2 AND m.role='assistant'",f.Course,f.Student));
+        Assert.Equal(404,(await Assert.ThrowsAsync<CaseChatException>(()=>f.Workflow.History(f.Course,f.Student,"psychosocial",default))).StatusCode);
         Assert.Equal(0,(await f.Workflow.Records(f.Course,f.Teacher,default)).Single(row=>row.Id==f.Student).Statistics.RoundTrips);
     }
 
@@ -310,32 +317,32 @@ public class CaseAnalysisChatTests
     {
         await using var f=await Fixture.Create();var settings=Microsoft.Extensions.Options.Options.Create(new CaseChatOptions());var model=Microsoft.Extensions.Options.Options.Create(new OllamaOptions{Model="mock-model"});
         using var raw=new RawChatSessions(TimeProvider.System,settings,model);
-        var context=new DefaultHttpContext{User=new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier,f.Student.ToString())],"test"))};
+        var context=new DefaultHttpContext{User=new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier,f.Teacher.ToString())],"test"))};
         var controller=new CaseAnalysisChatController(f.Workflow,raw,f.Provider,model,settings,new LearnerExperience(new HttpContextAccessor{HttpContext=context})){ControllerContext=new(){HttpContext=context}};
         var created=JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(await controller.CreateRaw(f.Course,default)).Value);var id=created.GetProperty("id").GetGuid();
         for(var turn=0;turn<3;turn++)Assert.IsType<OkObjectResult>(await controller.SendRaw(f.Course,id,new(){Content="Raw隔離問題"+turn},default));
-        Assert.All(f.Provider.Requests,request=>Assert.DoesNotContain(request,m=>m.Role=="system"));
-        Assert.Equal(5,f.Provider.Requests.Last().Count);
+        Assert.All(f.Provider.Requests,request=>{Assert.Single(request.Where(m=>m.Role=="system"));Assert.Contains("zh-TW",request[0].Content);});
+        Assert.Equal(6,f.Provider.Requests.Last().Count);
         Assert.IsType<OkObjectResult>(await controller.ClearRaw(f.Course,id,default));
         Assert.Equal(0L,await f.Sql("SELECT count(*) FROM case_analysis_sessions WHERE course_id=$1",f.Course));
         Assert.All(await f.Workflow.Records(f.Course,f.Teacher,default),row=>Assert.Equal(0,row.Statistics.RoundTrips));
-        await f.Workflow.Send(f.Course,f.Student,"premorbid",new(){RequestId=Guid.NewGuid(),Content="正式階段的問題"},default);
-        Assert.Equal(new[]{"system","user"},f.Provider.Requests.Last().Select(m=>m.Role));Assert.DoesNotContain("Raw隔離問題",string.Join("",f.Provider.Requests.Last().Select(m=>m.Content)));
+        await f.Workflow.Send(f.Course,f.Teacher,"premorbid",new(){RequestId=Guid.NewGuid(),Content="正式階段的問題"},default);
+        Assert.Equal(new[]{"system","user"},f.Provider.Requests.Last().Select(m=>m.Role));Assert.DoesNotContain("Raw隔離問題",string.Join("",f.Provider.Requests.Last().Select(m=>m.Content)));Assert.DoesNotContain("language of the user's current message",f.Provider.Requests.Last()[0].Content);
     }
     [FormativeDatabaseFact] public async Task RawReplyRechecksAuthorizationBeforeCommittingMemoryOrReturningContent()
     {
         await using var f=await Fixture.Create();var settings=Microsoft.Extensions.Options.Options.Create(new CaseChatOptions());var model=Microsoft.Extensions.Options.Options.Create(new OllamaOptions{Model="mock-model"});
         using var raw=new RawChatSessions(TimeProvider.System,settings,model);
-        var context=new DefaultHttpContext{User=new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier,f.Student.ToString())],"test"))};
+        var context=new DefaultHttpContext{User=new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier,f.Teacher.ToString())],"test"))};
         var controller=new CaseAnalysisChatController(f.Workflow,raw,f.Provider,model,settings,new LearnerExperience(new HttpContextAccessor{HttpContext=context})){ControllerContext=new(){HttpContext=context}};
         var created=JsonSerializer.SerializeToElement(Assert.IsType<OkObjectResult>(await controller.CreateRaw(f.Course,default)).Value);var id=created.GetProperty("id").GetGuid();
         var started=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);var release=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         f.Provider.Wait=async ct=>{started.TrySetResult();await release.Task.WaitAsync(ct);};
         var send=controller.SendRaw(f.Course,id,new(){Content="等待回覆時退選"},default);await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        await f.Sql("UPDATE course_members SET status='inactive' WHERE course_id=$1 AND user_id=$2",f.Course,f.Student);release.TrySetResult();
+        await f.Sql("UPDATE course_members SET status='inactive' WHERE course_id=$1 AND user_id=$2",f.Course,f.Teacher);release.TrySetResult();
         Assert.Equal(404,Assert.IsType<ObjectResult>(await send).StatusCode);
-        await f.Sql("UPDATE course_members SET status='active' WHERE course_id=$1 AND user_id=$2",f.Course,f.Student);
-        Assert.Equal(404,(await Assert.ThrowsAsync<CaseChatException>(()=>raw.Send(f.Course,f.Student,id,"舊記憶不可復活",f.Provider,default))).StatusCode);
+        await f.Sql("UPDATE course_members SET status='active' WHERE course_id=$1 AND user_id=$2",f.Course,f.Teacher);
+        Assert.Equal(404,(await Assert.ThrowsAsync<CaseChatException>(()=>raw.Send(f.Course,f.Teacher,id,"舊記憶不可復活",f.Provider,default))).StatusCode);
     }
     [FormativeDatabaseFact] public async Task ExpiredLeaseIsRetryableAndItsLateOriginalReplyCannotOverwriteTheSuccessfulRetry()
     {
@@ -387,6 +394,9 @@ public class CaseAnalysisChatTests
         public async ValueTask DisposeAsync()
         {
             await Sql("DELETE FROM audit_events WHERE entity_id=$1",Course);
+            await Sql("DELETE FROM case_formal_submissions WHERE course_id=$1",Course);
+            await Sql("DELETE FROM case_classification_rule_versions WHERE course_id=$1",Course);
+            await Sql("DELETE FROM assignments WHERE course_id=$1",Course);
             await Sql("DELETE FROM case_analysis_messages WHERE session_id IN (SELECT id FROM case_analysis_sessions WHERE course_id=$1)",Course);
             await Sql("DELETE FROM case_analysis_sessions WHERE course_id=$1",Course);
             await Sql("DELETE FROM course_members WHERE course_id=$1",Course);await Sql("DELETE FROM courses WHERE id IN ($1,$2)",Course,Other);

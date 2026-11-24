@@ -6,6 +6,38 @@ namespace AiTeachingAssistant.Tests;
 
 public sealed class CaseRawChatTests
 {
+    [Fact] public async Task RawLanguagePolicyIsIncludedInPreflightWithoutPollutingRejectedHistory()
+    {
+        using var sessions=Sessions(new(){MaxContextBytes=100});var course=Guid.NewGuid();var actor=Guid.NewGuid();var id=sessions.Create(course,actor);var provider=new Provider();
+        Assert.Equal(413,(await Assert.ThrowsAsync<CaseChatException>(()=>sessions.Send(course,actor,id,"x",provider,default))).StatusCode);Assert.Empty(provider.Inputs);
+        var allowed=new CaseChatModelChoice("qwen",new(){Model="synthetic",AssessmentSampling=new(){NumCtx=200000}},new(){MaxContextBytes=10000});
+        var reply=await sessions.Send(course,actor,id,"accepted",provider,default,requestChoice:allowed);Assert.Equal(new[]{"accepted","answer 1"},reply.Messages.Select(m=>m.Content));
+    }
+    [Fact] public async Task EachRawSendCanChooseAModelWithoutLosingHistoryOrRelabelingEarlierPairs()
+    {
+        using var sessions=Sessions();var course=Guid.NewGuid();var actor=Guid.NewGuid();var id=sessions.Create(course,actor);var first=new Provider();var second=new Provider();
+        var llama=new CaseChatModelChoice("llama3",new(){Model="raw-llama",AssessmentSampling=new(){NumCtx=200000}},new());
+        var qwen=new CaseChatModelChoice("qwen",new(){Model="raw-qwen",AssessmentSampling=new(){NumCtx=200000}},new());
+        await sessions.Send(course,actor,id,"first model",first,default,requestChoice:llama);
+        var reply=await sessions.Send(course,actor,id,"second model",second,default,requestChoice:qwen);
+        Assert.Equal(new[]{"first model","answer 1","second model"},second.Inputs.Single().Skip(1).Select(m=>m.Content));
+        Assert.Equal(new[]{"system","user","assistant","user"},second.Inputs.Single().Select(m=>m.Role));
+        Assert.Equal(new[]{"raw-llama","raw-llama","raw-qwen","raw-qwen"},reply.Messages.Select(m=>m.ModelName));
+        reply=await sessions.Send(course,actor,id,"environment default",first,default);
+        Assert.Equal("synthetic",reply.ModelName);Assert.Equal(new[]{"raw-llama","raw-llama","raw-qwen","raw-qwen","synthetic","synthetic"},reply.Messages.Select(m=>m.ModelName));
+        Assert.Null(sessions.GetChoice(course,actor,id));
+        Assert.Equal(404,(await Assert.ThrowsAsync<CaseChatException>(()=>sessions.Send(course,Guid.NewGuid(),id,"foreign owner",first,default,requestChoice:llama))).StatusCode);
+    }
+    [Fact] public async Task SelectedRawLimitsRejectWithoutTrimmingMemoryAndDoNotPolluteTheNextModel()
+    {
+        using var sessions=Sessions();var course=Guid.NewGuid();var actor=Guid.NewGuid();var id=sessions.Create(course,actor);var provider=new Provider();
+        await sessions.Send(course,actor,id,"retained",provider,default);
+        var restricted=new CaseChatModelChoice("breeze",new(){Model="restricted",AssessmentSampling=new(){NumCtx=200000}},new(){MaxContextBytes=1});
+        Assert.Equal(413,(await Assert.ThrowsAsync<CaseChatException>(()=>sessions.Send(course,actor,id,"rejected",provider,default,requestChoice:restricted))).StatusCode);
+        Assert.Single(provider.Inputs);var next=await sessions.Send(course,actor,id,"next model",provider,default);
+        Assert.Equal(new[]{"retained","answer 1","next model"},provider.Inputs.Last().Skip(1).Select(m=>m.Content));Assert.Equal(4,next.Messages.Count);
+        Assert.All(next.Messages,m=>Assert.Equal("synthetic",m.ModelName));
+    }
     [Fact] public async Task SelectedModelSnapshotBelongsOnlyToItsRawSessionAndNeverChangesTheDefault()
     {
         using var sessions=Sessions();var course=Guid.NewGuid();var actor=Guid.NewGuid();
@@ -24,7 +56,7 @@ public sealed class CaseRawChatTests
         provider.Metrics=new(2000,0,0,2000,222,0,4,200,6,"length");
         var reply=await sessions.Send(course,actor,id,"second",provider,default);
         Assert.Null(reply.Messages[0].Metrics);Assert.Equal(111,reply.Messages[1].Metrics!.PromptTokens);Assert.Null(reply.Messages[2].Metrics);Assert.Equal(222,reply.Messages[3].Metrics!.PromptTokens);
-        Assert.Equal(new[]{"first","answer 1","second"},provider.Inputs.Last().Select(m=>m.Content));
+        Assert.Equal(new[]{"first","answer 1","second"},provider.Inputs.Last().Skip(1).Select(m=>m.Content));
         await sessions.Clear(course,actor,id,default);var fresh=sessions.Create(course,actor);var next=await sessions.Send(course,actor,fresh,"new",provider,default);Assert.Equal(2,next.Messages.Count);
     }
     [Fact]
@@ -47,9 +79,10 @@ public sealed class CaseRawChatTests
         RawChatReply? reply = null;
         for (var i = 0; i < 24; i++) reply = await sessions.Send(course, actor, id, $"human {i}", provider, default);
         Assert.Equal(48, reply!.Messages.Count);
-        Assert.Equal("human 0", provider.Inputs[^1][0].Content);
-        Assert.Equal("answer 1", provider.Inputs[^1][1].Content);
-        Assert.Equal("human 23", provider.Inputs[^1][46].Content);
+        Assert.Equal("system",provider.Inputs[^1][0].Role);Assert.Single(provider.Inputs[^1].Where(m=>m.Role=="system"));
+        Assert.Equal("human 0", provider.Inputs[^1][1].Content);
+        Assert.Equal("answer 1", provider.Inputs[^1][2].Content);
+        Assert.Equal("human 23", provider.Inputs[^1][47].Content);
         Assert.Equal(Enumerable.Range(0, 48).Select(i => i % 2 == 0 ? "user" : "assistant"), reply.Messages.Select(m => m.Role));
         Assert.DoesNotContain(reply.Messages, m => m.Content.Contains("thinking"));
         Assert.Equal("synthetic", reply.ModelName);
@@ -62,7 +95,7 @@ public sealed class CaseRawChatTests
         var id = sessions.Create(course, actor); var other = sessions.Create(course, actor); var provider = new Provider();
         await sessions.Send(course, actor, id, "first private turn", provider, default);
         var reply = await sessions.Send(course, actor, other, "different session", provider, default);
-        Assert.Equal(2, reply.Messages.Count); Assert.Single(provider.Inputs[^1]);
+        Assert.Equal(2, reply.Messages.Count); Assert.Equal(new[]{"system","user"},provider.Inputs[^1].Select(m=>m.Role));
         Assert.Equal(404, (await Assert.ThrowsAsync<CaseChatException>(() => sessions.Send(Guid.NewGuid(), actor, id, "guess", provider, default))).StatusCode);
         Assert.Equal(404, (await Assert.ThrowsAsync<CaseChatException>(() => sessions.Send(course, Guid.NewGuid(), id, "guess", provider, default))).StatusCode);
         Assert.Equal(404, (await Assert.ThrowsAsync<CaseChatException>(() => sessions.Clear(course, Guid.NewGuid(), id, default))).StatusCode);

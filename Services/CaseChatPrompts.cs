@@ -4,9 +4,9 @@ namespace AiTeachingAssistant.Services;
 
 public static class CaseChatPrompts
 {
-    public const string Version = "professor-four-phase-20261116-v3";
+    public const string Version = "professor-four-phase-20261120-v8";
     public static string VersionFor(AnalysisStage stage) => stage == AnalysisStage.IllnessCourse
-        ? "professor-four-phase-20261117-b-v5" : Version;
+        ? "professor-four-phase-20261120-b-v10" : Version;
 
     // These contrasting examples describe the coding hierarchy, not case facts.
     // Keep the professor's complete rules below; never use an example as evidence.
@@ -20,9 +20,12 @@ public static class CaseChatPrompts
         """;
 
     public static string FeedbackRequirements(AnalysisStage? stage,int characters=0) => (stage == AnalysisStage.IllnessCourse
-        ? "先閱讀answerText。本次階段只有currentPhase的大字母。只依原文辨識分類，子分類不另算階段；同階段說明相符。先確認原文已寫的內容，有實際問題才建議修改；混合時點分段引用，不概括整份錯置。回饋2到4句，只說一次，無獨立病例原文請明示無法核實案例事實。只輸出feedback與annotations JSON，text逐字引自本次answerText，occurrence從0算，不標示例、包裝或回饋，不必計算位置。"
+        ? "逐片段檢查A/B/C/D，不得只找目前階段；保留真正分類，必要背景不算錯置，不確定就說待確認。misplaced須指出階段差異；有實際問題才建議修改。"
         : "只評閱 answerText 本次作答，先逐句核對 currentPhase。feedback依序說明目前作答階段、原文實際分類、修改建議；不要把目前階段當成原文所屬分類，不能只稱讚。混合本階段事件與他階段背景時分開說明，必要背景可保留，不概括整份錯置。無獨立病例原文不能宣稱資料遺漏。用繁體中文精簡回饋，不代寫。只回傳 feedback 與 annotations 的 JSON；標註逐字引用 answerText 及0起算 occurrence，不標回饋或包裝、不必計算位置。")
-        +(CaseFeedbackText.Applies(stage,characters)?"分類碼與逐字引用只放annotations；feedback是給學生的自然語言教學評語，用2到3句說明整理特點及有據建議，不列原文→代碼清單、不重複同一句，也不重抄分類規則。":"");
+        +(stage==AnalysisStage.IllnessCourse
+            ?"讀至末段。feedback用2到3句，不列碼或重複引用。"
+            :"範圍核對：依完整作答脈絡逐片段檢查A/B/C/D，不得只找目前階段或把他階段改成本階段碼。保留真正分類；明確錯置用misplaced，feedback指出目前與實際階段及調整方向。必要背景不算錯置，有據多碼保留；不確定就說待確認。保留否定與不確定語意；未提供資訊不可推成已有事實，不靠標題或關鍵字補碼。從原文開頭逐片段讀到最後一段，依完整脈絡檢查全部ABCD；最多128筆。相同text、occurrence、codes集合只列一次，有據多碼放同一筆，不能以重複同一片段填滿名額。explanation簡短，不必每句或每碼都標註，不補造分類。")
+        +CaseWritingGuidance.ReviewRequirements(stage);
 
     private const string TeachingAssistantPrompt = """
         你是中山醫學大學臨床心理學課程AI教學助教，以繁體中文提供形成性回饋。僅有A病前功能、B疾病病程、C功能評估結果、D心理社會條件四階段；整合概念化只供推理，不增第五階段。不給分、不判通過、不解鎖。
@@ -36,9 +39,10 @@ public static class CaseChatPrompts
         """;
 
     private const string AnnotationOutputInstructions = """
-        只回傳Schema JSON，無圍欄。feedback是本次實際繁中回饋，非欄位說明，1–12000個UTF-16單元。annotations可空且<=48筆，只含text、occurrence、codes、explanation、status；explanation<=200單元。
-        最新一則 user 的JSON欄位answerText解碼後才是本次原始作答；outputRequirements僅格式提醒。只逐字引用answerText，不標包裝、轉義、系統、案例、歷史、assistant或缺漏。occurrence為text在answerText完全相同的第幾次出現，0起算、唯一填0，由左至右含重疊匹配；重複片語指定正確次序。保留空白／換行／符號，不正規化或切開emoji代理對；引用／次序不確定則略過。不要輸出start/end或自行算位置；伺服器計算UTF-16 start與end exclusive。
-        codes只用表內有依據的碼；可同span多碼、重疊、相鄰，不強迫全編，未編不等於錯。勿加HTML、phase、annotationId或其他欄位。
+        僅Schema JSON，無圍欄。feedback為繁中回饋，非欄位說明，1–12000 UTF-16單元。annotations可空、最多128筆：text/occurrence/codes/explanation/status；explanation<=200。
+        只逐字引用最新一則 user解碼的answerText；包裝／轉義／系統／案例／歷史／assistant／缺漏不標。occurrence是text完全相同匹配由左至右（含重疊）0起算，唯一填0。不正規化空白／換行／符號、不切emoji代理對；引用或次序不確定略過。不要輸出start/end，伺服器算UTF-16 start及end exclusive。
+        以最小完整語意片段標註；同一句內不同事實分開annotations，可依，,、；;：:。.!?！？或換行，不只句號。小數、日期、縮寫、括號內容勿機械拆開。每段只編有據碼，不複製全句碼；真正同片段多碼保留。
+        codes只用表內有據碼，可重疊／相鄰，未編不等於錯；勿加HTML、phase、annotationId或其他欄位。
         分類不等於正確。status僅unverified（未核實事實）、unsupported（可信來源衝突／過推）、misplaced（明確他階段且非必要引用，保留真正代碼）。無案例只限制事實核實，明確階段錯置仍用misplaced並在feedback說明；必要背景引用不判錯。兼錯置與無據可unsupported並說明兩者。
         """;
 

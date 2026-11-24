@@ -1,8 +1,18 @@
 import {describe,it,expect} from 'vitest'
-import {annotationSegments,validateAnnotations,phaseForStage,annotationPhaseAlignment} from './caseAnnotations'
+import {annotationSegments,annotationBadgeRuns,validateAnnotations,phaseForStage,annotationPhaseAlignment} from './caseAnnotations'
 const catalog=[{code:'A1a',label:'年齡',phase:'A'},{code:'A1b',label:'性別',phase:'A'},{code:'C5',label:'日常生活活動',phase:'C'}]
 const ann=(start,end,text,codes=['A1a'],extra={})=>({annotationId:'ann',start,end,text,codes,explanation:'辨識到描述',status:'unverified',...extra})
 describe('exact UTF-16 submitted-answer annotations',()=>{
+ it('groups identical code sets across punctuation without altering source segments or losing evidence',()=>{
+  const text='55，男性\nADL',evidence=[ann(0,2,'55',['A1a','A1b']),ann(3,5,'男性',['A1b','A1a'],{status:'unsupported'}),ann(6,9,'ADL',['C5'])]
+  const segments=annotationSegments(text,evidence,catalog),snapshot=JSON.stringify(segments),runs=annotationBadgeRuns(segments)
+  expect(runs).toHaveLength(2);expect(runs[0].members).toHaveLength(2);expect(runs[0].start).toBe(3);expect(runs[0].annotations.map(a=>a.status)).toEqual(['unverified','unsupported']);expect(runs[1].codes).toEqual(['C5']);expect(JSON.stringify(segments)).toBe(snapshot)
+ })
+ it('ends a badge run at unannotated prose or a different complete code set',()=>{
+  const text='55未標記男性 ADL 55',evidence=[ann(0,2,'55'),ann(5,7,'男性'),ann(8,11,'ADL',['C5']),ann(12,14,'55')]
+  const runs=annotationBadgeRuns(annotationSegments(text,evidence,catalog))
+  expect(runs.map(r=>r.codes)).toEqual([['A1a'],['A1a'],['C5'],['A1a']]);expect(runs.every(r=>r.members.length===1)).toBe(true)
+ })
  it('compares only valid exact-original classifications with the selected stage without judging clinical correctness',()=>{
   expect(['premorbid','illnessCourse','functionalAssessment','psychosocial','raw','B',undefined].map(phaseForStage)).toEqual(['A','B','C','D',null,null,null])
   const mixed=annotationPhaseAlignment('55ADL',[ann(0,2,'55'),ann(2,5,'ADL',['C5'],{status:'unsupported'}),ann(0,2,'XX',['A1b'])],catalog,'functionalAssessment')

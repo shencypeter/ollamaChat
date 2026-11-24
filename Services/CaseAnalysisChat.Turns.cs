@@ -5,21 +5,21 @@ namespace AiTeachingAssistant.Services;
 
 public sealed partial class CaseAnalysisChat
 {
-    private sealed record Turn(Guid Course,Guid Actor,string Stage,Guid Session,Guid Message,Guid Attempt,IReadOnlyList<OllamaMessage> Context,CaseChatModelRuntime Model);
-    public async Task<CaseStageHistory> Send(Guid course,Guid actor,string stage,CaseChatInput input,CancellationToken ct)
+    private sealed record Turn(Guid Course,Guid Actor,string Stage,Guid Session,Guid Message,Guid Attempt,IReadOnlyList<OllamaMessage> Context,CaseChatModelRuntime Model,bool Practice,string PromptVersion,int? RuleVersion,IReadOnlyList<CaseClassificationRuleDefinition>? RuleSnapshot);
+    public async Task<CaseStageHistory> Send(Guid course,Guid actor,string stage,CaseChatInput input,CancellationToken ct,CaseHistoryQuery? page=null)
     {
         stage=AnalysisStageCatalog.Get(Stage(stage)).Key;
         if(input.RequestId==Guid.Empty||input.RevisesMessageId==Guid.Empty||string.IsNullOrWhiteSpace(input.Content)||input.Content.Length>chatOptions.Value.MaxMessageCharacters)throw new CaseChatException(400,"請輸入有效內容及獨立的訊息識別碼，單則最多8,000字元。");
         var turn=await BeginTurn(course,actor,stage,input.RequestId,input.Content,false,ct,input.RevisesMessageId,input.ModelProfile);
         if(turn is not null)await CompleteTurn(turn,ct);
-        return await History(course,actor,stage,ct);
+        return await History(course,actor,stage,ct,page?.Paged==true?new(){Paged=true,Target=input.RequestId}:page);
     }
-    public async Task<CaseStageHistory> Retry(Guid course,Guid actor,string stage,Guid message,CancellationToken ct,string? modelProfile=null)
+    public async Task<CaseStageHistory> Retry(Guid course,Guid actor,string stage,Guid message,CancellationToken ct,string? modelProfile=null,CaseHistoryQuery? page=null)
     {
         stage=AnalysisStageCatalog.Get(Stage(stage)).Key;
         var turn=await BeginTurn(course,actor,stage,message,null,true,ct,modelProfile:modelProfile);
         if(turn is not null)await CompleteTurn(turn,ct);
-        return await History(course,actor,stage,ct);
+        return await History(course,actor,stage,ct,page?.Paged==true?new(){Paged=true,Target=message}:page);
     }
     private static async Task Lock(NpgsqlConnection conn,Guid course,Guid actor,string stage,bool practice,CancellationToken ct)
     {
@@ -29,7 +29,7 @@ public sealed partial class CaseAnalysisChat
     {
         await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);
         var access=await Access(conn,course,actor,true,true,ct);
-        if(modelProfile is not null&&!access.Practice)throw new CaseChatException(403,"只有本課教師／授權助教可以選擇本人練習的模型。");
+        if(!access.Practice&&modelProfile is not null)throw new CaseChatException(403,"學生分析使用課程預設模型。");
         var runtime=modelProfile is null?new CaseChatModelRuntime(new(modelOptions.Value.Profile,modelOptions.Value,chatOptions.Value),provider,false)
             :models?.Select(modelProfile)??throw new CaseChatException(503,"此環境暫時無法選擇其他模型。");
         var runtimeModel=runtime.Choice.Options;
@@ -41,18 +41,24 @@ public sealed partial class CaseAnalysisChat
         {
             await using var expire=new NpgsqlCommand("UPDATE case_analysis_messages SET response_status='failed',failure_code='expired',lease_until=NULL WHERE session_id=$1 AND response_status='pending' AND lease_until<=$2",conn);Add(expire,active.Value,clock.GetUtcNow());await expire.ExecuteNonQueryAsync(ct);
         }
-        Guid? foundSession=null;string? foundStatus=null,foundModel=null,foundVersion=null;
-        await using(var cmd=new NpgsqlCommand("SELECT m.session_id,m.role,m.content,m.response_status,s.course_id,s.student_id,s.stage,s.is_practice,m.model_name,m.prompt_version,m.revises_message_id FROM case_analysis_messages m JOIN case_analysis_sessions s ON s.id=m.session_id WHERE m.id=$1",conn))
+        Guid? foundSession=null;string? foundStatus=null,foundModel=null,foundVersion=null,foundPrompt=null;int? ruleVersion=null;IReadOnlyList<CaseClassificationRuleDefinition>? ruleSnapshot=null;
+        await using(var cmd=new NpgsqlCommand("SELECT m.session_id,m.role,m.content,m.response_status,s.course_id,s.student_id,s.stage,s.is_practice,m.model_name,m.prompt_version,m.revises_message_id,m.trashed_at,m.rule_version,m.rule_snapshot,m.prompt_snapshot FROM case_analysis_messages m JOIN case_analysis_sessions s ON s.id=m.session_id WHERE m.id=$1",conn))
         {
             Add(cmd,requestId);await using var r=await cmd.ExecuteReaderAsync(ct);
             if(await r.ReadAsync(ct))
             {
                 if(r.GetString(1)!="user"||r.GetGuid(4)!=course||r.GetGuid(5)!=actor||r.GetString(6)!=stage||r.GetBoolean(7)!=access.Practice)throw new CaseChatException(retry?404:409,"無法使用此訊息識別碼。");
+                if(!r.IsDBNull(11))throw new CaseChatException(409,"這次作答已移至垃圾桶，請先還原，或使用新的回合。");
                 if(!retry&&(r.GetString(2)!=content||(r.IsDBNull(10)?(Guid?)null:r.GetGuid(10))!=revisesMessageId))throw new CaseChatException(409,"相同訊息識別碼不可更改內容或修改來源，請重新送出。");
                 foundSession=r.GetGuid(0);content=r.GetString(2);foundStatus=r.GetString(3);foundModel=r.GetString(8);foundVersion=r.GetString(9);
+                ruleVersion=r.IsDBNull(12)?null:r.GetInt32(12);ruleSnapshot=r.IsDBNull(13)?null:System.Text.Json.JsonSerializer.Deserialize<CaseClassificationRuleDefinition[]>(r.GetString(13),PerformanceJson);foundPrompt=r.IsDBNull(14)?null:r.GetString(14);
             }
         }
         if(retry&&!foundSession.HasValue)throw new CaseChatException(404,"找不到可重試的本人訊息。");
+        if(retry&&modelProfile is null&&foundModel!=runtimeModel.Model&&models?.Profiles.FirstOrDefault(p=>p.ModelName==foundModel) is {} originalProfile)
+        {
+            runtime=models.Select(originalProfile.Key);runtimeModel=runtime.Choice.Options;
+        }
         if(!retry&&foundModel is not null&&foundModel!=runtimeModel.Model)throw new CaseChatException(409,"相同訊息識別碼不可更換模型，請以新的回合比較。");
         if(foundStatus=="completed"||foundStatus=="failed"&&!retry){await tx.CommitAsync(ct);return null;}
         if(foundStatus=="pending")throw new CaseChatException(409,"這則訊息仍在等待回覆，請稍後重新載入。");
@@ -60,7 +66,7 @@ public sealed partial class CaseAnalysisChat
         if(retry&&(foundModel!=runtimeModel.Model||foundVersion!=CaseChatPrompts.VersionFor(Stage(stage))))throw new CaseChatException(409,"模型或提示版本已變更；重試請選原模型，或以新回合比較。");
         if(!retry&&revisesMessageId.HasValue)
         {
-            await using var parent=new NpgsqlCommand("SELECT m.response_status FROM case_analysis_messages m JOIN case_analysis_sessions s ON s.id=m.session_id WHERE m.id=$1 AND m.role='user' AND s.course_id=$2 AND s.student_id=$3 AND s.stage=$4 AND s.is_practice=$5",conn);
+            await using var parent=new NpgsqlCommand("SELECT m.response_status FROM case_analysis_messages m JOIN case_analysis_sessions s ON s.id=m.session_id WHERE m.id=$1 AND m.role='user' AND s.course_id=$2 AND s.student_id=$3 AND s.stage=$4 AND s.is_practice=$5 AND m.trashed_at IS NULL",conn);
             Add(parent,revisesMessageId.Value,course,actor,stage,access.Practice);
             if(await parent.ExecuteScalarAsync(ct) is not string status)throw new CaseChatException(404,"找不到可修改的本人同階段作答。");
             else if(status!="completed")throw new CaseChatException(409,"請先完成原作答的回饋，失敗回覆可使用重試。");
@@ -70,7 +76,12 @@ public sealed partial class CaseAnalysisChat
             active=Guid.NewGuid();await using var create=new NpgsqlCommand("INSERT INTO case_analysis_sessions(id,course_id,student_id,stage,is_practice,started_at,last_activity_at) VALUES($1,$2,$3,$4,$5,$6,$6)",conn);Add(create,active.Value,course,actor,stage,access.Practice,clock.GetUtcNow());await create.ExecuteNonQueryAsync(ct);
         }
         await using(var pending=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM case_analysis_messages WHERE session_id=$1 AND response_status='pending')",conn)){Add(pending,active.Value);if(await pending.ExecuteScalarAsync(ct) is true)throw new CaseChatException(409,"本階段仍有訊息等待回覆，請勿同時送出。");}
-        var attempt=Guid.NewGuid();var lease=clock.GetUtcNow().AddSeconds(runtimeModel.TimeoutSeconds*(CaseFeedbackText.Applies(Stage(stage),content!.Length)?2:1)+30);
+        // Cover classification, its one bounded retry, and optional B feedback repair.
+        var maximumCalls=CaseFeedbackText.Applies(Stage(stage),content!.Length)?3:2;
+        var attempt=Guid.NewGuid();var lease=clock.GetUtcNow().AddSeconds(runtimeModel.TimeoutSeconds*maximumCalls+30);
+        if(!retry){var rules=await ReadRules(conn,course,ct);ruleVersion=rules.Version;ruleSnapshot=rules.Definitions;}
+        var prompt=foundPrompt??CaseClassificationRules.Prompt(Stage(stage),ruleVersion??0,ruleSnapshot??CaseClassificationRules.Defaults);
+        var promptVersion=foundVersion??CaseChatPrompts.VersionFor(Stage(stage));
         if(retry)
         {
             await using(var latest=new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM case_analysis_messages newer JOIN case_analysis_messages original ON original.id=$1 WHERE newer.session_id=original.session_id AND newer.sequence_number>original.sequence_number)",conn)){Add(latest,requestId);if(await latest.ExecuteScalarAsync(ct) is true)throw new CaseChatException(409,"只能重試目前對話最後一則未完成的提問，或重新開始對話。");}
@@ -79,15 +90,15 @@ public sealed partial class CaseAnalysisChat
         else
         {
             var sequence=await NextSequence(conn,active.Value,ct);
-            await using var insert=new NpgsqlCommand("INSERT INTO case_analysis_messages(id,session_id,role,content,sequence_number,response_status,model_name,prompt_version,attempt_token,lease_until,created_at,revises_message_id) VALUES($1,$2,'user',$3,$4,'pending',$5,$6,$7,$8,$9,$10)",conn);
-            Add(insert,requestId,active.Value,content!,sequence,runtimeModel.Model,CaseChatPrompts.VersionFor(Stage(stage)),attempt,lease,clock.GetUtcNow());insert.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Uuid,Value=(object?)revisesMessageId??DBNull.Value});await insert.ExecuteNonQueryAsync(ct);
+            await using var insert=new NpgsqlCommand("INSERT INTO case_analysis_messages(id,session_id,role,content,sequence_number,response_status,model_name,prompt_version,attempt_token,lease_until,created_at,revises_message_id,rule_version,rule_snapshot,prompt_snapshot) VALUES($1,$2,'user',$3,$4,'pending',$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13)",conn);
+            Add(insert,requestId,active.Value,content!,sequence,runtimeModel.Model,promptVersion,attempt,lease,clock.GetUtcNow());insert.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Uuid,Value=(object?)revisesMessageId??DBNull.Value});Add(insert,ruleVersion!.Value,System.Text.Json.JsonSerializer.Serialize(ruleSnapshot,PerformanceJson),prompt);await insert.ExecuteNonQueryAsync(ct);
         }
         await using(var update=new NpgsqlCommand("UPDATE case_analysis_sessions SET last_activity_at=$2 WHERE id=$1",conn)){Add(update,active.Value,clock.GetUtcNow());await update.ExecuteNonQueryAsync(ct);}
         // Revisions and feedback remain in the database for review/diff/statistics.
         // Each formal round is assessed independently, including a retry.
-        var messages=new List<OllamaMessage>{new("system",CaseChatPrompts.Get(Stage(stage))),new("user",content!)};
+        var messages=new List<OllamaMessage>{new("system",prompt),new("user",content!){CaseRules=ruleSnapshot}};
         await tx.CommitAsync(ct);
-        return new(course,actor,stage,active.Value,requestId,attempt,messages,runtime);
+        return new(course,actor,stage,active.Value,requestId,attempt,messages,runtime,access.Practice,promptVersion,ruleVersion,ruleSnapshot);
     }
     private static async Task<int> NextSequence(NpgsqlConnection conn,Guid session,CancellationToken ct)
     {
@@ -101,16 +112,23 @@ public sealed partial class CaseAnalysisChat
             CaseChatBudget.EnsureFits(turn.Context,limits,runtimeModel,runtimeModel.CaseFeedbackMaxTokens);
             var result=await turn.Model.Provider.CaseFeedbackAsync(turn.Context,Stage(turn.Stage),ct);
             CaseAnnotationContract.EnsureComplete(result.Metrics.DoneReason);
-            var feedback=CaseAnnotationContract.Parse(result.Content,turn.Context.Last(m=>m.Role=="user").Content);
+            var feedback=CaseAnnotationContract.Parse(result.Content,turn.Context.Last(m=>m.Role=="user").Content,turn.RuleSnapshot);
             if(CaseFeedbackText.Applies(Stage(turn.Stage),turn.Context.Last(m=>m.Role=="user").Content.Length))CaseFeedbackText.EnsureAcceptable(feedback.Feedback);
             if(feedback.Feedback.Length>limits.MaxResponseCharacters)throw new CaseChatException(502,"模型回覆超出長度限制，原提問已保留，可重試。",new("output_size",$"回饋長度 {feedback.Feedback.Length} 字元，超過應用程式回覆上限 {limits.MaxResponseCharacters}。"));
             await using var conn=await source.OpenConnectionAsync(ct);await using var tx=await conn.BeginTransactionAsync(ct);
             var completionAccess=await Access(conn,turn.Course,turn.Actor,true,true,ct);
-            if(turn.Model.IsOverride&&!completionAccess.Practice)throw new CaseChatException(403,"課程角色已變更，未保存所選模型的回覆。");
+            if(completionAccess.Practice!=turn.Practice)throw new CaseChatException(403,"課程角色已變更，未保存本次回覆；請重新載入對話。");
             await using(var session=new NpgsqlCommand("SELECT status FROM case_analysis_sessions WHERE id=$1 FOR UPDATE",conn)){Add(session,turn.Session);if(await session.ExecuteScalarAsync(ct) is not "active")throw new CaseChatException(409,"對話已結束，未保存逾時回覆。");}
             await using(var guard=new NpgsqlCommand("UPDATE case_analysis_messages SET response_status='completed',lease_until=NULL WHERE id=$1 AND response_status='pending' AND attempt_token=$2 AND lease_until>$3",conn)){Add(guard,turn.Message,turn.Attempt,clock.GetUtcNow());if(await guard.ExecuteNonQueryAsync(ct)!=1)throw new CaseChatException(409,"這次回覆已失效，請重新載入紀錄。");}
             var sequence=await NextSequence(conn,turn.Session,ct);
-            await using(var insert=new NpgsqlCommand("INSERT INTO case_analysis_messages(id,session_id,role,content,sequence_number,response_status,in_reply_to,model_name,prompt_version,created_at,performance_metrics,annotations) VALUES($1,$2,'assistant',$3,$4,'completed',$5,$6,$7,$8,$9::jsonb,$10::jsonb)",conn)){Add(insert,Guid.NewGuid(),turn.Session,feedback.Feedback,sequence,turn.Message,runtimeModel.Model,CaseChatPrompts.VersionFor(Stage(turn.Stage)),clock.GetUtcNow(),System.Text.Json.JsonSerializer.Serialize(ChatPerformanceMetrics.Clean(result.Metrics),PerformanceJson),System.Text.Json.JsonSerializer.Serialize(feedback.Annotations,PerformanceJson));await insert.ExecuteNonQueryAsync(ct);}
+            await using(var insert=new NpgsqlCommand("INSERT INTO case_analysis_messages(id,session_id,role,content,sequence_number,response_status,in_reply_to,model_name,prompt_version,created_at,performance_metrics,annotations,rule_version,rule_snapshot,prompt_snapshot) VALUES($1,$2,'assistant',$3,$4,'completed',$5,$6,$7,$8,$9::jsonb,$10::jsonb,$11,$12::jsonb,$13)",conn))
+            {
+                Add(insert,Guid.NewGuid(),turn.Session,feedback.Feedback,sequence,turn.Message,runtimeModel.Model,turn.PromptVersion,clock.GetUtcNow(),System.Text.Json.JsonSerializer.Serialize(ChatPerformanceMetrics.Clean(result.Metrics),PerformanceJson),System.Text.Json.JsonSerializer.Serialize(feedback.Annotations,PerformanceJson));
+                insert.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Integer,Value=(object?)turn.RuleVersion??DBNull.Value});
+                insert.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Text,Value=turn.RuleSnapshot is null?DBNull.Value:System.Text.Json.JsonSerializer.Serialize(turn.RuleSnapshot,PerformanceJson)});
+                insert.Parameters.Add(new(){NpgsqlDbType=NpgsqlTypes.NpgsqlDbType.Text,Value=turn.RuleSnapshot is null?DBNull.Value:turn.Context.First(m=>m.Role=="system").Content});
+                await insert.ExecuteNonQueryAsync(ct);
+            }
             await using(var update=new NpgsqlCommand("UPDATE case_analysis_sessions SET last_activity_at=$2 WHERE id=$1",conn)){Add(update,turn.Session,clock.GetUtcNow());await update.ExecuteNonQueryAsync(ct);}
             await tx.CommitAsync(ct);
         }

@@ -26,6 +26,19 @@ export function annotationSegments(content,annotations,classifications){
   return {start,end,text:content.slice(start,end),annotations:covering,codes,phases:phases.filter(phase=>codes.some(code=>catalog.get(code).phase===phase))}
  })
 }
+// Display-only badge runs. Exact evidence ranges and source text stay unchanged.
+// Unannotated prose breaks a run; punctuation/spacing may bridge matching codes.
+export function annotationBadgeRuns(segments){
+ const runs=[];let current=null
+ for(const segment of segments){
+  if(!segment.codes.length){if(!/^[\p{P}\s]*$/u.test(segment.text))current=null;continue}
+  if(current&&current.codes.length===segment.codes.length&&current.codes.every(code=>segment.codes.includes(code))){
+   current.start=segment.start;current.end=segment.end;current.text=segment.text
+   current.members.push(segment);current.annotations=[...new Set([...current.annotations,...segment.annotations])]
+  }else{current={...segment,members:[segment],annotations:[...segment.annotations]};runs.push(current)}
+ }
+ return runs
+}
 // This compares AI classifications with the selected stage, never clinical truth.
 // Reuse the exact-original validation so a different revision cannot inherit a check.
 export function annotationPhaseAlignment(content,annotations,classifications,stage){

@@ -58,18 +58,40 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         // Keep only the supplied system instructions and the current answer.
         // Raw Chat uses ConversationAsync and retains its independent memory.
         var answer=messages.LastOrDefault(m=>m.Role=="user")??throw new InvalidOperationException("Case feedback requires a current answer.");
+        var definitions=answer.CaseRules;
+        var slots=CaseAnnotationSlots.For(answer.Content,_options.CompactCaseFeedback);
         var request=messages.Where(m=>m.Role=="system").Select(m=>new OllamaMessage(m.Role,m.Content)).Append(new OllamaMessage("user",answer.Content)).ToArray();
         var current=request.Length-1;
         request[current]=new("user",System.Text.Json.JsonSerializer.Serialize(new {
             currentPhase=stage.HasValue?AnalysisStageCatalog.PhaseCode(stage.Value):null,
             currentStage=stage.HasValue?AnalysisStageCatalog.Get(stage.Value).Key:null,
             currentStageLabel=stage.HasValue?AnalysisStageCatalog.Get(stage.Value).Label:null,
-            outputRequirements=CaseChatPrompts.FeedbackRequirements(stage,answer.Content.Length),
+            outputRequirements=CaseChatPrompts.FeedbackRequirements(stage,answer.Content.Length)+(slots is null?"":CaseAnnotationSlots.Instructions),
+            annotationSlots=slots?.Input,
             answerText=request[current].Content
         },new System.Text.Json.JsonSerializerOptions{Encoder=System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping}));
-        var result=await IsolatedConversationAsync(request,CaseAnnotationContract.SchemaFor(_options.CompactCaseFeedback,annotationsFirst:stage==AnalysisStage.IllnessCourse),cancellationToken,_options.CaseFeedbackMaxTokens);
+        var schema=slots?.Schema(_options.CompactCaseFeedback,stage==AnalysisStage.IllnessCourse,definitions)
+            ??CaseAnnotationContract.SchemaFor(_options.CompactCaseFeedback,annotationsFirst:stage==AnalysisStage.IllnessCourse,original:answer.Content,definitions:definitions);
+        CaseChatBudget.EnsureFits(request,new CaseChatOptions{MaxContextBytes=48000},_options,_options.CaseFeedbackMaxTokens);
+        var result=await IsolatedConversationAsync(request,schema,cancellationToken,_options.CaseFeedbackMaxTokens);
+        if(slots is not null)result=(slots.Normalize(result.Content),result.Thinking,result.Metrics);
+        CaseAnnotationContract.FeedbackResult parsed;
+        try{parsed=CaseAnnotationContract.Parse(result.Content,answer.Content,definitions);}
+        catch(CaseChatException failure) when(failure.Diagnostic?.Code=="annotation_repetition")
+        {
+            // One fresh, full classification pass; never feed the broken output or
+            // previous drafts back into the model, or silently dedupe a partial prefix.
+            var retry=request.ToArray();
+            retry[0]=retry[0].Role=="system"
+                ?new("system",retry[0].Content+"\n"+AnnotationRetryInstructions)
+                :retry[0];
+            if(retry[0].Role!="system")retry=new[]{new OllamaMessage("system",AnnotationRetryInstructions)}.Concat(retry).ToArray();
+            CaseChatBudget.EnsureFits(retry,new CaseChatOptions{MaxContextBytes=48000},_options,_options.CaseFeedbackMaxTokens);
+            var repairedAnnotations=await IsolatedConversationAsync(retry,schema,cancellationToken,_options.CaseFeedbackMaxTokens,"case-annotation-repair");
+            parsed=CaseAnnotationContract.Parse(repairedAnnotations.Content,answer.Content,definitions);
+            result=(repairedAnnotations.Content,repairedAnnotations.Thinking,ChatPerformanceMetrics.Combine(result.Metrics,repairedAnnotations.Metrics));
+        }
         if(!CaseFeedbackText.Applies(stage,answer.Content.Length))return result;
-        var parsed=CaseAnnotationContract.Parse(result.Content,answer.Content);
         if(!CaseFeedbackText.RequiresRepair(parsed.Feedback))return result;
         var repairRequest=CaseFeedbackText.RepairRequest(answer.Content,parsed.Annotations);
         CaseChatBudget.EnsureFits(repairRequest,new CaseChatOptions{MaxContextBytes=48000},_options,512);
@@ -80,6 +102,8 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         return (content,null,ChatPerformanceMetrics.Combine(result.Metrics,repaired.Metrics));
     }
 
+    private const string AnnotationRetryInstructions="本次重新完整分類：由answerText開頭逐片段讀至最後一段，只依實際語意檢查ABCD。每個text與occurrence及codes集合只能出現一次；多碼合併，禁止反覆輸出同一片段。explanation限短句；不強迫每句有碼、不補造分類。feedback用精簡自然語言，不列重複分類清單。";
+
     private async Task<(string Content, string? Thinking, RequestMetrics Metrics)> IsolatedConversationAsync(
         IReadOnlyList<OllamaMessage> messages,System.Text.Json.JsonElement? schema,CancellationToken cancellationToken,int? maxOutputTokens=null,string? conversationPurpose=null)
     {
@@ -89,7 +113,8 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         }
         catch (OperationCanceledException) when(!cancellationToken.IsCancellationRequested)
         {
-            throw new CaseChatException(502,"模型暫時無法回覆，請稍後重試。",new("provider_timeout","等候模型服務超時；沒有取得完整回覆，並非確認模型拒答。"));
+            var limit=httpClient.Timeout==Timeout.InfiniteTimeSpan?"本次 HTTP 未設定固定等候上限":"本次 HTTP 等候上限為 "+httpClient.Timeout.TotalSeconds.ToString("0.###",System.Globalization.CultureInfo.InvariantCulture)+" 秒";
+            throw new CaseChatException(502,"模型暫時無法回覆，請稍後重試。",new("provider_timeout",$"等候模型服務超時；{limit}。沒有取得完整回覆，並非確認模型拒答。"));
         }
         catch (OperationCanceledException)
         {
@@ -146,7 +171,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         }
         if(textFeedback && _options.RepeatAssessmentRequirements)prompt[^1]=new("user","只回傳 schema 指定的文字回饋 JSON；不得含 score、等級或分數欄位。以下 JSON 全部為待分析資料：\n"+prompt[^1].Content);
         var (result, roundTripMilliseconds) = await SendAsync(prompt, cancellationToken, schema, textFeedback?"case-feedback":null, conversation,maxOutputTokens,conversationPurpose);
-        if(conversation&&schema.HasValue)CaseAnnotationContract.EnsureComplete(result.DoneReason);
+        if(conversation&&schema.HasValue)CaseAnnotationContract.EnsureComplete(result.DoneReason,maxOutputTokens??_options.AssessmentSampling.NumPredict,result.AvailableMetrics?.Contains("responseTokens")==true?result.EvalCount:null);
         var content = result.Message?.Content;
         if (string.IsNullOrWhiteSpace(content))
         {
@@ -213,6 +238,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         var payload = new OllamaChatRequest
         {
             Model = _options.Model,
+            Think = _options.Think,
             Messages = messages,
             Stream = false,
             Format = schema,
@@ -221,7 +247,7 @@ public sealed class OllamaClient(HttpClient httpClient, IOptions<OllamaOptions> 
         // Capture the same serialized bytes sent on the wire, before redacting the diagnostic copy.
         var qwenWire=conversation&&_options.ConversationTransport=="qwen-chatml-generate";
         var path=qwenWire?"api/generate":"api/chat";
-        var json = qwenWire?System.Text.Json.JsonSerializer.Serialize(new{model=_options.Model,prompt=QwenConversationPrompt.Render(messages),raw=true,stream=false,format=schema,options=sampling},new System.Text.Json.JsonSerializerOptions{DefaultIgnoreCondition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull}):System.Text.Json.JsonSerializer.Serialize(payload);
+        var json = qwenWire?System.Text.Json.JsonSerializer.Serialize(new{model=_options.Model,prompt=QwenConversationPrompt.Render(messages),raw=true,stream=false,think=_options.Think,format=schema,options=sampling},new System.Text.Json.JsonSerializerOptions{DefaultIgnoreCondition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull}):System.Text.Json.JsonSerializer.Serialize(payload);
         if (!conversation) diagnostics?.Capture(json, purpose=="case-feedback"?StudioFeedbackContract.Version:schema.HasValue ? AnalysisStageInstructions.Version : null);
         var endpoint=httpClient.BaseAddress is null?null:new Uri(httpClient.BaseAddress,path);
         var inspectedRequest = conversation

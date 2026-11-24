@@ -1,4 +1,35 @@
+## 2026-11-23 歷程模型篩選與舊作答（現行）
+
+模型篩選僅整理API已授權返回的本人各階段歷程，不查他人草稿或額外模型來源。學生可按本人歷史modelName篩選，仍不能指定提交modelProfile或使用Raw；教師／TA指定模型權限不因歷程篩選改變。舊模型／NULL標記不得以目前環境模型偽補。
+
+舊closed session的本人completed作答可讀及copy到當前composer；原後端已允許同課／本人／同階段／同practice且未trash的completed跨session ancestry，沒有放寬API授權。closed或非active尾筆失敗不提供retry。trash／restore仍原owner及正式提交保護，diagnostic snapshot以真實session/message取鍵。教師查學生仍僅正式快照，學生POV仍唯讀；Raw保持多輪及原隔離規則。
+
+## 2026-11-20 分類階段頁籤與作答版本移除（現行）
+
+分類工具由多段可收合標題改為水平頁籤，只列有已辨識分類的階段；藍點標示實際作答階段，不隨瀏覽其他分類頁籤移動。優先開啟目前階段，若未提及則開第一個可用階段。切換保留跨階段已選分類與底線，手機頁籤可水平捲動，支援左右／Home／End及獨立ARIA。未提及分類仍可閱讀定義。
+
+每張未正式提交的本人作答版本右上角新增 ×；確認後沿既有垃圾桶流程移除作答及配對回饋，可還原、原始編號與統計不變。移除其他卡片不改目前選版或未送草稿；pending／忙碌時停用，唯讀／學生POV不提供。學生需先成功載入正式版本資料才提供移除。
+
+任何已正式提交來源（包括已退回及歷史正式版本）都不提供 × 或移至垃圾桶。後端直接呼叫亦回409；與正式提交共用既有stage交易鎖，防止兩操作同時成功。既有已在垃圾桶的正式來源仍可還原。無Migration或資料重寫，不改模型、Prompt、分類輸出或成績。
+
+2026-11-20 現行個案分析權限：學生本人AI草稿私有，教師／grading授權TA只讀正式提交並可退回；statistics聚合數字另獨立授權。Raw／模型比較／請求診斷限本課staff本人practice，學生Raw及指定模型後端403。分類規則teacher寫、teacher／TA讀，學生不讀維護API。學生POV仍唯讀。詳[11/19修正](case-analysis-2026-11-19-corrections.md)。
+
+2026-11-23 本人歷程分頁：stages routes可選paged=true，每頁固定最多5份作答與配對回覆。metadata、模型選項、before游標及Target直查都先限定authenticated actor／course／stage／practice；猜測其他學員或課程的message ID不會擴大查詢，Target不屬本人範圍回404。教師仍不得藉分頁／模型篩選查私人學生草稿，正式提交查閱授權不改。GET匿名401與跨帳號／跨課程隔離已驗證；無新DB資料或權限。
+
+2026-11-23 教師學生POV作答頁籤開放閱讀：四階段學生指引／停用輸入框可見，預覽不能send/retry／正式提交、不能開Raw／選模型／維護分類。返回教學模式連結沿既有view=teaching guard恢復實際角色後才可測試，不直接在預覽擴權。一般學生與停用課程原權限不變。
+
 # 平台管理權限與課程角色規格
+
+## 2026-11-19 個案分析回合整理權限
+
+| 情境 | 查看正常／垃圾桶 | 移至垃圾桶／還原 |
+| --- | --- | --- |
+| 課程學生 | 本人正式歷程 | 本人正式回合 |
+| 本課教師／TA教學練習 | 本人practice歷程 | 本人practice回合 |
+| 有statistics權限的教師／TA查閱學生 | 本課正式學生歷程（含trash） | 不可替學生變更 |
+| 學生POV預覽／其他課程或成員 | 沿既有read授權 | 不可 |
+
+Mutation需active課程、個案分析enabled及有效課程成員；以course／owner／stage／practice及user message ID核對，不靠平台教授名稱或UI隱藏。Closed本人session在active課可整理，live pending不行；assistant不能單獨trash。Trash可還原，原學習內容／revision鏈／正式統計保留，audit不含作答內容，無永久刪除endpoint。退選、降權或課程封存後無整理權。沿現有登入／CSRF與學生POV寫入禁止，Migration040不賦予新全域權限。
 
 ## 2026-11-10 小組 PDF 權限
 

@@ -1,4 +1,64 @@
+## 2026-11-24 Omni正式回饋輸出上限（現行）
+
+僅`qwen25-omni.json`的`Ollama.CaseFeedbackMaxTokens`由5120提高至8192，取代以下舊額度；Raw的`AssessmentSampling.NumPredict=512`、`NumCtx=32768`、48KB輸入安全限制、CJK估算、ChatML transport及180秒timeout保持。其他三profile完全保持本輪前設定，不套用Omni修正。Omni正式輸入token預算相應扣8192輸出預留，不能關閉預檢或以此保證8000字均可容納。
+
+正式`done_reason=length`仍拒收，教師安全診斷顯示本次輸出額度及provider提供的實際生成token；缺值明確標示未提供，不推為零，不回傳任意provider本文。錯誤及失敗封包在composer下方卡片依原授權顯示，就地重試不增加虛假成功紀錄；Raw原length行為保持。
+
+合成661字／66欄完整A提示實測：舊5120與新8192均stop，分別output3160／3164，未重現使用者個案截斷，未重送真實作答。增加餘裕不是完整性或品質保證，保留嚴格JSON／欄位檢查。105聚焦後端＋3隔離DB、109Vue、8Chrome及VS含Vite通過；唯一7173已重啟且bin設定核對，無Migration／歷史重寫。
+
+## 2026-11-24 Raw語言System Prompt（現行）
+
+依使用者要求，Raw不再是完全零應用system的baseline。RawChatSessions每次送出一則語言-only system：依本次user訊息／明確要求的回覆語言作答，中文採臺灣繁體zh-TW而非zh-CN。再接完整暫存user／assistant歷史及本次user，不加入profile全域強制中文提示、教學角色、四階段／分類／評分內容。指示在預檢前組入，因此計入bytes／token，不放LangChain buffer、DB或正式統計。
+
+四profile保持原樣；chat三模型看到首則system，Omni generate沿既有ChatML渲染同一system。教師實際payload可查這則指示。A–D提示與版本未改；舊Raw無system紀錄僅代表當時狀態。84聚焦後端含四profile wire／語言切換／預檢、4隔離DB授權及無持久化、24 dialog Vue與正常VS含Vite通過；未進行真實模型語言遵循驗收。7173重啟後生效，暫存Raw清除，沒有Migration或持久化資料更動。
+
+## 2026-11-23 Qwen3 thinking／生成逾時（現行）
+
+早上32K容量調整保留。僅Configuration/Ollama/qwen.json新增 `Think:false`、`CompactCaseFeedback:true`、`TimeoutSeconds:600`；num_predict4096／num_ctx32768及教學system不改。Think為可選參數，null不送，其他三profile仍原transport／採樣與180秒timeout；不把Qwen修正套用其他模型。Raw仍無應用system，沿同一profile推論參數；正式仍只送當輪，不加DB歷史。
+
+附檔僅745字但66個分類欄，輸出不是單一短答。合成實測預設Qwen3會消耗輸出token於thinking且可能無最終content；關閉thinking並沿既有compact格式（feedback600、explanation80）後，完整66欄需340.68秒、input4067／output2793／stop，超過舊180秒但低於新600秒。不裁原文／漏欄／忽略不完整JSON；此只驗傳輸完整性而非臨床分類品質。32K footprint約9.62GiB而VRAM4.01GiB，不可視為確切硬體盤點或唯一延遲原因。
+
+教師逾時診斷顯示實際HTTP上限，不傳任意transport內容；pending lease按既有最多2次分類／3次B長文含評語修復計算，沒有新增自動重試。容量、輸出token、thinking與HTTP等待是不同控制項，較大context不保證更快。600秒仍可能逾時，既有作答保留；不能由成功JSON推論分類可靠。
+
+官方參考：[Thinking](https://docs.ollama.com/capabilities/thinking)、[FAQ](https://docs.ollama.com/faq)。73聚焦後端＋1隔離DB測試、非空升級／rerun、VS含Vite通過；新參數於7173重啟後生效。無Migration／歷史重寫，未重送真實作答或保存合成模型內容。
+
+2026-11-20 最新指引：A/C/D提示20261120-v8、B20261120-b-v10，正式user.outputRequirements追加使用者提供的本階段撰寫面向、重點及核心問題，並明示尚待原始教材核對、非事實／必填表、不增碼或推定遺漏。Vue與C# embedded resource共用Configuration/CaseAnalysis/stage-guidance.json。B評語重整也帶同指引；原system教授方法／代碼／課內規則不改，B user冗餘敘述精簡以保留容量。完整wrapper預檢，四階段Omni2125字實際請求通過。四profile／transport／context／token／Raw不變，新作答生效、舊歷史不重寫；舊base版本重試沿既有409保護。
+
+2026-11-20 容量修正紀錄：正式annotations容量128（043）；長文32–128可用分句採有界annotationSlots傳輸，annotations為固定key物件，每欄codes可空、explanation、status。伺服器將模型碼映回原文精確位置，外部／DB仍舊陣列。缺漏／重複／未知key拒收，短文機械重複最多一次新推論；不重送歷史／壞回覆、不關鍵字補碼。當時A/C/D提示20261120-v7、B20261120-b-v9，舊快照不改。四profile／context16384／Omni正式5120及Raw512不改，Studio維持獨立48筆。真實Omni745字66分句由舊48筆（同一位置重複24次、只到332）改善為66唯一位置至末句，input3964/output3905/stop；只是結構完整性，不保證分類正確。詳[評估](../ai-tuning/03-evaluation-results.md)。
+
+2026-11-20 現行：課內版本化分類載入正式turn的system分類資料及啟用schema，message保存rule_version／rule_snapshot／prompt_snapshot；retry保留原規則與system且base版仍需相同。四profile／Raw無system及LangChain暫存本質不變；學生Raw／手動選模依新教學角色政策禁止，staff保留測試。底線是Vue規則，不加入LLM著色指令。詳[交付](../case-analysis-2026-11-19-corrections.md)。
+
 # Ollama 模型設定與有效負載保存
+
+## 2026-11-23 四profile容量（現行）
+
+四profile皆明確設定`AssessmentSampling.NumCtx=32768`、`CaseChat.MaxContextBytes=48000`、`ContextTokenOverhead=512`。此節取代本文較早16K／12KB／Omni24KB的現行值，原紀錄保留。三一般profile仍CJK估算3／輸出4096，Omni仍CJK2／正式輸出5120／Raw512；抽樣、chat或ChatML transport、合併／重申與Prompt不改。完整wrapper與原文均算預算，不送歷次作答、不裁字；真正超限仍拒收，字元／UTF8bytes／token不是同一單位。
+
+唯讀模型show：Llama131072、Qwen3 40960、Breeze／Omni32768；採所有模型均支援的32K而非一律用各自原生最大值。正式輸入上限扣輸出後分別28672／Omni27648 tokens，已包含模板預留；48KB安全檢查獨立有效。實機四模型各一筆合成1-token探測接受32K，length為刻意輸出上限，不表示輸入截斷或分類品質合格。沒有保證基礎設施不留存請求。
+
+47相關mock tests（16組phase×profile full prompt／2125字85slots、完整原文、Raw無system）、全可執行後端426通過／85DB條件略過、VS含Vite及diff check通過。7173已重啟，Raw暫存清空，正式DB歷史不改；舊payload仍顯示當時16K，新回合才看到32K。
+
+## 2026-11-19 Omni 分句標註名額與輸出預算
+
+compact annotation數由8提高為48，與既有standard／server bound一致。保留compact text160／explanation80／feedback600及8codes；只Omni CaseFeedbackMaxTokens改5120，Raw512／num_ctx16384／bytecap24000／其餘profiles不變。6144會令既有B2125字預檢失敗，未採用。正式A/C/D版本20261119-v6、B 20261119-b-v8；舊8筆回覆需新提交，歷史不重寫。
+
+最終真實Omni合成48分句得到48筆，input2743／output3253／stop，達最後分句；443後端、升級及VS含Vue通過。這只驗結構容量，非編碼品質保證；未使用真實答案。只有7173已更新，無Migration。這一節取代較早compact最多8筆／正式4096的現行設定。
+
+## 2026-11-19 ABCD 範圍提示強化
+
+正式CaseFeedback每次user.outputRequirements要求依完整脈絡逐片段核對全部ABCD，保留真正碼／必要背景／不確定性，錯置需在feedback說明階段差異；B評語重整傳首輪Status保留錯置訊號。A/C/D版本20261119-v5、B 20261119-b-v7。完整system、source-clause enum、四profile／transport／抽樣及容量不改；Raw不加Prompt或分類，不重新送歷史。438後端、332 Vue、38 Chrome與VS含Vue通過，但未執行本輪實際模型品質比較；分類仍需專業核對。
+
+## 2026-11-19 正式分類的分句證據約束（現行）
+
+正式A/C/D prompt版本20261119-v4，B為20261119-b-v6。只改標註輸出粒度與壓縮冗餘格式文字，教授TeachingInstructions、Raw／Studio與四profile保持。CaseFeedback在可安全列出原文分句時將候選作為schema text.enum，防模型把逗號／分號等分隔的多個事實合成整句quote；不猜碼、不改answerText、不重送歷史。原文只增加於同次受控schema，不新存DB／log；教師本人既有payload可查，學生授權隔離保持。
+
+候選條件／fallback及模型語意限制詳[標註](../ai-tuning/06-annotation-ui.md)。最終隔離DB433、Vue331、Chrome8與VS含Vue通過；Omni6／Llama2合成請求完整，但仍過度編碼、漏標，不稱臨床正確。舊歷史保留原版本，需新回合取得細粒度；無Migration，唯一7173已部署。
+
+## 2026-11-18 師生每次選一個模型（現行）
+
+教師、TA及實際修課學生都可在輸入區選本次回覆模型，下一次提交才使用；自動路由IAN02 Llama3.1／Qwen3與Taipei Breeze／Qwen2.5 Omni。四profile／採樣／相容設定／環境預設不改，不新增任意主機或模型輸入。正式每輪存實際tag；Raw每次Send可選profile，保留同次LangChain完整記憶及草稿、每pair標記當時model但不寫DB。此節取代較早teacher-only及Raw切模清空的現行行為。學生預覽仍唯讀，teacher-only payload／診斷授權保持。
+
+詳[師生選模操作](model-selection.md)。隔離DB411、Vue301、Chrome34及VS含Vue通過；兩台健康與四模型可用核對，沒有改模型生成參數／prompt。唯一7173已部署，無Migration。
 
 ## 2026-11-17 教師選模及Omni角色格式（現行）
 
@@ -127,7 +187,7 @@ dotnet run --launch-profile http
 | `llama3` | `llama3.1:8b`，`IAN02:11434` | 語言、階段規準、Schema 各為 system；user 為 JSON | 舊 v2 有歷史成功及逾時；目前 v3 組合尚待即時驗收 |
 | `qwen` | `qwen3:8b`，`IAN02:11434` | 保留早期多 system 方式；user 為 JSON | 模型名稱見既有程式及測試；目前服務可用性、Schema 及 v3 評分未驗證 |
 
-三者共同保留 JSON Schema、繁體中文輸入、嚴格後端解析、案例存在性限制及相同規準；不復原受污染的答案鍵。共同抽樣為 temperature=0、seed=42、top_p=0.9、top_k=40、num_ctx=16384、num_predict=4096。這是可重現設定，不保證不同硬體／Ollama 版本完全決定性。
+三者共同保留 JSON Schema、繁體中文輸入、嚴格後端解析、案例存在性限制及相同規準；不復原受污染的答案鍵。共同抽樣為 temperature=0、seed=42、top_p=0.9、top_k=40、num_ctx=32768、num_predict=4096。這是可重現設定，不保證不同硬體／Ollama 版本完全決定性。容量以2026-11-23現行節為準，Omni的獨立輸出額度保持。
 
 ## 保存的有效負載
 
